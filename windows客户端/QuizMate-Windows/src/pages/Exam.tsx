@@ -1,0 +1,370 @@
+// 笔试助手配置页 - 嵌入原考试插件 ConfigPage 核心功能
+// 在 MainLayout 内渲染，不含 TitleBar；不含邀请代理和本地知识库
+import { useState, useEffect, useCallback } from 'react';
+import {
+  Play, Square, RefreshCw, ExternalLink, Info, Eye, EyeOff,
+  Volume2, Loader2,
+} from 'lucide-react';
+import { useTheme } from '../contexts/ThemeContext';
+import { defaultShortcutBindings, examOverlayShortcutActions, examVoiceShortcutActions } from '../../shared/shortcuts';
+import ShortcutSettings from '../components/ShortcutSettings';
+
+type ProcessingMode = 'overlay' | 'voice';
+
+export default function Exam() {
+  // 通过 preload 暴露的 electronAPI 兼容层调用后端（与原考试插件接口一致）
+  const api = (window as any).electronAPI;
+  const { theme, setTheme } = useTheme();
+
+  // 用户/积分/版本
+  const [userInfo, setUserInfo] = useState<any>(null);
+  const [credits, setCredits] = useState<number | null>(null);
+  const [version, setVersion] = useState('');
+  const [updateInfo, setUpdateInfo] = useState<any>(null);
+
+  // 悬浮窗状态
+  const [overlayActive, setOverlayActive] = useState<boolean>(false); // 是否已启动
+  const [overlayVisible, setOverlayVisible] = useState<boolean>(false); // 当前是否可见
+  const [backgroundOpacity, setBackgroundOpacity] = useState(0.85);
+
+  // 工作模式
+  const [processingMode, setProcessingMode] = useState<ProcessingMode>('overlay');
+
+  // 快捷键绑定
+  const [shortcutBindings, setShortcutBindings] = useState<Record<string, string>>(defaultShortcutBindings);
+  const [ttsTesting, setTtsTesting] = useState(false);
+
+  // 加载初始配置数据
+  const loadData = useCallback(async () => {
+    try {
+      const info = await api.auth.fetchUserInfo();
+      setUserInfo(info);
+      const creditInfo = await api.credits.check();
+      setCredits(creditInfo.available);
+      const v = await api.app.getVersion();
+      setVersion(v);
+      const bindings = await api.config.getShortcutBindings();
+      setShortcutBindings(bindings);
+      // 读取透明度（主题默认 dark，由 ThemeContext 通过 getClientSettings 读取）
+      const settings = await api.config.getClientSettings();
+      if (settings.backgroundOpacity !== undefined) {
+        setBackgroundOpacity(settings.backgroundOpacity);
+      }
+      const mode = await api.config.getProcessingMode();
+      setProcessingMode(mode);
+      // 同步悬浮框启动状态（由侧边栏菜单控制）
+      const isActive = await api.app.isExamClientActive();
+      setOverlayActive(!!isActive);
+      setOverlayVisible(!!isActive);
+    } catch (e) {
+      console.error('加载笔试助手配置失败:', e);
+    }
+  }, [api]);
+
+  useEffect(() => {
+    loadData();
+    // 监听后端事件
+    const unsubs: Array<(() => void) | undefined> = [];
+    // 积分变动
+    unsubs.push(api?.on('credits-updated', (newCredits: number) => {
+      setCredits(newCredits);
+    }));
+    // 透明度变更（悬浮框内部调节时同步）
+    unsubs.push(api?.on('background-opacity-changed', (opacity: number) => {
+      setBackgroundOpacity(opacity);
+    }));
+    // 工作模式切换
+    unsubs.push(api?.on('processing-mode-changed', (data: any) => {
+      setProcessingMode(data.mode);
+    }));
+    return () => {
+      unsubs.forEach((u) => u && u());
+    };
+  }, [api, loadData]);
+
+  // 启动笔试悬浮窗
+  const handleStartExam = async () => {
+    // 语音播报模式无需悬浮框，直接标记为已启动
+    if (processingMode === 'voice') {
+      setOverlayActive(true);
+      setOverlayVisible(false);
+      return;
+    }
+    await api.app.launchExamClient();
+    setOverlayActive(true);
+    setOverlayVisible(true);
+  };
+
+  // 关闭笔试悬浮窗
+  const handleCloseOverlay = async () => {
+    // 语音播报模式无需关闭悬浮框
+    if (processingMode === 'voice') {
+      setOverlayActive(false);
+      setOverlayVisible(false);
+      return;
+    }
+    await api.app.closeExamClient();
+    setOverlayActive(false);
+    setOverlayVisible(false);
+  };
+
+  // 显示/隐藏悬浮窗（已启动时仅切换可见性）
+  const handleToggleOverlay = async () => {
+    if (!overlayActive) {
+      await handleStartExam();
+      return;
+    }
+    // 语音播报模式没有悬浮框可切换
+    if (processingMode === 'voice') return;
+    if (overlayVisible) {
+      await api.window.hide();
+      setOverlayVisible(false);
+    } else {
+      await api.window.show();
+      setOverlayVisible(true);
+    }
+  };
+
+  // 切换工作模式
+  const handleSwitchMode = async (mode: ProcessingMode) => {
+    if (mode === processingMode) return;
+    await api.app.switchMode(mode);
+    setProcessingMode(mode);
+  };
+
+  // 透明度调节
+  const handleOpacityChange = async (value: number) => {
+    const clamped = Math.max(0.1, Math.min(1.0, value));
+    setBackgroundOpacity(clamped);
+    await api.window.setOpacity(clamped);
+  };
+
+  // 检测更新
+  const handleCheckUpdate = async () => {
+    const result = await api.app.checkUpdate();
+    setUpdateInfo(result);
+  };
+
+  // 打开官网
+  const handleOpenWebsite = () => {
+    api.app.openExternal('https://www.quizmate.vip');
+  };
+
+  return (
+    <div className="max-w-5xl mx-auto space-y-4">
+      {/* 头部：用户信息 + 积分 + 操作按钮 */}
+      <div className="card">
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div>
+            <h1 className="text-lg font-semibold">
+              {userInfo?.email || userInfo?.username || '已登录用户'}
+            </h1>
+            <p className="text-xs text-slate-400 mt-1">
+              版本 {version}
+              {credits !== null && ` · 积分 `}
+              {credits !== null && <span className="text-amber-400 font-bold">{credits}</span>}
+            </p>
+          </div>
+          <div className="flex gap-2 flex-wrap justify-end items-center">
+            {!overlayActive ? (
+              <button onClick={handleStartExam} className="btn-exam">
+                <Play size={14} /> 开始使用
+              </button>
+            ) : (
+              <button onClick={handleCloseOverlay} className="btn-outline">
+                <Square size={14} /> 关闭悬浮窗
+              </button>
+            )}
+            <button onClick={handleCheckUpdate} className="btn-ghost">
+              <RefreshCw size={14} /> 检测更新
+            </button>
+            <button onClick={handleOpenWebsite} className="btn-ghost">
+              <ExternalLink size={14} /> 官网
+            </button>
+          </div>
+        </div>
+        {updateInfo && (
+          <div className={`mt-3 p-2 rounded text-xs ${updateInfo.hasUpdate ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-800 text-slate-400'}`}>
+            {updateInfo.hasUpdate
+              ? `发现新版本 ${updateInfo.latest}（当前 ${updateInfo.current}）`
+              : `已是最新版本 ${updateInfo.current}`}
+          </div>
+        )}
+      </div>
+
+      {/* 工作模式选择 */}
+      <div className="card">
+        <h3 className="text-sm font-semibold mb-1">工作模式</h3>
+        <p className="text-xs text-slate-400 mb-3">
+          选择答案呈现方式，切换后会自动调整悬浮框与快捷键
+        </p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+          {/* 悬浮框文字呈现 */}
+          <button
+            onClick={() => handleSwitchMode('overlay')}
+            className={`text-left p-4 rounded-lg border-2 transition ${processingMode === 'overlay' ? 'border-exam bg-exam/10' : 'border-slate-700 bg-slate-900/40 hover:border-slate-600'}`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold">悬浮框文字呈现</span>
+              {processingMode === 'overlay' && (
+                <span className="tag bg-exam text-white">已选</span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400">
+              截图后答案显示在防捕获悬浮框，适合单机位
+            </p>
+          </button>
+          {/* 语音播报 */}
+          <button
+            onClick={() => handleSwitchMode('voice')}
+            className={`text-left p-4 rounded-lg border-2 transition ${processingMode === 'voice' ? 'border-exam bg-exam/10' : 'border-slate-700 bg-slate-900/40 hover:border-slate-600'}`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-sm font-semibold">语音播报</span>
+              {processingMode === 'voice' && (
+                <span className="tag bg-exam text-white">已选</span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400">
+              按搜题快捷键自动截图+播报答案，适合双机位，无悬浮框
+            </p>
+            {processingMode === 'voice' && (
+              <p className="text-xs mt-1 text-exam font-medium">
+                只需按搜题快捷键即可完成截图+分析+播报全流程
+              </p>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {/* 悬浮框控制（仅 overlay 模式）：显示开关 + 透明度滑块 */}
+      {processingMode === 'overlay' && (
+        <div className="card">
+          <h3 className="text-sm font-semibold mb-3">悬浮框控制</h3>
+          <div className="flex items-center gap-6 flex-wrap">
+            {/* 显示/隐藏开关 */}
+            <div className="flex items-center gap-3 shrink-0">
+              <div>
+                <div className="text-sm font-medium flex items-center gap-1.5">
+                  {overlayVisible ? <Eye size={14} /> : <EyeOff size={14} />}
+                  悬浮框显示
+                </div>
+                <div className="text-xs text-slate-400 mt-0.5">
+                  {overlayActive ? (overlayVisible ? '已显示' : '已隐藏') : '未启动'}
+                </div>
+              </div>
+              <button
+                onClick={handleToggleOverlay}
+                className={`relative w-12 h-6 rounded-full transition-colors shrink-0 ${overlayVisible ? 'bg-emerald-500' : 'bg-slate-600'}`}
+              >
+                <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${overlayVisible ? 'translate-x-6' : ''}`} />
+              </button>
+            </div>
+            {/* 分隔线 */}
+            <div className="w-px h-10 bg-slate-700 hidden md:block"></div>
+            {/* 透明度滑块 */}
+            <div className="flex-1 min-w-[200px]">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-sm font-medium">背景透明度</span>
+                <span className="text-xs text-slate-400">
+                  {Math.round(backgroundOpacity * 100)}%
+                </span>
+              </div>
+              <input
+                type="range"
+                min={0.1}
+                max={1.0}
+                step={0.05}
+                value={backgroundOpacity}
+                onChange={(e) => handleOpacityChange(parseFloat(e.target.value))}
+                className="w-full h-2 rounded-lg appearance-none cursor-pointer bg-slate-700 accent-exam"
+              />
+              <div className="flex justify-between text-xs mt-1 text-slate-500">
+                <span>透明</span>
+                <span>不透明</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 悬浮框主题（仅 overlay 模式） */}
+      {processingMode === 'overlay' && (
+        <div className="card">
+          <h3 className="text-sm font-semibold mb-3">悬浮框主题</h3>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setTheme('dark')}
+              className={`flex-1 p-4 rounded-lg border-2 transition ${theme === 'dark' ? 'border-exam bg-slate-800' : 'border-slate-700 bg-slate-900/40 hover:border-slate-600'}`}
+            >
+              <div className="w-full h-12 bg-slate-900 rounded mb-2"></div>
+              <div className="text-sm font-medium">黑色主题</div>
+            </button>
+            <button
+              onClick={() => setTheme('light')}
+              className={`flex-1 p-4 rounded-lg border-2 transition ${theme === 'light' ? 'border-exam bg-slate-800' : 'border-slate-700 bg-slate-900/40 hover:border-slate-600'}`}
+            >
+              <div className="w-full h-12 bg-white border rounded mb-2"></div>
+              <div className="text-sm font-medium">白色主题 <span className="text-xs text-emerald-400">推荐</span></div>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 语音播报设置（仅 voice 模式） */}
+      {processingMode === 'voice' && (
+        <div className="card">
+          <h3 className="text-sm font-semibold mb-3">语音播报设置</h3>
+          <div className="space-y-3">
+            <p className="text-xs text-slate-400">
+              语音播报使用系统内置语音引擎，无需额外配置。如需调整语速或音色，请在 Windows 设置 - 时间和语言 - 语音中管理。
+            </p>
+            <button
+              onClick={async () => {
+                if (ttsTesting) return;
+                setTtsTesting(true);
+                try {
+                  await api.tts.speak('这是一段测试文本，用于试听语音效果。');
+                } catch {}
+                setTtsTesting(false);
+              }}
+              disabled={ttsTesting}
+              className="btn-outline text-xs"
+            >
+              {ttsTesting ? <Loader2 size={14} className="animate-spin" /> : <Volume2 size={14} />}
+              {ttsTesting ? '播报中...' : 'TTS 试听'}
+            </button>
+          </div>
+        </div>
+      )}
+
+      <ShortcutSettings
+        commonActions={processingMode === 'overlay' ? examOverlayShortcutActions : examVoiceShortcutActions}
+        bindings={shortcutBindings}
+        onBindingsChange={setShortcutBindings}
+        accentClass="bg-exam"
+      />
+
+      {/* 操作提示 */}
+      <div className="card bg-slate-900/40">
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+          <Info size={16} /> 操作提示
+        </h3>
+        <ul className="text-sm text-slate-300 space-y-2">
+          <li>· 点击「开始使用」启动笔试悬浮框，或按 {shortcutBindings.toggle_visibility || 'Ctrl+B'} 快捷键启动/切换</li>
+          <li>· 拖动悬浮框顶部提示栏可移动位置</li>
+          <li>· 拖动悬浮框四边或四角可调整大小</li>
+          <li>· 使用「悬浮框显示」开关或 {shortcutBindings.toggle_visibility || 'Ctrl+B'} 快捷键可显示/隐藏悬浮框</li>
+          <li>· 透明度可通过上方进度条实时调节</li>
+          {processingMode === 'voice' && (
+            <li>· 语音播报模式下，按搜题快捷键即可完成截图+分析+播报全流程</li>
+          )}
+          {processingMode === 'voice' && (
+            <li>· 按 {shortcutBindings.replay || 'Ctrl+R'} 可重听上次答案</li>
+          )}
+        </ul>
+      </div>
+
+    </div>
+  );
+}

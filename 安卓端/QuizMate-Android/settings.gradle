@@ -1,0 +1,47 @@
+pluginManagement {
+    repositories {
+        maven { url "https://maven.aliyun.com/repository/google" }
+        maven { url "https://maven.aliyun.com/repository/gradle-plugin" }
+        maven { url "https://mirrors.cloud.tencent.com/nexus/repository/maven-public/" }
+        google {
+            content {
+                includeGroupByRegex "androidx\\..*"
+                includeGroupByRegex "com\\.android.*"
+            }
+        }
+        maven {
+            url "https://maven.aliyun.com/repository/public"
+            content {
+                excludeGroupByRegex "androidx\\..*"
+                excludeGroupByRegex "com\\.android.*"
+            }
+        }
+        mavenCentral()
+        gradlePluginPortal()
+    }
+}
+
+dependencyResolutionManagement {
+    repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+    repositories {
+        maven { url "https://maven.aliyun.com/repository/google" }
+        maven { url "https://mirrors.cloud.tencent.com/nexus/repository/maven-public/" }
+        google {
+            content {
+                includeGroupByRegex "androidx\\..*"
+                includeGroupByRegex "com\\.android.*"
+            }
+        }
+        maven {
+            url "https://maven.aliyun.com/repository/public"
+            content {
+                excludeGroupByRegex "androidx\\..*"
+                excludeGroupByRegex "com\\.android.*"
+            }
+        }
+        mavenCentral()
+    }
+}
+
+rootProject.name = "QuizMateAndroid"
+include ":app"

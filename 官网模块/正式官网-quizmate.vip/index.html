@@ -1,0 +1,1037 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="AI笔试助手、AI面试助手与免费求职浏览器插件。Windows 客户端专注笔试面试，浏览器插件提供 AI 网申、投递管理和职位监控，安卓端继续提供下载，Mac 版本后续更新。"
+    />
+    <meta name="theme-color" content="#0f172a" />
+    <meta name="keywords" content="AI笔试助手,AI面试助手,AI笔试工具,AI面试工具,会隐身的笔试助手,笔试助手,面试助手,笔试AI助手,面试AI助手,在线笔试助手,求职AI工具,校招笔试,秋招笔试,春招笔试,答题悬浮助手,QuizMate,quizmate" />
+    <link rel="canonical" href="https://quizmate.cn/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://quizmate.cn/" />
+    <meta property="og:title" content="AI笔试助手_AI面试助手_会隐身的求职AI工具 - QuizMate" />
+    <meta property="og:description" content="AI笔试助手、AI面试助手，会隐身的求职AI工具。QuizMate笔试助手AI秒出参考答案，面试助手实时识别问题语音播报回答。不截屏、不切屏、录屏无痕。" />
+    <meta property="og:image" content="https://quizmate.cn/assets/hero-desktop.png" />
+    <meta property="og:locale" content="zh_CN" />
+    <meta property="og:site_name" content="QuizMate" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="AI笔试助手_AI面试助手_会隐身的求职AI工具 - QuizMate" />
+    <meta name="twitter:description" content="AI笔试助手、AI面试助手，会隐身的求职AI工具。QuizMate笔试助手AI秒出参考答案，面试助手实时识别问题语音播报回答。不截屏、不切屏、录屏无痕。" />
+    <meta name="twitter:image" content="https://quizmate.cn/assets/hero-desktop.png" />
+    <title>AI笔试助手_AI面试助手_会隐身的求职AI工具 - QuizMate</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "QuizMate",
+        "alternateName": ["QuizMate", "AI笔试助手", "AI面试助手", "AI笔试工具", "AI面试工具", "会隐身的笔试助手"],
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "Windows, Android, Chrome, Edge",
+        "description": "QuizMate Windows 客户端提供 AI 笔试和面试辅助，免费浏览器插件提供 AI 网申、投递管理与职位监控。",
+        "url": "https://quizmate.cn/",
+        "downloadUrl": "https://quizmate.cn/download.html",
+        "softwareVersion": "2.0.0",
+        "keywords": "AI笔试助手,AI面试助手,AI笔试工具,AI面试工具,会隐身的笔试助手,笔试助手,面试助手,QuizMate,quizmate,校招笔试,秋招笔试,春招笔试",
+        "featureList": ["Windows笔试助手", "Windows面试助手", "免费浏览器插件-AI网申", "免费浏览器插件-投递管理", "免费浏览器插件-职位监控"],
+        "offers": [
+          {"@type": "Offer", "price": "19.80", "priceCurrency": "CNY", "description": "30天授权"},
+          {"@type": "Offer", "price": "29.80", "priceCurrency": "CNY", "description": "90天授权"},
+          {"@type": "Offer", "price": "69.80", "priceCurrency": "CNY", "description": "365天授权"}
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "QuizMate是什么？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "QuizMate Windows 客户端提供笔试和面试辅助，免费浏览器插件提供 AI 网申、投递管理与职位监控；同时保留 Android 下载，Mac 版本后续更新。官网 https://quizmate.cn/"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "什么是笔试面试AI助手？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "笔试面试AI助手（QuizMate）是一款覆盖求职全流程的AI工具。笔试助手直接读取网页题目AI秒出参考答案，面试助手实时识别面试官问题语音播报参考回答，不截屏、不切屏、录屏无痕。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "求职AI搭子支持哪些平台？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "QuizMate 支持 Windows、Android、Chrome 和 Edge；Mac 版本后续更新。Windows 客户端用于笔试面试，免费插件用于 AI 网申、投递管理和职位监控。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "笔试助手和面试助手怎么用？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "笔试助手在笔试页面直接读取题目和选项，AI生成参考答案，无需截屏切屏；面试助手通过语音实时识别面试官问题，AI秒出参考回答并语音播报。两种模式都支持录屏无痕。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "QuizMate多少钱？怎么收费？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "QuizMate提供三档授权：30天授权19.80元、90天授权29.80元、365天授权69.80元。支持微信、支付宝付款，一个账号全平台通用。充值页面：https://quizmate.cn/recharge.html"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "QuizMate安全吗？会被检测到吗？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "QuizMate不截屏、不切屏、不弹窗，全程留在当前页面操作。共享屏幕、切屏监控、后台录屏均无法捕捉。笔试助手通过DOM解析读取题目，面试助手通过第二台设备语音播报，主设备完全无痕。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "有没有免费的求职AI工具推荐？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "QuizMate 提供可下载试用的 Windows 笔试面试客户端，以及永久免费的 Chrome/Edge 求职插件。Android 下载保持提供，Mac 版本后续更新。官网：https://quizmate.cn/"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "笔试AI助手哪个好用？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "QuizMate笔试AI助手直接读取网页题目和选项，AI秒出参考答案，不截屏不切屏录屏无痕。支持单选、多选、判断、填空等多题型，支持悬浮框模式和双机位语音播报模式。已有1200+注册用户使用，覆盖字节跳动、腾讯、百度、阿里等名企校招笔试。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "面试AI助手哪个好？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "QuizMate面试助手实时语音识别面试官问题，AI秒出参考回答并语音播报。语音识别准确率99.3%，平均回答用时400ms，支持多语言和隐身模式。适合远程面试、视频面试等场景。"
+            }
+          },
+          {
+            "@type": "Question",
+            "name": "QuizMate怎么下载安装？",
+            "acceptedAnswer": {
+              "@type": "Answer",
+              "text": "QuizMate 提供 Windows 客户端、免费 Chrome/Edge 求职插件和 Android 安装包。Mac 版本后续更新。下载页面：https://quizmate.cn/download.html"
+            }
+          }
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "QuizMate",
+        "alternateName": "答题悬浮助手",
+        "url": "https://quizmate.cn/",
+        "logo": "https://quizmate.cn/assets/hero-desktop.png",
+        "description": "QuizMate是笔试面试AI助手，求职AI搭子。笔试助手读取页面题目AI秒出参考答案，面试助手实时识别面试官问题语音播报参考回答。不截屏、不切屏、录屏无痕。",
+        "foundingDate": "2026"
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "QuizMate",
+        "url": "https://quizmate.cn/",
+        "description": "QuizMate - 笔试面试AI助手 | 求职AI搭子",
+        "inLanguage": "zh-CN",
+        "publisher": {
+          "@type": "Organization",
+          "name": "QuizMate",
+          "url": "https://quizmate.cn/"
+        }
+      }
+    </script>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css?v=20260816-v16" />
+    <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script defer src="app.js?v=20260727-mobile2"></script>
+    <script defer src="credits.js?v=20260801-pkgs"></script>
+  </head>
+  <body data-page="home">
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header" data-header>
+      <div class="header-inner">
+        <a class="brand" href="/" aria-label="QuizMate首页">
+          <span class="brand-mark" aria-hidden="true">Q</span>
+          <span>QuizMate</span>
+        </a>
+        <nav class="desktop-nav" aria-label="主导航">
+          <a href="/" aria-current="page">首页</a>
+          <a href="docs.html">操作文档</a>
+          <a href="recharge.html">充值</a>
+          <a href="download.html">下载</a>
+          <a href="blog.html">博客</a>
+        </nav>
+        <button class="account-nav-button" type="button" data-open-auth>
+          <i data-lucide="user-round" aria-hidden="true"></i>
+          <span data-header-account>登录</span>
+        </button>
+        <div class="download-dropdown" data-download-dropdown>
+          <button class="download-trigger" type="button" data-download-trigger aria-haspopup="true" aria-expanded="false">
+            <i data-lucide="download" aria-hidden="true"></i>
+            <span>立即下载</span>
+            <i data-lucide="chevron-down" aria-hidden="true"></i>
+          </button>
+          <div class="download-menu" role="menu">
+            <a href="downloads/QuizMate-Windows-2026.8.16.exe" data-download="windows-client" role="menuitem">
+              <i data-lucide="monitor" aria-hidden="true"></i>
+              <span>Windows 客户端</span>
+            </a>
+            <a href="downloads/QuizMate-Career-Extension-2.2.0.zip" data-download="browser-extension" role="menuitem">
+              <i data-lucide="chrome" aria-hidden="true"></i>
+              <span>QuizMate 求职插件（免费）</span>
+            </a>
+            <a href="downloads/QuizMate-Android-2026.07.31.apk" data-download="android-client" role="menuitem">
+              <i data-lucide="smartphone" aria-hidden="true"></i>
+              <span>Android 客户端</span>
+            </a>
+          </div>
+        </div>
+        <button class="menu-button" type="button" aria-label="打开导航菜单" aria-expanded="false" data-menu-button>
+          <i data-lucide="menu" aria-hidden="true"></i>
+        </button>
+      </div>
+      <nav class="mobile-nav" aria-label="移动端导航" data-mobile-nav>
+        <a href="/" aria-current="page">首页</a>
+        <a href="docs.html">操作文档</a>
+        <a href="recharge.html">充值</a>
+        <a href="download.html">下载</a>
+        <a href="blog.html">博客</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero-v3" aria-labelledby="hero-title">
+        <div class="hero-v3-inner">
+          <div class="hero-v3-badge">
+            <span class="pulse-dot" aria-hidden="true"></span>
+            已有 <span id="reg-user-count">1203</span> 位注册用户
+          </div>
+          <h1 id="hero-title">AI笔试助手 + AI面试助手，会隐身的求职AI工具</h1>
+          <p class="hero-v3-subtitle">QuizMate AI笔试助手读取页面题目，AI秒出参考答案；AI面试助手实时识别面试官问题，语音播报参考回答。不截屏、不切屏、录屏无痕，一个客户端覆盖求职全流程。</p>
+          <div class="live-activity" id="liveActivity">
+            <span class="live-dot"></span>
+            <span class="live-text" id="liveText">z****e@qq.com 正在搜题…</span>
+          </div>
+          <div class="download-dropdown" data-download-dropdown>
+            <button class="download-trigger download-trigger-hero" type="button" data-download-trigger aria-haspopup="true" aria-expanded="false">
+              <i data-lucide="download" aria-hidden="true"></i>
+              <span>立即下载</span>
+              <i data-lucide="chevron-down" aria-hidden="true"></i>
+            </button>
+            <div class="download-menu" role="menu">
+              <a href="downloads/QuizMate-Windows-2026.8.16.exe" data-download="windows-client" role="menuitem">
+                <i data-lucide="monitor" aria-hidden="true"></i>
+                <span>Windows 客户端</span>
+              </a>
+              <a href="downloads/QuizMate-Career-Extension-2.2.0.zip" data-download="browser-extension" role="menuitem">
+                <i data-lucide="chrome" aria-hidden="true"></i>
+                <span>QuizMate 求职插件（免费）</span>
+              </a>
+              <a href="downloads/QuizMate-Android-2026.07.31.apk" data-download="android-client" role="menuitem">
+                <i data-lucide="smartphone" aria-hidden="true"></i>
+                <span>Android 客户端</span>
+              </a>
+            </div>
+          </div>
+          <p class="hero-v3-note">无需注册即可试用 · 支持 Chrome、Edge、Android</p>
+        </div>
+      </section>
+
+      <section class="section client-demo" aria-labelledby="demo-title">
+        <div class="section-inner">
+          <div class="section-heading">
+            <p class="section-kicker">产品体验</p>
+            <h2 id="demo-title">一个客户端加一个免费插件</h2>
+            <p>点击左侧菜单，体验每个功能</p>
+          </div>
+          <div class="client-window">
+            <div class="client-titlebar">
+              <span class="titlebar-dot dot-red"></span>
+              <span class="titlebar-dot dot-yellow"></span>
+              <span class="titlebar-dot dot-green"></span>
+              <span class="client-title">QuizMate</span>
+            </div>
+            <div class="client-body">
+              <nav class="client-sidebar" aria-label="功能菜单">
+                <button class="sidebar-item is-active" data-panel="video" type="button">
+                  <i data-lucide="play-circle" aria-hidden="true"></i>
+                  <span>演示视频</span>
+                </button>
+                <button class="sidebar-item" data-panel="exam" type="button">
+                  <i data-lucide="file-text" aria-hidden="true"></i>
+                  <span>笔试助手</span>
+                </button>
+                <button class="sidebar-item" data-panel="interview" type="button">
+                  <i data-lucide="headphones" aria-hidden="true"></i>
+                  <span>面试助手</span>
+                </button>
+                <button class="sidebar-item" data-panel="extension" type="button">
+                  <i data-lucide="chrome" aria-hidden="true"></i>
+                  <span>免费求职插件</span>
+                </button>
+              </nav>
+              <div class="client-main">
+                <div class="client-panel is-active" data-panel="video">
+                  <div class="demo-video-wrap">
+                    <iframe
+                      src="https://player.bilibili.com/player.html?bvid=BV1gAbd6SEsg&amp;autoplay=0&amp;danmaku=0&amp;high_quality=1"
+                      scrolling="no"
+                      frameborder="no"
+                      allow="fullscreen; encrypted-media; picture-in-picture"
+                      allowfullscreen="true"
+                      title="QuizMate 产品演示视频"
+                    ></iframe>
+                  </div>
+                </div>
+                <div class="client-panel" data-panel="exam">
+                  <div class="mode-tabs">
+                    <button class="mode-tab is-active" data-mode="float" type="button">悬浮框模式</button>
+                    <button class="mode-tab" data-mode="voice" type="button">双机位语音播报模式</button>
+                  </div>
+                  <div class="mode-content is-active" data-mode="float">
+                    <img src="assets/mode-float.jpg" alt="笔试助手悬浮框模式" loading="lazy" />
+                  </div>
+                  <div class="mode-content" data-mode="voice">
+                    <img src="assets/mode-voice.png" alt="笔试助手语音播报模式" loading="lazy" />
+                  </div>
+                  <h3>笔试助手</h3>
+                  <p>悬浮框模式直接读取页面题目与选项，AI 生成参考答案；双机位语音播报模式通过第二台设备语音播报答案，主设备完全无痕。</p>
+                  <div class="panel-tags">
+                    <span>不截屏</span>
+                    <span>不切屏</span>
+                    <span>录屏无痕</span>
+                    <span>多题型支持</span>
+                  </div>
+                </div>
+                <div class="client-panel" data-panel="interview">
+                  <img src="assets/showcase-interview.avif" alt="面试助手界面" loading="lazy" />
+                  <h3>面试助手</h3>
+                  <p>实时识别面试官问题，AI 秒出参考回答。语音识别准确率 99.3%，平均回答用时 400ms。</p>
+                  <div class="panel-tags">
+                    <span>语音识别</span>
+                    <span>实时答案</span>
+                    <span>多语言支持</span>
+                    <span>隐身模式</span>
+                  </div>
+                </div>
+                <div class="client-panel client-panel-mockup" data-panel="extension">
+                  <div class="mockup-app">
+                    <div class="mockup-toolbar">
+                      <span class="mockup-tab is-active">AI 填网申</span>
+                      <span class="mockup-tab">档案管理</span>
+                    </div>
+                    <div class="mockup-body">
+                      <div class="mockup-form">
+                        <div class="mockup-row"><span class="mockup-label">网申网址</span><div class="mockup-input">https://campus.example.com/apply</div><button class="mockup-btn">打开网页</button></div>
+                        <div class="mockup-row"><span class="mockup-label">Cookie 状态</span><div class="mockup-tag mockup-tag-green">已获取</div></div>
+                        <div class="mockup-row"><span class="mockup-label">当前档案</span><div class="mockup-input">字节跳动-后端开发</div><button class="mockup-btn">切换</button></div>
+                        <div class="mockup-section-title">填写字段</div>
+                        <div class="mockup-fields">
+                          <div class="mockup-field"><span>姓名</span><div class="mockup-input">张三</div></div>
+                          <div class="mockup-field"><span>手机号</span><div class="mockup-input">138****1234</div></div>
+                          <div class="mockup-field"><span>毕业院校</span><div class="mockup-input">浙江大学</div></div>
+                          <div class="mockup-field"><span>专业</span><div class="mockup-input">计算机科学与技术</div></div>
+                          <div class="mockup-field"><span>学历</span><div class="mockup-input">本科</div></div>
+                          <div class="mockup-field"><span>意向岗位</span><div class="mockup-input">后端开发工程师</div></div>
+                        </div>
+                        <div class="mockup-actions">
+                          <button class="mockup-btn mockup-btn-primary">AI 智能填写</button>
+                          <button class="mockup-btn mockup-btn-outline">快速填写</button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="client-panel client-panel-mockup" data-panel="resume">
+                  <div class="mockup-app">
+                    <div class="mockup-toolbar">
+                      <span class="mockup-tab is-active">简历列表</span>
+                      <span class="mockup-tab">模板选择</span>
+                      <span class="mockup-tab">AI 优化</span>
+                    </div>
+                    <div class="mockup-body">
+                      <div class="mockup-resume-list">
+                        <div class="mockup-resume-item is-active">
+                          <div class="mockup-resume-info"><strong>后端开发-字节版</strong><span>上次编辑：2026-08-05</span></div>
+                          <span class="mockup-tag mockup-tag-blue">默认</span>
+                        </div>
+                        <div class="mockup-resume-item">
+                          <div class="mockup-resume-info"><strong>前端开发-通用版</strong><span>上次编辑：2026-07-28</span></div>
+                        </div>
+                        <div class="mockup-resume-item">
+                          <div class="mockup-resume-info"><strong>算法工程师-蚂蚁版</strong><span>上次编辑：2026-07-20</span></div>
+                        </div>
+                      </div>
+                      <div class="mockup-resume-preview">
+                        <div class="mockup-resume-header">
+                          <strong>张三</strong>
+                          <span>后端开发工程师 · 138****1234 · z****e@qq.com</span>
+                        </div>
+                        <div class="mockup-resume-section">
+                          <div class="mockup-resume-section-title">教育背景</div>
+                          <div class="mockup-line"></div>
+                          <div class="mockup-line mockup-line-short"></div>
+                        </div>
+                        <div class="mockup-resume-section">
+                          <div class="mockup-resume-section-title">实习经历</div>
+                          <div class="mockup-line"></div>
+                          <div class="mockup-line"></div>
+                          <div class="mockup-line mockup-line-short"></div>
+                        </div>
+                        <div class="mockup-resume-section">
+                          <div class="mockup-resume-section-title">项目经历</div>
+                          <div class="mockup-line"></div>
+                          <div class="mockup-line mockup-line-short"></div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="client-panel client-panel-mockup" data-panel="notice">
+                  <div class="mockup-app">
+                    <div class="mockup-toolbar">
+                      <span class="mockup-tab is-active">全部公告</span>
+                      <span class="mockup-tab">已收藏</span>
+                    </div>
+                    <div class="mockup-body">
+                      <div class="mockup-filter-bar">
+                        <span class="mockup-chip is-active">全部</span>
+                        <span class="mockup-chip">互联网</span>
+                        <span class="mockup-chip">金融</span>
+                        <span class="mockup-chip">国企</span>
+                        <span class="mockup-chip">2026届</span>
+                        <span class="mockup-chip">2027届</span>
+                      </div>
+                      <div class="mockup-notice-list">
+                        <div class="mockup-notice-item">
+                          <div class="mockup-notice-tag mockup-tag-blue">字节跳动</div>
+                          <div class="mockup-notice-content"><strong>2027届秋季校园招聘</strong><span>后端/前端/算法/客户端 · 全岗位</span></div>
+                          <div class="mockup-notice-date">08-05</div>
+                        </div>
+                        <div class="mockup-notice-item">
+                          <div class="mockup-notice-tag mockup-tag-green">腾讯</div>
+                          <div class="mockup-notice-content"><strong>2027届技术大咖提前批</strong><span>PCG/TEG/CSIG · 技术类</span></div>
+                          <div class="mockup-notice-date">08-03</div>
+                        </div>
+                        <div class="mockup-notice-item">
+                          <div class="mockup-notice-tag mockup-tag-amber">阿里巴巴</div>
+                          <div class="mockup-notice-content"><strong>蚂蚁集团2027届校招</strong><span>Java开发/算法/数据 · 杭州/北京</span></div>
+                          <div class="mockup-notice-date">08-01</div>
+                        </div>
+                        <div class="mockup-notice-item">
+                          <div class="mockup-notice-tag mockup-tag-purple">美团</div>
+                          <div class="mockup-notice-content"><strong>2027届秋季校园招聘</strong><span>前端/后端/数据分析 · 北京/上海</span></div>
+                          <div class="mockup-notice-date">07-30</div>
+                        </div>
+                        <div class="mockup-notice-item">
+                          <div class="mockup-notice-tag mockup-tag-blue">百度</div>
+                          <div class="mockup-notice-content"><strong>2027届提前批内推</strong><span>算法工程师/研发工程师 · 全岗位</span></div>
+                          <div class="mockup-notice-date">07-28</div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+                <div class="client-panel client-panel-mockup" data-panel="monitor">
+                  <div class="mockup-app">
+                    <div class="mockup-toolbar">
+                      <span class="mockup-tab is-active">监控列表</span>
+                      <span class="mockup-tab">消息提醒</span>
+                    </div>
+                    <div class="mockup-body">
+                      <div class="mockup-monitor-list">
+                        <div class="mockup-monitor-item">
+                          <div class="mockup-monitor-info">
+                            <strong>字节跳动 - 后端开发工程师</strong>
+                            <span>投递时间：2026-08-01</span>
+                          </div>
+                          <span class="mockup-status mockup-status-active">笔试中</span>
+                        </div>
+                        <div class="mockup-monitor-item">
+                          <div class="mockup-monitor-info">
+                            <strong>腾讯 - 产品经理</strong>
+                            <span>投递时间：2026-07-25</span>
+                          </div>
+                          <span class="mockup-status mockup-status-interview">面试中</span>
+                        </div>
+                        <div class="mockup-monitor-item">
+                          <div class="mockup-monitor-info">
+                            <strong>阿里巴巴 - Java开发</strong>
+                            <span>投递时间：2026-07-20</span>
+                          </div>
+                          <span class="mockup-status mockup-status-offer">已 Offer</span>
+                        </div>
+                        <div class="mockup-monitor-item">
+                          <div class="mockup-monitor-info">
+                            <strong>美团 - 前端开发</strong>
+                            <span>投递时间：2026-07-18</span>
+                          </div>
+                          <span class="mockup-status mockup-status-pending">简历评估</span>
+                        </div>
+                        <div class="mockup-monitor-item">
+                          <div class="mockup-monitor-info">
+                            <strong>百度 - 算法工程师</strong>
+                            <span>投递时间：2026-07-15</span>
+                          </div>
+                          <span class="mockup-status mockup-status-active">笔试中</span>
+                        </div>
+                      </div>
+                      <div class="mockup-monitor-reminder">
+                        <i data-lucide="bell" aria-hidden="true"></i>
+                        <span>3 条新状态更新，点击查看详情</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="section features-v3" aria-labelledby="features-title">
+        <div class="section-inner">
+          <div class="section-heading">
+            <p class="section-kicker">核心优势</p>
+            <h2 id="features-title">为什么选择 AI笔试助手 QuizMate</h2>
+            <p>笔试面试AI助手全程留在当前页面，不截图、不切屏、不弹窗。</p>
+          </div>
+          <div class="feature-grid-v3">
+            <article class="feature-card-v3">
+              <span class="feature-icon-v3"><i data-lucide="scan-text" aria-hidden="true"></i></span>
+              <h3>不截屏，直接读取</h3>
+              <p>从页面结构提取题目、选项和正文，不依赖截图识别。</p>
+            </article>
+            <article class="feature-card-v3">
+              <span class="feature-icon-v3"><i data-lucide="shield-check" aria-hidden="true"></i></span>
+              <h3>不切屏，录屏无痕</h3>
+              <p>全程留在当前页面，不切换应用、不弹窗。</p>
+            </article>
+            <article class="feature-card-v3">
+              <span class="feature-icon-v3"><i data-lucide="brain-circuit" aria-hidden="true"></i></span>
+              <h3>多模型智能</h3>
+              <p>根据场景使用合适的 AI 大模型，答案更准确。</p>
+            </article>
+            <article class="feature-card-v3">
+              <span class="feature-icon-v3"><i data-lucide="layers" aria-hidden="true"></i></span>
+              <h3>常驻悬浮面板</h3>
+              <p>在当前页面展示结果，减少复制粘贴和切换应用。</p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section carousel-section" id="feedback" aria-labelledby="carousel-title">
+        <div class="section-inner">
+          <div class="section-heading">
+            <p class="section-kicker">用户好评</p>
+            <h2 id="carousel-title">拿到 Offer 的小伙伴们</h2>
+            <p>来看看他们用QuizMate之后的真实经历，也许下一个就是你。</p>
+          </div>
+          <div class="feedback-marquee">
+            <div class="marquee-row">
+              <div class="marquee-track">
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/bytedance.png" alt="字节">
+                  </div>
+                  <p class="feedback-text">天哪这个插件简直是救命神器！！秋招笔试遇到那种超难的行测题，直接出答案，关键是共享屏幕完全看不到！！最后拿下了字节，感恩！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">186****921</span>
+                    <span class="feedback-tag">26届秋招 · 字节跳动 · 后端开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/tencent.ico" alt="腾讯">
+                  </div>
+                  <p class="feedback-text">春招补录用了一周，效率真的起飞！不用切屏看答案，直接页面上就有，太方便了。已签腾讯，强烈推荐给还在找工作的同学！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">138****221</span>
+                    <span class="feedback-tag">26届春招 · 腾讯 · 产品经理</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/baidu.ico" alt="百度">
+                  </div>
+                  <p class="feedback-text">提前批投了百度，笔试那天紧张得不行，还好有QuizMate兜底，代码题思路直接出来了，面试官都没发现异常哈哈哈哈，已经收到oc了！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">138****618</span>
+                    <span class="feedback-tag">27届提前批 · 百度 · 算法工程师</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/alibaba.ico" alt="蚂蚁">
+                  </div>
+                  <p class="feedback-text">蚂蚁的笔试题量太变态了，要不是有悬浮助手根本做不完！全程不切屏答案就在旁边，效率翻倍！已拿到蚂蚁offer，太激动了！！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">177****041</span>
+                    <span class="feedback-tag">27届提前批 · 阿里巴巴蚂蚁集团 · Java开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/meituan.ico" alt="美团">
+                  </div>
+                  <p class="feedback-text">双非院校秋招本来没啥底气，用了之后笔试通过率蹭蹭涨！完全不截屏不切屏这点真的牛，最后拿下了美团，感谢QuizMate！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">188****517</span>
+                    <span class="feedback-tag">26届秋招 · 美团 · 前端开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/jd.ico" alt="京东">
+                  </div>
+                  <p class="feedback-text">提前批同时投了好几家，笔试时间撞了也得硬上，有这个工具真的省心好多，不用来回切应用查答案，直接页面上看解析，绝了！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">186****229</span>
+                    <span class="feedback-tag">27届提前批 · 京东 · 数据分析师</span>
+                  </div>
+                </article>
+                <!-- duplicate for seamless loop -->
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/bytedance.png" alt="字节">
+                  </div>
+                  <p class="feedback-text">天哪这个插件简直是救命神器！！秋招笔试遇到那种超难的行测题，直接出答案，关键是共享屏幕完全看不到！！最后拿下了字节，感恩！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">186****921</span>
+                    <span class="feedback-tag">26届秋招 · 字节跳动 · 后端开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/tencent.ico" alt="腾讯">
+                  </div>
+                  <p class="feedback-text">春招补录用了一周，效率真的起飞！不用切屏看答案，直接页面上就有，太方便了。已签腾讯，强烈推荐给还在找工作的同学！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">138****221</span>
+                    <span class="feedback-tag">26届春招 · 腾讯 · 产品经理</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/baidu.ico" alt="百度">
+                  </div>
+                  <p class="feedback-text">提前批投了百度，笔试那天紧张得不行，还好有QuizMate兜底，代码题思路直接出来了，面试官都没发现异常哈哈哈哈，已经收到oc了！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">138****618</span>
+                    <span class="feedback-tag">27届提前批 · 百度 · 算法工程师</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/alibaba.ico" alt="蚂蚁">
+                  </div>
+                  <p class="feedback-text">蚂蚁的笔试题量太变态了，要不是有悬浮助手根本做不完！全程不切屏答案就在旁边，效率翻倍！已拿到蚂蚁offer，太激动了！！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">177****041</span>
+                    <span class="feedback-tag">27届提前批 · 阿里巴巴蚂蚁集团 · Java开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/meituan.ico" alt="美团">
+                  </div>
+                  <p class="feedback-text">双非院校秋招本来没啥底气，用了之后笔试通过率蹭蹭涨！完全不截屏不切屏这点真的牛，最后拿下了美团，感谢QuizMate！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">188****517</span>
+                    <span class="feedback-tag">26届秋招 · 美团 · 前端开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/jd.ico" alt="京东">
+                  </div>
+                  <p class="feedback-text">提前批同时投了好几家，笔试时间撞了也得硬上，有这个工具真的省心好多，不用来回切应用查答案，直接页面上看解析，绝了！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">186****229</span>
+                    <span class="feedback-tag">27届提前批 · 京东 · 数据分析师</span>
+                  </div>
+                </article>
+              </div>
+            </div>
+            <div class="marquee-row marquee-row-reverse">
+              <div class="marquee-track">
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/pinduoduo.ico" alt="拼多多">
+                  </div>
+                  <p class="feedback-text">面试助手的语音识别真的绝了！面试官刚说完问题，参考回答就出来了，反应速度比我自己想快多了！已拿拼多多offer！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">155****836</span>
+                    <span class="feedback-tag">27届提前批 · 拼多多 · 客户端开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/netease.ico" alt="网易">
+                  </div>
+                  <p class="feedback-text">双机位语音播报模式简直是天才设计！第二台手机悄悄播答案，主电脑完全无痕，笔试再也不慌了！已签网易！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">133****502</span>
+                    <span class="feedback-tag">26届秋招 · 网易 · 游戏开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/xiaohongshu.ico" alt="小红书">
+                  </div>
+                  <p class="feedback-text">秋招笔试遇到编程题头都大了，还好有这个神器，思路直接清晰了！全程共享屏幕面试官啥也没看出来，已拿小红书offer！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">159****778</span>
+                    <span class="feedback-tag">26届秋招 · 小红书 · 算法岗</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/huawei.ico" alt="华为">
+                  </div>
+                  <p class="feedback-text">用了一整个秋招季，从笔试到面试全覆盖！网申助手填表也省了好多时间，最后一个拿了华为的offer，真的感谢！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">136****419</span>
+                    <span class="feedback-tag">26届秋招 · 华为 · 通用软件开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/mihoyo.ico" alt="米哈游">
+                  </div>
+                  <p class="feedback-text">春招最后冲刺阶段发现的宝藏工具！简历制作功能也很好用，AI生成的简历直接被HR夸了！已签米哈游！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">189****645</span>
+                    <span class="feedback-tag">26届春招 · 米哈游 · 游戏服务端</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/lixiang.ico" alt="理想">
+                  </div>
+                  <p class="feedback-text">校招公告和职位监控功能太实用了！投了30多家全靠它追踪进度，一个都没漏！最终拿到理想汽车offer，感恩！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">152****308</span>
+                    <span class="feedback-tag">27届提前批 · 理想汽车 · 自动驾驶</span>
+                  </div>
+                </article>
+                <!-- duplicate for seamless loop -->
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/pinduoduo.ico" alt="拼多多">
+                  </div>
+                  <p class="feedback-text">面试助手的语音识别真的绝了！面试官刚说完问题，参考回答就出来了，反应速度比我自己想快多了！已拿拼多多offer！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">155****836</span>
+                    <span class="feedback-tag">27届提前批 · 拼多多 · 客户端开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/netease.ico" alt="网易">
+                  </div>
+                  <p class="feedback-text">双机位语音播报模式简直是天才设计！第二台手机悄悄播答案，主电脑完全无痕，笔试再也不慌了！已签网易！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">133****502</span>
+                    <span class="feedback-tag">26届秋招 · 网易 · 游戏开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/xiaohongshu.ico" alt="小红书">
+                  </div>
+                  <p class="feedback-text">秋招笔试遇到编程题头都大了，还好有这个神器，思路直接清晰了！全程共享屏幕面试官啥也没看出来，已拿小红书offer！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">159****778</span>
+                    <span class="feedback-tag">26届秋招 · 小红书 · 算法岗</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/huawei.ico" alt="华为">
+                  </div>
+                  <p class="feedback-text">用了一整个秋招季，从笔试到面试全覆盖！网申助手填表也省了好多时间，最后一个拿了华为的offer，真的感谢！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">136****419</span>
+                    <span class="feedback-tag">26届秋招 · 华为 · 通用软件开发</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/mihoyo.ico" alt="米哈游">
+                  </div>
+                  <p class="feedback-text">春招最后冲刺阶段发现的宝藏工具！简历制作功能也很好用，AI生成的简历直接被HR夸了！已签米哈游！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">189****645</span>
+                    <span class="feedback-tag">26届春招 · 米哈游 · 游戏服务端</span>
+                  </div>
+                </article>
+                <article class="feedback-card">
+                  <div class="feedback-card-top">
+                    <div class="feedback-stars" aria-label="5星好评">★★★★★</div>
+                    <img class="company-logo-img" src="assets/company-logos/lixiang.ico" alt="理想">
+                  </div>
+                  <p class="feedback-text">校招公告和职位监控功能太实用了！投了30多家全靠它追踪进度，一个都没漏！最终拿到理想汽车offer，感恩！！</p>
+                  <div class="feedback-meta">
+                    <span class="feedback-author">152****308</span>
+                    <span class="feedback-tag">27届提前批 · 理想汽车 · 自动驾驶</span>
+                  </div>
+                </article>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <section class="section seo-content" aria-label="QuizMate 笔试面试AI助手详细介绍" style="padding:1.5rem 0;background:#f8fafc;border-top:1px solid #e2e8f0;">
+      <div class="section-inner" style="max-width:800px;">
+        <article style="font-size:0.8125rem;color:var(--muted,#64748b);line-height:1.7;">
+          <h2 style="font-size:0.9375rem;font-weight:600;margin-bottom:0.5rem;color:var(--ink,#1e293b);">QuizMate - AI笔试助手、AI面试助手，会隐身的求职AI工具</h2>
+          <p>
+            <strong>QuizMate</strong>是一款专为求职者打造的<strong>笔试面试AI助手</strong>，也是你的<strong>求职AI搭子</strong>。
+            QuizMate 的<strong>笔试助手</strong>直接读取网页题目，AI秒出参考答案，不截屏、不切屏、录屏无痕；
+            <strong>面试助手</strong>实时语音识别面试官问题，AI生成参考回答并语音播报。
+            QuizMate 覆盖校招笔试、秋招笔试、春招笔试和在线面试等场景，提供 Windows 客户端、免费浏览器插件和安卓端。
+            Windows 客户端专注笔试与面试，AI 网申、投递管理和职位监控由免费浏览器插件提供；Mac 版本后续更新。
+          </p>
+
+          <h3 style="font-size:0.8125rem;font-weight:600;margin:1rem 0 0.4rem;color:var(--ink,#1e293b);">QuizMate 产品概要</h3>
+          <table style="width:100%;font-size:0.75rem;border-collapse:collapse;margin-bottom:0.5rem;">
+            <tbody>
+              <tr><th style="text-align:left;padding:3px 8px;border:1px solid #e2e8f0;background:#f1f5f9;width:100px;">产品名称</th><td style="padding:3px 8px;border:1px solid #e2e8f0;">QuizMate</td></tr>
+              <tr><th style="text-align:left;padding:3px 8px;border:1px solid #e2e8f0;background:#f1f5f9;">产品定位</th><td style="padding:3px 8px;border:1px solid #e2e8f0;">笔试面试AI助手 / 求职AI搭子</td></tr>
+              <tr><th style="text-align:left;padding:3px 8px;border:1px solid #e2e8f0;background:#f1f5f9;">支持平台</th><td style="padding:3px 8px;border:1px solid #e2e8f0;">Windows / Android / Chrome / Edge；Mac 后续更新</td></tr>
+              <tr><th style="text-align:left;padding:3px 8px;border:1px solid #e2e8f0;background:#f1f5f9;">核心功能</th><td style="padding:3px 8px;border:1px solid #e2e8f0;">客户端：笔试、面试；免费插件：AI网申、投递管理、职位监控</td></tr>
+              <tr><th style="text-align:left;padding:3px 8px;border:1px solid #e2e8f0;background:#f1f5f9;">价格</th><td style="padding:3px 8px;border:1px solid #e2e8f0;">19.80元/30天 · 29.80元/90天 · 69.80元/365天</td></tr>
+              <tr><th style="text-align:left;padding:3px 8px;border:1px solid #e2e8f0;background:#f1f5f9;">官网</th><td style="padding:3px 8px;border:1px solid #e2e8f0;"><a href="https://quizmate.cn/">https://quizmate.cn/</a></td></tr>
+            </tbody>
+          </table>
+
+          <h3 style="font-size:0.8125rem;font-weight:600;margin:0.75rem 0 0.4rem;color:var(--ink,#1e293b);">常见问题</h3>
+          <details style="margin-bottom:0.25rem;">
+            <summary style="font-size:0.75rem;cursor:pointer;font-weight:500;color:var(--ink,#1e293b);">QuizMate是什么？</summary>
+            <p style="font-size:0.75rem;color:var(--muted,#64748b);padding:0.4rem 0 0 1rem;">QuizMate Windows 客户端专注笔试和面试辅助，免费浏览器插件提供 AI 网申、投递管理与职位监控。</p>
+          </details>
+          <details style="margin-bottom:0.25rem;">
+            <summary style="font-size:0.75rem;cursor:pointer;font-weight:500;color:var(--ink,#1e293b);">QuizMate安全吗？会被检测到吗？</summary>
+            <p style="font-size:0.75rem;color:var(--muted,#64748b);padding:0.4rem 0 0 1rem;">QuizMate不截屏、不切屏、不弹窗，全程留在当前页面操作。共享屏幕、切屏监控、后台录屏均无法捕捉。</p>
+          </details>
+          <details style="margin-bottom:0.25rem;">
+            <summary style="font-size:0.75rem;cursor:pointer;font-weight:500;color:var(--ink,#1e293b);">QuizMate怎么下载？</summary>
+            <p style="font-size:0.75rem;color:var(--muted,#64748b);padding:0.4rem 0 0 1rem;">访问下载页面 https://quizmate.cn/download.html ，可下载 Windows 客户端、免费浏览器插件和 Android 版本；Mac 版本后续更新。</p>
+          </details>
+        </article>
+      </div>
+    </section>
+<!-- SEO-DISCOVERY-START -->
+    <section class="seo-discovery" aria-labelledby="seo-discovery-title">
+      <div class="seo-discovery-inner">
+        <p class="seo-discovery-eyebrow">QuizMate 求职 AI 工具</p>
+        <h2 id="seo-discovery-title">按你的求职阶段了解产品</h2>
+        <p>从笔试练习、面试准备到网申和投递管理，每个主题都有独立说明、适用边界和常见问题。</p>
+        <div class="seo-discovery-grid">
+          <a href="ai-written-test-assistant.html"><strong>AI笔试助手</strong><span>题目读取、参考思路与练习复盘</span></a>
+          <a href="ai-interview-assistant.html"><strong>AI面试助手</strong><span>问题识别、回答框架与模拟练习</span></a>
+          <a href="campus-recruitment-ai-assistant.html"><strong>校园招聘AI助手</strong><span>网申、笔试、面试和投递流程</span></a>
+          <a href="career-ai-tools.html"><strong>大学生求职AI工具</strong><span>平台、价格、免费功能与选择标准</span></a>
+        </div>
+        <nav class="seo-discovery-links" aria-label="品牌与信任信息"><a href="about.html">关于 QuizMate</a><a href="privacy.html">隐私说明</a><a href="security.html">安全与合规</a><a href="changelog.html">更新日志</a></nav>
+      </div>
+    </section>
+    <!-- SEO-DISCOVERY-END -->
+
+    <footer class="footer-v3 footer-minimal">
+      <p class="copyright">© 2026 QuizMate · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">赣ICP备2025058268号-3</a></p>
+    </footer>
+
+    <!-- 悬浮客服二维码 -->
+    <div class="float-contact" id="floatContact">
+      <button class="float-contact-toggle" id="floatContactToggle" type="button" aria-label="联系客服" aria-expanded="false">
+        <svg class="float-contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        <span class="float-contact-badge">客服</span>
+      </button>
+      <div class="float-contact-panel" id="floatContactPanel">
+        <button class="float-contact-close" id="floatContactClose" type="button" aria-label="关闭">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <p class="float-contact-title">扫码联系客服</p>
+        <div class="float-contact-codes">
+          <div class="float-contact-code">
+            <img src="assets/qr-wechat.jpg" alt="微信客服二维码" />
+            <span>微信</span>
+          </div>
+          <div class="float-contact-code">
+            <img src="assets/qr-qq.jpg" alt="QQ客服二维码" />
+            <span>QQ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      (function () {
+        function init() {
+          /* --- Download dropdown toggle --- */
+          document.querySelectorAll("[data-download-dropdown]").forEach(function (dropdown) {
+            var trigger = dropdown.querySelector("[data-download-trigger]");
+            if (!trigger) return;
+            trigger.addEventListener("click", function (e) {
+              e.stopPropagation();
+              var isOpen = dropdown.classList.contains("is-open");
+              document.querySelectorAll("[data-download-dropdown]").forEach(function (d) {
+                d.classList.remove("is-open");
+                d.querySelector("[data-download-trigger]")?.setAttribute("aria-expanded", "false");
+              });
+              if (!isOpen) {
+                dropdown.classList.add("is-open");
+                trigger.setAttribute("aria-expanded", "true");
+              }
+            });
+          });
+          document.addEventListener("click", function () {
+            document.querySelectorAll("[data-download-dropdown]").forEach(function (d) {
+              d.classList.remove("is-open");
+              d.querySelector("[data-download-trigger]")?.setAttribute("aria-expanded", "false");
+            });
+          });
+
+          /* --- Sidebar panel switching --- */
+          var sidebarItems = document.querySelectorAll(".sidebar-item");
+          var panels = document.querySelectorAll(".client-panel");
+          sidebarItems.forEach(function (item) {
+            item.addEventListener("click", function () {
+              var targetPanel = this.getAttribute("data-panel");
+              sidebarItems.forEach(function (s) { s.classList.remove("is-active"); });
+              panels.forEach(function (p) { p.classList.remove("is-active"); });
+              this.classList.add("is-active");
+              var target = document.querySelector('.client-panel[data-panel="' + targetPanel + '"]');
+              if (target) target.classList.add("is-active");
+            });
+          });
+
+          /* --- Lucide icons initialization --- */
+          if (window.lucide) {
+            lucide.createIcons();
+          }
+
+          /* --- Mode tabs (笔试助手悬浮框/语音播报) --- */
+          document.querySelectorAll(".client-panel").forEach(function (panel) {
+            var modeTabs = panel.querySelectorAll(".mode-tab");
+            if (!modeTabs.length) return;
+            modeTabs.forEach(function (tab) {
+              tab.addEventListener("click", function () {
+                var mode = this.getAttribute("data-mode");
+                panel.querySelectorAll(".mode-tab").forEach(function (t) { t.classList.remove("is-active"); });
+                panel.querySelectorAll(".mode-content").forEach(function (c) { c.classList.remove("is-active"); });
+                this.classList.add("is-active");
+                var target = panel.querySelector('.mode-content[data-mode="' + mode + '"]');
+                if (target) target.classList.add("is-active");
+              });
+            });
+          });
+
+          /* --- Dynamic registered user counter --- */
+          var countEl = document.getElementById("reg-user-count");
+          if (countEl) {
+            var baseCount = parseInt(countEl.textContent, 10) || 1203;
+            setInterval(function () {
+              baseCount += Math.floor(Math.random() * 3) + 1;
+              countEl.textContent = baseCount.toLocaleString();
+            }, 5000 + Math.random() * 5000);
+          }
+
+          /* --- Live activity ticker --- */
+          var liveText = document.getElementById("liveText");
+          if (liveText) {
+            var emails = [
+              "z****e@qq.com", "l****i@163.com", "w****g@gmail.com", "c****n@qq.com",
+              "y****o@outlook.com", "z****a@163.com", "h****i@qq.com", "s****u@gmail.com",
+              "m****g@qq.com", "j****e@163.com", "p****r@outlook.com", "r****n@qq.com"
+            ];
+            var actions = ["正在搜题…", "正在搜题…", "正在搜题…", "正在查看面试答案…", "正在搜题…", "正在填写网申…"];
+            var idx = 0;
+            setInterval(function () {
+              idx = (idx + 1) % emails.length;
+              var action = actions[Math.floor(Math.random() * actions.length)];
+              liveText.style.opacity = "0";
+              setTimeout(function () {
+                liveText.textContent = emails[idx] + " " + action;
+                liveText.style.opacity = "1";
+              }, 300);
+            }, 3500);
+          }
+
+          /* --- Float contact toggle --- */
+          var floatToggle = document.getElementById("floatContactToggle");
+          var floatClose = document.getElementById("floatContactClose");
+          var floatPanel = document.getElementById("floatContactPanel");
+          var floatContact = document.getElementById("floatContact");
+          if (floatToggle && floatPanel) {
+            var openFloat = function () { floatContact.classList.add("is-open"); floatToggle.setAttribute("aria-expanded", "true"); };
+            var closeFloat = function () { floatContact.classList.remove("is-open"); floatToggle.setAttribute("aria-expanded", "false"); };
+            floatToggle.addEventListener("click", function (e) {
+              e.stopPropagation();
+              floatContact.classList.contains("is-open") ? closeFloat() : openFloat();
+            });
+            if (floatClose) floatClose.addEventListener("click", function (e) { e.stopPropagation(); closeFloat(); });
+            document.addEventListener("click", function () { closeFloat(); });
+            floatPanel.addEventListener("click", function (e) {
+              e.stopPropagation();
+            });
+          }
+
+          /* --- Feedback carousel removed, now CSS marquee --- */
+        }
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", init);
+        } else {
+          init();
+        }
+      })();
+    </script>
+  </body>
+</html>

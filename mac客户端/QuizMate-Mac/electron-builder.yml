@@ -1,0 +1,31 @@
+appId: vip.quizmate.mac
+productName: QuizMate
+copyright: Copyright (C) 2026 QuizMate
+directories:
+  output: release
+  buildResources: resources
+files:
+  - out/**/*
+  - resources/**/*
+  - package.json
+extraResources:
+  - from: resources/
+    to: resources/
+asarUnpack:
+  - node_modules/screenshot-desktop
+mac:
+  target:
+    - dmg
+  icon: resources/icon.png
+  category: public.app-category.productivity
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  extendInfo:
+    NSMicrophoneUsageDescription: QuizMate needs microphone access for realtime interview transcription.
+    NSScreenCaptureUsageDescription: QuizMate needs screen recording access to capture written-test questions.
+    NSCameraUsageDescription: QuizMate does not use the camera.
+dmg:
+  artifactName: QuizMate-Mac-${arch}-${version}.dmg
+publish:
+  provider: generic
+  url: https://update.quizmate.vip/mac/

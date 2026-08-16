@@ -1,0 +1,9 @@
+feat: 邀请海报生成 + 微信分享 + Windows v2.1.0 安装包
+
+- 官网：Canvas 海报生成功能（渐变背景+邀请码+二维码+卖点文案）
+- 官网：一键分享到微信（Web Share API，移动端可直接调起微信分享）
+- 客户端：海报生成+保存+分享入口（Windows/Mac）
+- 客户端：新增 qrcode 依赖
+- Windows：修复 electron-builder 配置，成功打包 v2.1.0 安装包
+- 下载页：Windows 版本更新为 2026.07.27
+- OSS：Windows exe + credits.js + styles.css + download.html 已部署

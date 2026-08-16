@@ -1,0 +1,62 @@
+{
+  "name": "quizmate",
+  "productName": "QuizMate",
+  "version": "2026.8.13",
+  "description": "QuizMate Windows 客户端 - 笔试与面试实时辅助",
+  "main": "out/main/index.js",
+  "author": {
+    "name": "QuizMate",
+    "email": "support@quizmate.vip"
+  },
+  "license": "MIT",
+  "homepage": "https://quizmate.vip",
+  "type": "module",
+  "scripts": {
+    "dev": "electron-vite dev",
+    "build": "electron-vite build",
+    "preview": "electron-vite preview",
+    "package:win": "electron-vite build && electron-builder --win --x64",
+    "package:store": "electron-vite build && electron-builder --win appx --x64",
+    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "tsc --noEmit -p tsconfig.web.json"
+  },
+  "dependencies": {
+    "@radix-ui/react-dialog": "^1.1.2",
+    "@radix-ui/react-dropdown-menu": "^2.1.2",
+    "@radix-ui/react-label": "^2.1.0",
+    "@radix-ui/react-slot": "^1.1.0",
+    "@radix-ui/react-tabs": "^1.1.1",
+    "@radix-ui/react-toast": "^1.2.2",
+    "@tanstack/react-query": "^5.64.0",
+    "axios": "^1.10.0",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
+    "electron-log": "^5.2.4",
+    "electron-store": "^10.0.0",
+    "electron-updater": "^6.3.9",
+    "koffi": "^2.16.3",
+    "lucide-react": "^0.460.0",
+    "qrcode": "^1.5.4",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-router-dom": "^6.28.1",
+    "screenshot-desktop": "^1.15.0",
+    "tailwind-merge": "^2.5.5",
+    "uuid": "^11.0.3"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/qrcode": "^1.5.6",
+    "@types/react": "^18.2.48",
+    "@types/react-dom": "^18.2.18",
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.16",
+    "electron": "^31.0.0",
+    "electron-builder": "^24.13.3",
+    "electron-vite": "^2.3.0",
+    "postcss": "^8.4.32",
+    "tailwindcss": "^3.4.0",
+    "typescript": "^5.3.3",
+    "vite": "^5.4.0"
+  }
+}

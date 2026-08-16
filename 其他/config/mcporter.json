@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "cloudbase": {
+      "command": "C:\\Users\\Administrator\\.cache\\codex-runtimes\\codex-primary-runtime\\dependencies\\bin\\fallback\\pnpm.cmd",
+      "args": ["dlx", "@cloudbase/cloudbase-mcp@latest"],
+      "description": "CloudBase MCP",
+      "lifecycle": "keep-alive"
+    }
+  }
+}

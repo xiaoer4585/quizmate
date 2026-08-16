@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">QuizMate</string>
+    <string name="accessibility_service_label">QuizMate 页面读取</string>
+    <string name="accessibility_service_description">开启后，单击悬浮球时可辅助读取当前屏幕文字，用于学习、练习和复盘分析。不读取密码，不用于真实考试或受限评估。</string>
+    <string name="notification_channel">QuizMate 运行中</string>
+    <string name="notification_title">QuizMate 已开启</string>
+    <string name="notification_text">悬浮球正在运行，单击可分析当前屏幕。</string>
+    <string name="capture_channel">图像识别</string>
+    <string name="capture_notification_text">截图权限已就绪，点击悬浮球时按需截图识别。</string>
+</resources>

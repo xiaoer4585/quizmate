@@ -1,0 +1,103 @@
+# ============================================
+# 考试插件项目 .gitignore
+# 原则：只提交源码与配置，不提交依赖、构建产物、密钥
+# ============================================
+
+# === 依赖目录（绝不进 Git）===
+node_modules/
+**/node_modules/
+.pnpm-store/
+
+# === 二进制依赖文件 ===
+*.jar
+*.dll
+*.exe
+*.jmod
+*.pdb
+*.pyd
+*.so
+*.dylib
+
+# === 构建产物 ===
+dist/
+build/
+out/
+output/
+*.apk
+*.dmg
+*.msi
+*.app
+*.zip
+*.tar.gz
+*.7z
+*.rar
+
+# === 临时文件 ===
+tmp/
+*.tmp
+*.log
+*.cache
+*.bak
+
+# === 环境变量 / 密钥（安全！）===
+.env
+.env.*
+*.pem
+*.key
+*.p12
+*.pfx
+
+# === 系统文件 ===
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# === IDE 配置 ===
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# === 历史归档代码（不纳入版本管理）===
+归档l历史代码正常不需要引用/
+
+# === 项目特定的临时/大文件目录 ===
+temp-old-extract/
+.deps/
+
+# === Android 构建工具与缓存（体积巨大）===
+安卓端/QuizMate-Android/.gradle/
+安卓端/QuizMate-Android/tools/
+安卓端/QuizMate-Android/app/build/
+安卓端/QuizMate-Android/local.properties
+
+# === Windows/Mac 客户端构建产物 ===
+windows客户端/QuizMate Setup.exe
+windows客户端/QuizMate-Windows/dist/
+windows客户端/QuizMate-Windows/build/
+windows客户端/QuizMate-Windows/out/
+windows客户端/QuizMate-Windows/release*/
+扩展插件版/发布包/
+
+# === 官网模块大资源文件（部署到 OSS，不进 git）===
+*.mp4
+官网模块/正式官网-quizmate.vip/assets/*.mp4
+官网模块/正式官网-quizmate.vip/downloads/
+
+# === Python 缓存 ===
+__pycache__/
+*.pyc
+
+# === 上传/部署日志 ===
+upload-*.log
+upload-*.txt
+build-*.log
+
+# === Trae/Agent 临时目录 ===
+.workbuddy/
+.codebuddy/
+.codex/
+.agents/
+.config/

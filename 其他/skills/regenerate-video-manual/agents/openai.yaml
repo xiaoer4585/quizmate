@@ -1,0 +1,4 @@
+interface:
+  display_name: "视频操作手册再生成"
+  short_description: "从新版操作视频重建图文 Word、PDF 并更新官网"
+  default_prompt: "Use $regenerate-video-manual to rebuild the product manual from the latest desktop and Android videos and update the website files."

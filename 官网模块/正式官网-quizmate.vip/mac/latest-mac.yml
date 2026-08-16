@@ -1,0 +1,11 @@
+version: 2026.8.13
+files:
+  - url: ../downloads/QuizMate-Mac-Apple-Silicon-2026.8.13.dmg
+    sha512: m7eGxyloyekSPh2/uYA7+ibxUqi9/FbTfnQ74JsZCHDHnNMelXwT2Xo57K2mNyop48z/mnNicoQsQJv3yGnVmQ==
+    size: 126912827
+  - url: ../downloads/QuizMate-Mac-Intel-2026.8.13.dmg
+    sha512: foJOmgN+B69W8QJ4KQT5h+pmvgZHA2f6wgoNfoHyHgqlyIf1tdtR0t4JKI8EIUig//qWZw+nl2qf9uyofNdg1w==
+    size: 130568976
+path: ../downloads/QuizMate-Mac-Apple-Silicon-2026.8.13.dmg
+sha512: m7eGxyloyekSPh2/uYA7+ibxUqi9/FbTfnQ74JsZCHDHnNMelXwT2Xo57K2mNyop48z/mnNicoQsQJv3yGnVmQ==
+releaseDate: '2026-08-15T02:10:26.000Z'

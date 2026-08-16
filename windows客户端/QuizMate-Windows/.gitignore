@@ -1,0 +1,9 @@
+node_modules/
+release*/
+out/
+dist/
+*.log
+*.tsbuildinfo
+.DS_Store
+shared-session.json
+device-id.json

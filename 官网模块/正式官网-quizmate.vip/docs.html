@@ -1,0 +1,648 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="QuizMate 笔试面试AI助手操作文档 - 笔试助手、面试助手、AI填网申、简历制作、校招公告、职位监控的完整使用说明。求职AI搭子QuizMate，不截屏不切屏录屏无痕。" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="keywords" content="QuizMate操作文档,笔试面试AI助手使用说明,求职AI搭子教程,笔试助手用法,面试助手用法,QuizMate帮助手册" />
+    <link rel="canonical" href="https://www.quizmate.vip/docs.html" />
+    <title>操作文档 - AI笔试助手_AI面试助手 - QuizMate</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css?v=20260808-v10" />
+    <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <style>
+      /* 飞书文档风格 */
+      .docs-page { background: #fff; padding-top: 72px; }
+      @media (max-width: 768px) { .docs-page { padding-top: 64px; } }
+      .docs-layout {
+        display: flex;
+        max-width: 1400px;
+        margin: 0 auto;
+        gap: 0;
+      }
+      .docs-sidebar {
+        width: 260px;
+        flex-shrink: 0;
+        position: sticky;
+        top: 72px;
+        height: calc(100vh - 72px);
+        overflow-y: auto;
+        padding: 32px 16px 32px 24px;
+        border-right: 1px solid #e5e6eb;
+      }
+      .docs-sidebar h3 {
+        font-size: 13px;
+        font-weight: 600;
+        color: #8f959e;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin: 0 0 12px;
+        padding: 0 8px;
+      }
+      .docs-sidebar nav { display: flex; flex-direction: column; gap: 2px; }
+      .docs-sidebar a {
+        display: block;
+        padding: 8px 12px;
+        font-size: 14px;
+        color: #1f2329;
+        text-decoration: none;
+        border-radius: 6px;
+        transition: background 0.15s;
+        line-height: 1.5;
+      }
+      .docs-sidebar a:hover { background: #f2f3f5; }
+      .docs-sidebar a.active { background: #e8f3ff; color: #3370ff; font-weight: 500; }
+      .docs-sidebar a.sub-item { padding-left: 24px; font-size: 13px; color: #646a73; }
+      .docs-content {
+        flex: 1;
+        min-width: 0;
+        max-width: 860px;
+        padding: 48px 32px 80px;
+        font-size: 15px;
+        line-height: 1.8;
+        color: #1f2329;
+      }
+      .docs-content h1 {
+        font-size: 28px;
+        font-weight: 700;
+        margin: 0 0 8px;
+        color: #1f2329;
+      }
+      .docs-content .docs-updated {
+        font-size: 13px;
+        color: #8f959e;
+        margin-bottom: 32px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid #e5e6eb;
+      }
+      .docs-content h2 {
+        font-size: 22px;
+        font-weight: 700;
+        margin: 40px 0 16px;
+        color: #1f2329;
+        padding-top: 8px;
+      }
+      .docs-content h3 {
+        font-size: 18px;
+        font-weight: 600;
+        margin: 28px 0 12px;
+        color: #1f2329;
+      }
+      .docs-content h4 {
+        font-size: 16px;
+        font-weight: 600;
+        margin: 20px 0 8px;
+        color: #1f2329;
+      }
+      .docs-content p {
+        margin: 0 0 14px;
+      }
+      .docs-content strong { font-weight: 600; }
+      .docs-content a { color: #3370ff; text-decoration: none; }
+      .docs-content a:hover { text-decoration: underline; }
+      .docs-content ul, .docs-content ol {
+        padding-left: 24px;
+        margin: 0 0 14px;
+      }
+      .docs-content li { margin-bottom: 6px; }
+      .docs-content table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 16px 0;
+        font-size: 14px;
+      }
+      .docs-content th, .docs-content td {
+        border: 1px solid #e5e6eb;
+        padding: 10px 14px;
+        text-align: left;
+      }
+      .docs-content th {
+        background: #f7f8fa;
+        font-weight: 600;
+      }
+      .docs-content .docs-callout {
+        background: #fffbe6;
+        border-left: 3px solid #faad14;
+        padding: 12px 16px;
+        border-radius: 4px;
+        margin: 16px 0;
+        font-size: 14px;
+      }
+      .docs-content .docs-callout-info {
+        background: #e8f3ff;
+        border-left-color: #3370ff;
+      }
+      .docs-content .docs-callout-success {
+        background: #f0f9eb;
+        border-left-color: #52c41a;
+      }
+      .docs-content .docs-callout-shield {
+        background: #f0f5ff;
+        border-left-color: #2f54eb;
+      }
+      .docs-content .docs-feature-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+        margin: 20px 0;
+      }
+      .docs-content .docs-feature-card {
+        border: 1px solid #e5e6eb;
+        border-radius: 8px;
+        padding: 16px;
+      }
+      .docs-content .docs-feature-card h4 { margin: 0 0 4px; }
+      .docs-content .docs-feature-card p { margin: 0; font-size: 13px; color: #646a73; }
+      .docs-content code {
+        background: #f2f3f5;
+        padding: 2px 6px;
+        border-radius: 4px;
+        font-size: 13px;
+        font-family: 'SF Mono', Monaco, Consolas, monospace;
+      }
+      @media (max-width: 1023px) {
+        .docs-sidebar { display: none; }
+        .docs-content { max-width: 100%; padding: 32px 20px 60px; }
+      }
+      @media (max-width: 768px) {
+        .docs-content .docs-feature-grid { grid-template-columns: 1fr; }
+        .docs-content table { font-size: 13px; }
+        .docs-content th, .docs-content td { padding: 8px 10px; }
+      }
+    </style>
+  </head>
+  <body data-page="docs">
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header" data-header>
+      <div class="header-inner">
+        <a class="brand" href="/"><span class="brand-mark">Q</span><span>QuizMate</span></a>
+        <nav class="desktop-nav" aria-label="主导航">
+          <a href="/">首页</a>
+          <a href="docs.html" aria-current="page">操作文档</a>
+          <a href="recharge.html">充值</a>
+          <a href="download.html">下载</a>
+        </nav>
+        <button class="account-nav-button" type="button" data-open-auth><i data-lucide="user-round"></i><span data-header-account>登录</span></button>
+        <button class="menu-button" type="button" aria-label="打开导航菜单" aria-expanded="false" data-menu-button>
+          <i data-lucide="menu"></i>
+        </button>
+      </div>
+      <nav class="mobile-nav" aria-label="移动端导航" data-mobile-nav>
+        <a href="/">首页</a>
+        <a href="docs.html" aria-current="page">操作文档</a>
+        <a href="recharge.html">充值</a>
+        <a href="download.html">下载</a>
+      </nav>
+    </header>
+
+    <main id="main" class="docs-page">
+      <div class="docs-layout">
+        <aside class="docs-sidebar">
+          <h3>目录</h3>
+          <nav>
+            <a href="#intro">QuizMate AI 助手帮助手册</a>
+            <a href="#features">核心功能一览</a>
+            <a href="#stealth">一、为什么不会被检测到？</a>
+            <a href="#stealth-principle" class="sub-item">1.1 核心原理</a>
+            <a href="#stealth-platforms" class="sub-item">1.2 隐身效果与平台支持</a>
+            <a href="#stealth-settings" class="sub-item">1.3 部分软件平台设置</a>
+            <a href="#stealth-test" class="sub-item">1.4 测试检查</a>
+            <a href="#stealth-system" class="sub-item">1.5 系统要求</a>
+            <a href="#install">二、安装与登录</a>
+            <a href="#install-download" class="sub-item">2.1 下载安装</a>
+            <a href="#install-permission" class="sub-item">2.2 权限设置</a>
+            <a href="#credits">三、积分与充值</a>
+            <a href="#credits-rules" class="sub-item">3.1 积分消耗规则</a>
+            <a href="#credits-recharge" class="sub-item">3.2 积分充值</a>
+            <a href="#exam">四、笔试助手</a>
+            <a href="#exam-start" class="sub-item">4.1 启动与配置</a>
+            <a href="#exam-shortcuts" class="sub-item">4.2 快捷键说明</a>
+            <a href="#exam-notes" class="sub-item">4.3 注意事项</a>
+            <a href="#interview">五、面试助手</a>
+            <a href="#interview-start" class="sub-item">5.1 启动与配置</a>
+            <a href="#interview-resume" class="sub-item">5.2 简历上传</a>
+            <a href="#interview-history" class="sub-item">5.3 历史记录</a>
+            <a href="#apply">六、AI 填网申</a>
+            <a href="#resume">七、简历制作</a>
+            <a href="#faq">八、常见问题</a>
+          </nav>
+        </aside>
+        <div class="docs-content">
+          <h1 id="intro">QuizMate AI 助手帮助手册</h1>
+          <p class="docs-updated">最后更新：2026年8月</p>
+
+          <p>欢迎使用 <strong>QuizMate AI 助手</strong>，这是一款搭载先进 AI 大模型的在线笔试/面试助手。笔试截图题目生成答案，面试识别问题辅助回答。不惧任何检测方式：共享屏幕、切屏监控、眼神检测等均无法发现。</p>
+          <p>除笔试/面试核心功能外，QuizMate 还提供 <strong>AI 填网申</strong>、<strong>简历制作</strong>、<strong>校招公告</strong>、<strong>职位监控</strong> 等一站式求职功能，助力应届生高效斩获心仪 Offer。</p>
+
+          <h2 id="features">核心功能一览</h2>
+          <div class="docs-feature-grid">
+            <div class="docs-feature-card">
+              <h4>笔试助手</h4>
+              <p>截图题目 -> AI 秒出答案，悬浮框防捕获显示，支持快捷键截图</p>
+            </div>
+            <div class="docs-feature-card">
+              <h4>面试助手</h4>
+              <p>实时听写面试官问题，AI 结合简历秒出参考答案，语音播报可选</p>
+            </div>
+            <div class="docs-feature-card">
+              <h4>AI 填网申</h4>
+              <p>浏览器自动化 + Cookie 获取 + AI 语义匹配，一键智能填写网申表单</p>
+            </div>
+            <div class="docs-feature-card">
+              <h4>简历制作</h4>
+              <p>多份简历管理，AI 按 JD 适配优化，模板美化，一键导出 PDF</p>
+            </div>
+            <div class="docs-feature-card">
+              <h4>校招公告</h4>
+              <p>聚合全网校招信息，7 维筛选，收藏追踪，定时抓取，永久免费</p>
+            </div>
+            <div class="docs-feature-card">
+              <h4>职位监控</h4>
+              <p>监控心仪公司岗位变动，实时推送提醒，永久免费</p>
+            </div>
+          </div>
+          <p style="text-align:center;margin:24px 0"><img src="assets/stealth/img_09_0pVU1wrFT7.png" alt="QuizMate 客户端主界面" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
+
+          <h2 id="stealth">一、为什么 QuizMate 不会被检测到？</h2>
+
+          <h3 id="stealth-principle">1.1 核心原理</h3>
+          <p>笔试/面试的平台通常是一个独立的软件，又或者是浏览器打开的网页，这些平台受限于电脑系统本身的安全限制，它们在自身权限范围内的检测手段是有限的，QuizMate 可以逐一破解。</p>
+          <div class="docs-callout docs-callout-success">
+            <strong>✅ 真实可靠</strong><br>
+            目前已经有 2 千多位用户正常使用，未有一个人反馈会被检测到！请你放心使用。
+          </div>
+          <p style="text-align:center;margin:24px 0"><img src="assets/stealth/img_10_JjdP1wrFT7.png" alt="QuizMate 隐身原理" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
+
+          <h3 id="stealth-platforms">1.2 隐身效果与平台支持</h3>
+          <p>上面提及的屏幕共享隐身效果，原理是使用标准 WebRTC 协议中的不可见模式。它在大部分最新的系统和平台上都能够实现：</p>
+          <table>
+            <thead>
+              <tr><th>平台</th><th>类型</th><th>隐身支持情况</th><th>切屏检测</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Chrome</td><td>浏览器</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>Edge</td><td>浏览器</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>腾讯会议</td><td>视频会议</td><td>使用"流畅度优先"设置时隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>钉钉</td><td>视频会议</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>飞书</td><td>视频会议</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>Zoom</td><td>视频会议</td><td>使用"带窗口筛选功能的截屏"设置后完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>百度如流</td><td>视频会议</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>Google Meet</td><td>视频会议</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>牛客网</td><td>编码平台</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>LeetCode</td><td>编码平台</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>HackerRank</td><td>编码平台</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+              <tr><td>CoderPad</td><td>编码平台</td><td>完全隐身 ✅</td><td>快捷键不会触发 ✅</td></tr>
+            </tbody>
+          </table>
+          <p style="text-align:center;margin:24px 0"><img src="assets/stealth/img_03_rmo61wrFT7.png" alt="隐身效果演示" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
+
+          <h3 id="stealth-settings">1.3 部分软件平台设置</h3>
+          <h4>腾讯会议</h4>
+          <p>共享屏幕时，勾选"视频流畅度优先"。</p>
+          <p style="text-align:center;margin:20px 0"><img src="assets/stealth/img_04_g5SA1wrFT7.png" alt="腾讯会议设置" style="max-width:80%;border-radius:8px;border:1px solid #e5e6eb"></p>
+          <h4>Zoom</h4>
+          <ol>
+            <li>把 Zoom 升级到最新版本，打开"设置"（不同版本的界面可能会有差异）</li>
+            <li>选择"共享屏幕"，点击"高级"选项</li>
+            <li>在"截屏模式"中选择"带窗口筛选功能的截屏"。这样即可保证隐身功能正常运行。</li>
+          </ol>
+          <p style="text-align:center;margin:20px 0"><img src="assets/stealth/img_05_LUQd1wrFT7.png" alt="Zoom 隐身设置" style="max-width:80%;border-radius:8px;border:1px solid #e5e6eb"></p>
+
+          <h3 id="stealth-test">1.4 测试检查（重要）</h3>
+          <div class="docs-callout">
+            <strong>⚠️ 重要提醒</strong><br>
+            如果你的笔试/面试要求你共享屏幕，那么建议你在正式使用前进行共享屏幕测试，以确保隐身功能生效。
+          </div>
+          <p>具体测试方式如下：</p>
+          <ol>
+            <li>请打开你要用来接入会议的平台（例如腾讯会议、Zoom、钉钉、飞书等等），快速开启一个新会议，使用另一台设备（自己的手机或者是其他小伙伴的账号）入会。</li>
+            <li>接着启动 QuizMate 笔试/面试助手，然后在会议中共享整个电脑屏幕。</li>
+            <li>在另一台设备上，检查你共享的屏幕内容，是否会出现 QuizMate 的界面。如果能看得到，请确认是否符合前面的系统和平台要求，尝试把系统和会议软件升级到最新版本再次尝试。</li>
+          </ol>
+          <p style="text-align:center;margin:24px 0"><img src="assets/stealth/img_06_0KWi1wrFT7.png" alt="共享屏幕测试" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
+
+          <h3 id="stealth-system">1.5 系统要求</h3>
+          <table>
+            <thead>
+              <tr><th></th><th>Windows 系统</th><th>Mac 系统</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>版本要求</td><td>不低于 2004 版本号（20 年 4 月后的系统版本）</td><td>不低于 macOS 15.0</td></tr>
+              <tr><td>如何查看</td><td>打开"设置"，路径为：开始 -> 设置 -> 系统 -> 关于，在"Windows 规格"中即可查看操作系统的版本及版本号</td><td>点击左上角苹果图标，选择"关于本机"</td></tr>
+            </tbody>
+          </table>
+          <p style="text-align:center;margin:20px 0"><img src="assets/stealth/img_07_7M3S1wrFT7.png" alt="Windows 系统版本查看" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
+          <p style="text-align:center;margin:20px 0"><img src="assets/stealth/img_08_pgRF1wrFT7.png" alt="Mac 系统版本查看" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
+
+          <h2 id="install">二、安装与登录</h2>
+
+          <h3 id="install-download">2.1 下载安装</h3>
+          <ol>
+            <li>前往官网 <a href="https://quizmate.vip/">quizmate.vip</a> 免费下载客户端，根据你的系统选择对应的版本，并完成安装。</li>
+            <li>如果你是 Windows 系统，安装失败的情况下，请关闭 360 等"安全软件"后再次尝试。由于 QuizMate 需要调用特定的系统 API 以实现"隐身"能力，可能会触发部分"安全软件"的提醒。请放心，我们使用的是标准的系统能力，只专注解决你的笔试问题。</li>
+            <li>安装后打开 QuizMate 客户端并完成登录/注册，新用户会享有免费试用积分。</li>
+          </ol>
+          <p style="text-align:center;margin:24px 0"><img src="assets/stealth/img_09_0pVU1wrFT7.png" alt="QuizMate 客户端启动" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
+
+          <h3 id="install-permission">2.2 权限设置</h3>
+          <h4>Mac 用户</h4>
+          <ul>
+            <li>在首次打开 QuizMate 时，如果弹出系统确认框，请输入你的系统开机密码，选择"始终允许"（有些系统版本不会弹出则忽略）</li>
+            <li>在首次打开 QuizMate 进入笔试进行截图时，系统会弹出授权框，请选择"打开系统设置"，打开 QuizMate 的开关，退出重新打开 QuizMate 即授权完成</li>
+            <li>在首次打开 QuizMate 进入面试助手-测试模式时，系统会弹出授权框，请选择"允许"即授权完成</li>
+          </ul>
+          <p style="text-align:center;margin:20px 0"><img src="assets/stealth/img_10_JjdP1wrFT7.png" alt="Mac 系统权限授权" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
+          <h4>Windows 用户</h4>
+          <p>如果你使用的是 Windows，则不需要特别的设置。</p>
+
+          <h2 id="credits">三、积分与充值</h2>
+
+          <h3 id="credits-rules">3.1 积分消耗规则</h3>
+          <p>QuizMate 采用积分制收费模式。不同功能消耗不同积分：</p>
+          <table>
+            <thead>
+              <tr><th>功能模块</th><th>消耗规则</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>笔试助手</td><td>每次截图识别消耗积分</td><td>截图后 AI 自动识别题目并生成答案</td></tr>
+              <tr><td>面试助手</td><td>每次 AI 作答消耗 30 积分</td><td>语音识别免费，仅 AI 生成答案时消耗</td></tr>
+              <tr><td>AI 填网申</td><td>每次填写消耗积分</td><td>AI 智能填写与笔试共用积分池</td></tr>
+              <tr><td>简历制作</td><td>AI 优化/生成消耗积分</td><td>手动编辑、导出 PDF 不消耗积分</td></tr>
+              <tr><td>校招公告</td><td>永久免费 ✅</td><td>不消耗积分</td></tr>
+              <tr><td>职位监控</td><td>永久免费 ✅</td><td>不消耗积分</td></tr>
+            </tbody>
+          </table>
+          <p style="text-align:center;margin:20px 0"><img src="assets/stealth/img_03_rmo61wrFT7.png" alt="积分余额显示" style="max-width:80%;border-radius:8px;border:1px solid #e5e6eb"></p>
+          <div class="docs-callout">
+            <strong>⚠️ 注意</strong><br>
+            当剩余可用积分为 0 时，笔试/面试助手将无法继续工作，请记得在面试前检测剩余积分。
+          </div>
+
+          <h3 id="credits-recharge">3.2 积分充值</h3>
+          <p>你可以在客户端右上角点击「积分」按钮进入充值中心进行积分充值。套餐价格在不同的活动期间可能会有变化，如果你有特殊的需要，欢迎随时点击页面右上角咨询官方客服，我们可以为你量身定制。</p>
+
+          <h2 id="exam">四、笔试助手</h2>
+
+          <h3 id="exam-start">4.1 启动与配置</h3>
+          <p>打开 QuizMate 客户端，在左侧导航栏选择「笔试助手」，进入笔试设置界面。</p>
+          <ol>
+            <li>点击「开始使用」按钮启动笔试悬浮窗</li>
+            <li>悬浮窗启动后，会显示在屏幕上方，可通过拖拽顶部提示栏移动位置</li>
+            <li>拖动悬浮窗四边或四角可调整大小</li>
+            <li>使用「悬浮框显示」开关或快捷键可显示/隐藏悬浮框</li>
+            <li>透明度可通过进度条实时调节，建议设置为 85% 左右</li>
+          </ol>
+
+          <h4>工作模式</h4>
+          <p>笔试助手支持<strong>悬浮框文字呈现</strong>模式：截图后答案显示在防捕获悬浮框中，适合单机位笔试场景。</p>
+
+          <h4>悬浮框主题</h4>
+          <p>提供黑色主题和白色主题两种选择。推荐使用白色主题，在不同背景下都有较好的可读性。</p>
+
+          <h3 id="exam-shortcuts">4.2 快捷键说明</h3>
+          <p>QuizMate 支持自定义快捷键，所有快捷键均可在笔试助手页面重新绑定：</p>
+          <table>
+            <thead>
+              <tr><th>快捷键功能</th><th>默认按键</th><th>说明</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>截图识别</td><td>Ctrl+S</td><td>截取屏幕区域，AI 识别题目并生成答案</td></tr>
+              <tr><td>显示/隐藏悬浮框</td><td>Ctrl+B</td><td>切换悬浮框的显示和隐藏状态</td></tr>
+              <tr><td>重新截图</td><td>Ctrl+R</td><td>重新截取上次区域</td></tr>
+            </tbody>
+          </table>
+          <p>所有快捷键均可点击「更改」按钮自定义，支持 Ctrl/Shift/Alt 组合键。如遇快捷键冲突会提示，可重置为默认值。</p>
+
+          <h3 id="exam-notes">4.3 注意事项（重要）</h3>
+          <div class="docs-callout">
+            <strong>⚠️ 重要提醒</strong><br>
+            当你完成笔试后，hover 在最右侧的设置按钮，点击「退出笔试助手」可以立即退出。但一定要注意，如果在笔试中途退出了笔试助手，那么你需要打开 QuizMate 客户端才能重新启动，这个过程中，可能会检测到你鼠标切换焦点，如果你在共享屏幕，那么对方也能看到客户端的界面！<br><br>
+            所以，除非你确定后面的时间内不再使用笔试助手，否则请不要在笔试中途退出。如果你只是想要隐藏笔试助手的界面，可以随时使用快捷键 Ctrl+B 切换。
+          </div>
+
+          <h2 id="interview">五、面试助手</h2>
+
+          <h3 id="interview-start">5.1 启动与配置</h3>
+          <p>面试助手可以实时听写面试官的问题，AI 秒出参考答案，并结合你的简历作答，窗口隐身防录屏。</p>
+          <ol>
+            <li>在左侧导航栏选择「面试助手」，进入面试配置界面</li>
+            <li>设置面试上下文：填写<strong>应聘岗位</strong>和<strong>面试公司</strong>，选择答案风格（简洁要点/详细展开）</li>
+            <li>点击「启动悬浮窗」打开面试答案显示窗口</li>
+            <li>点击「开始听写」启动语音识别，系统将自动监听面试官的提问</li>
+            <li>识别到问题后，AI 会自动生成参考答案并显示在悬浮窗中</li>
+          </ol>
+
+          <h4>语音模型配置</h4>
+          <p>语音模型 API 由管理后台统一配置，客户端无需本地配置，便于统一更新与计费。</p>
+
+          <h4>语音播报</h4>
+          <p>可开启/关闭语音播报功能。开启后，AI 生成的答案将通过语音朗读出来，方便你在面试中快速获取参考。</p>
+
+          <h4>快捷键</h4>
+          <p>使用 <code>Ctrl+Shift+I</code> 可快速切换语音听写的开始/停止。</p>
+
+          <div class="docs-callout docs-callout-shield">
+            <strong>🛡️ 隐身保护</strong><br>
+            隐身保护已启用：悬浮窗对屏幕共享、录屏软件、远程桌面不可见，可放心使用。
+          </div>
+
+          <h3 id="interview-resume">5.2 简历上传</h3>
+          <p>面试助手支持上传简历，AI 将结合你的经历生成更精准的答案：</p>
+          <ul>
+            <li>支持 txt/md 格式简历上传（PDF/Word 需后端解析）</li>
+            <li>可上传多份简历，选择一份作为当前作答依据</li>
+            <li>上传后，AI 会在回答时参考你的项目经历、技能等信息</li>
+          </ul>
+
+          <h3 id="interview-history">5.3 历史记录与面经分享</h3>
+          <p>面试过程中的所有 QA 记录会保存在历史记录中，方便你复盘。面试结束后，可点击「生成面经」将 QA 记录导出为图片分享。</p>
+
+          <h2 id="apply">六、AI 填网申</h2>
+          <p>AI 填网申功能结合浏览器自动化、Cookie 获取和 AI 智能匹配，帮你一键填写网申表单。</p>
+
+          <h3>6.1 使用流程</h3>
+          <ol>
+            <li><strong>打开网申网页</strong>：在输入框粘贴网申网址，点击「打开网页」在内置浏览器中打开并登录</li>
+            <li><strong>获取 Cookie</strong>：登录后点击「获取 Cookie」保存登录态（用于后续自动化填写）</li>
+            <li><strong>新建档案</strong>：点击「新建档案」完善个人信息（可创建多个，按岗位/公司区分）</li>
+            <li><strong>智能填写</strong>：点击「AI 智能填写」调用 AI 语义匹配字段（推荐，更精准），或「快速填写」使用简单字符串匹配</li>
+          </ol>
+
+          <h3>6.2 档案管理</h3>
+          <p>档案分为以下字段组，支持多份档案管理：</p>
+          <ul>
+            <li><strong>基本信息</strong>：姓名、性别、出生年月、籍贯、政治面貌、民族、身份证号</li>
+            <li><strong>联系方式</strong>：手机号、邮箱、微信号、紧急联系人</li>
+            <li><strong>教育背景</strong>：毕业院校、专业、学历、毕业时间、GPA、年级排名、英语等级</li>
+            <li><strong>求职意向</strong>：意向岗位、意向城市、期望薪资、到岗时间、实习经历、项目经历</li>
+          </ul>
+          <div class="docs-callout docs-callout-info">
+            <strong>💡 小贴士</strong><br>
+            支持文本框、下拉框、单选、多选等常见控件。每次填写消耗一定积分（AI 智能填写与笔试共用积分池）。
+          </div>
+
+          <h2 id="resume">七、简历制作</h2>
+          <p>简历制作模块支持多份简历管理、AI 按 JD 适配优化、模板美化、导出 PDF。</p>
+
+          <h3>7.1 核心功能</h3>
+          <div class="docs-feature-grid">
+            <div class="docs-feature-card">
+              <h4>上传简历</h4>
+              <p>支持上传已有简历文件，系统自动解析入库</p>
+            </div>
+            <div class="docs-feature-card">
+              <h4>AI 优化</h4>
+              <p>粘贴目标岗位 JD，AI 针对性优化简历关键词和经历描述</p>
+            </div>
+            <div class="docs-feature-card">
+              <h4>JD 适配生成</h4>
+              <p>选择 1-N 份简历 + 目标 JD，AI 综合生成全新适配简历</p>
+            </div>
+            <div class="docs-feature-card">
+              <h4>导出 PDF</h4>
+              <p>多套模板可选，一键导出精美 PDF</p>
+            </div>
+          </div>
+
+          <h3>7.2 使用流程</h3>
+          <ol>
+            <li>点击「新建简历」或「上传简历」开始</li>
+            <li>填写基本信息（姓名、手机、邮箱、学历、专业）</li>
+            <li>编辑各章节内容（教育背景、实习经历、项目经历、技能证书、荣誉奖项等）</li>
+            <li>选择模板样式</li>
+            <li>可选：粘贴目标岗位 JD，使用 AI 优化简历内容</li>
+            <li>保存后点击「导出 PDF」生成最终简历</li>
+          </ol>
+
+          <h2 id="faq">八、常见问题</h2>
+
+          <h3>Q1：QuizMate 会被笔试/面试平台检测到吗？</h3>
+          <p>不会。QuizMate 利用系统级窗口隔离技术，对屏幕共享、录屏软件、远程桌面均不可见。已有 2 千多位用户正常使用，未有检测反馈。请在使用前参照测试检查章节进行验证。</p>
+
+          <h3>Q2：积分用完了怎么办？</h3>
+          <p>点击客户端右上角的积分按钮，进入充值中心即可购买积分套餐。校招公告和职位监控功能永久免费，不受积分影响。</p>
+
+          <h3>Q3：支持哪些操作系统？</h3>
+          <p>Windows 系统需不低于 2004 版本号（2020 年 4 月后的系统版本），Mac 系统需不低于 macOS 15.0。</p>
+
+          <h3>Q4：安装时被安全软件拦截怎么办？</h3>
+          <p>请关闭 360 等"安全软件"后再次尝试。QuizMate 需要调用特定的系统 API 以实现"隐身"能力，可能会触发部分安全软件的提醒。我们使用的是标准的系统能力，请放心使用。</p>
+
+          <h3>Q5：笔试中途可以退出笔试助手吗？</h3>
+          <p>可以，但不建议在笔试中途退出。退出后需要重新打开 QuizMate 客户端才能重新启动，过程中可能检测到鼠标焦点切换。如果只是想隐藏界面，请使用快捷键 Ctrl+B 切换显示/隐藏。</p>
+
+          <h3>Q6：面试助手支持哪些语言？</h3>
+          <p>面试助手语音识别默认支持中文（zh-CN），使用 Chrome/Edge 内核。如需其他语言，请联系客服。</p>
+
+          <h3>Q7：AI 填网申支持哪些网站？</h3>
+          <p>支持大部分标准网申网站，包括文本框、下拉框、单选、多选等常见控件。部分特殊网站可能需要手动辅助填写。</p>
+
+          <h3>Q8：校招公告和职位监控怎么用？</h3>
+          <p>校招公告和职位监控是 QuizMate 提供的<strong>永久免费</strong>功能，不消耗任何积分。</p>
+          <ul>
+            <li><strong>校招公告</strong>：聚合全网校招信息，支持 7 维度筛选（公司、岗位、城市、学历、薪资、行业、招聘类型），可收藏感兴趣的信息并追踪更新，系统定时抓取最新公告，助你不再错过任何机会。</li>
+            <li><strong>职位监控</strong>：添加你心仪的目标公司，系统会实时监控其岗位变动情况，一旦有新岗位发布或状态变化，立即推送提醒，让你第一时间投递。</li>
+          </ul>
+
+          <h3>Q9：QuizMate 支持哪些笔试平台？</h3>
+          <p>支持牛客网、LeetCode、HackerRank、CoderPad 等主流编码平台，以及腾讯会议、钉钉、飞书、Zoom 等视频会议平台。详细支持列表请参考<a href="#stealth-platforms">隐身效果与平台支持</a>章节。</p>
+
+        </div>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <div class="section-inner footer-inner">
+        <div>
+          <a class="brand brand-footer" href="/"><span class="brand-mark">Q</span><span>QuizMate</span></a>
+        </div>
+        <div class="footer-links">
+          <a href="/">首页</a><a href="download.html">下载</a><a href="recharge.html">充值</a><a href="docs.html">操作文档</a>
+        </div>
+        <p class="copyright">© 2026 QuizMate · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">赣ICP备2025058268号-2</a></p>
+      </div>
+    </footer>
+    <script src="app.js?v=20260727-mobile2"></script>
+    <script defer src="credits.js?v=20260801-pkgs"></script>
+    <script>
+    (function(){
+      var links = document.querySelectorAll('.docs-sidebar a');
+      var sections = [];
+      links.forEach(function(link){
+        var id = link.getAttribute('href').slice(1);
+        var el = document.getElementById(id);
+        if (el) sections.push({el: el, link: link});
+      });
+      function update() {
+        var scrollY = window.scrollY + 100;
+        var current = sections[0];
+        for (var i = 0; i < sections.length; i++) {
+          if (sections[i].el.offsetTop <= scrollY) current = sections[i];
+        }
+        links.forEach(function(l){ l.classList.remove('active'); });
+        if (current) current.link.classList.add('active');
+      }
+      window.addEventListener('scroll', update);
+      update();
+      // Smooth scroll
+      links.forEach(function(link){
+        link.addEventListener('click', function(e){
+          e.preventDefault();
+          var id = this.getAttribute('href').slice(1);
+          var el = document.getElementById(id);
+          if (el) {
+            var top = el.offsetTop - 80;
+            window.scrollTo({top: top, behavior: 'smooth'});
+          }
+        });
+      });
+    })();
+    </script>
+    <!-- 悬浮客服二维码 -->
+    <div class="float-contact" id="floatContact">
+      <button class="float-contact-toggle" id="floatContactToggle" type="button" aria-label="联系客服" aria-expanded="false">
+        <svg class="float-contact-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>
+        <span class="float-contact-badge">客服</span>
+      </button>
+      <div class="float-contact-panel" id="floatContactPanel">
+        <button class="float-contact-close" id="floatContactClose" type="button" aria-label="关闭">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <p class="float-contact-title">扫码联系客服</p>
+        <div class="float-contact-codes">
+          <div class="float-contact-code">
+            <img src="assets/qr-wechat.jpg" alt="微信客服二维码" />
+            <span>微信</span>
+          </div>
+          <div class="float-contact-code">
+            <img src="assets/qr-qq.jpg" alt="QQ客服二维码" />
+            <span>QQ</span>
+          </div>
+        </div>
+      </div>
+    </div>
+    <script>
+    (function () {
+      function init() {
+        var toggle = document.getElementById("floatContactToggle");
+        var closeBtn = document.getElementById("floatContactClose");
+        var fc = document.getElementById("floatContact");
+        var panel = document.getElementById("floatContactPanel");
+        if (!toggle || !fc) return;
+        function open() { fc.classList.add("is-open"); toggle.setAttribute("aria-expanded", "true"); }
+        function close() { fc.classList.remove("is-open"); toggle.setAttribute("aria-expanded", "false"); }
+        toggle.addEventListener("click", function (e) { e.stopPropagation(); fc.classList.contains("is-open") ? close() : open(); });
+        if (closeBtn) closeBtn.addEventListener("click", function (e) { e.stopPropagation(); close(); });
+        document.addEventListener("click", function () { close(); });
+        if (panel) panel.addEventListener("click", function (e) { e.stopPropagation(); });
+      }
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", init);
+      } else {
+        init();
+      }
+    })();
+    </script>
+  </body>
+</html>

@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Domain For Sale · 域名出售</title>
+  <meta name="robots" content="index, follow" />
+  <meta name="description" content="Premium domain name for sale. 优质域名出售，欢迎询价。" />
+  <style>
+    :root {
+      --bg: #0b1220;
+      --bg2: #131c30;
+      --ink: #0f172a;
+      --panel: #ffffff;
+      --muted: #64748b;
+      --line: #e2e8f0;
+      --brand: #2563eb;
+      --brand2: #38bdf8;
+      --green: #16a34a;
+      --radius: 14px;
+    }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; }
+    body {
+      font-family: "Inter", "PingFang SC", "Microsoft YaHei", "Noto Sans SC", system-ui, sans-serif;
+      color: var(--ink);
+      background: radial-gradient(1200px 600px at 80% -10%, #1e3a8a33 0%, transparent 60%),
+                  radial-gradient(900px 500px at -10% 20%, #0ea5e933 0%, transparent 55%),
+                  linear-gradient(180deg, var(--bg) 0%, var(--bg2) 100%);
+      min-height: 100vh;
+      -webkit-font-smoothing: antialiased;
+    }
+    .wrap { max-width: 920px; margin: 0 auto; padding: 28px 20px 60px; }
+    header.topbar {
+      display: flex; align-items: center; justify-content: space-between;
+      gap: 12px; margin-bottom: 28px;
+    }
+    .brand { display: flex; align-items: center; gap: 10px; color: #e2e8f0; font-weight: 700; letter-spacing: .3px; }
+    .brand .dot { width: 10px; height: 10px; border-radius: 50%; background: linear-gradient(135deg, var(--brand), var(--brand2)); box-shadow: 0 0 12px #38bdf899; }
+    .lang-toggle {
+      background: rgba(255,255,255,.08); color: #e2e8f0; border: 1px solid rgba(255,255,255,.18);
+      padding: 8px 14px; border-radius: 999px; cursor: pointer; font-weight: 700; font-size: 13px;
+    }
+    .lang-toggle:hover { background: rgba(255,255,255,.16); }
+
+    .hero {
+      text-align: center; color: #f1f5f9; padding: 30px 16px 18px;
+    }
+    .badge {
+      display: inline-block; padding: 6px 14px; border-radius: 999px;
+      background: rgba(56,189,248,.12); border: 1px solid rgba(56,189,248,.35);
+      color: #bae6fd; font-size: 12px; font-weight: 700; letter-spacing: .5px; margin-bottom: 18px;
+    }
+    .domain {
+      font-size: clamp(38px, 9vw, 78px); line-height: 1.05; font-weight: 800; margin: 0;
+      background: linear-gradient(135deg, #ffffff 0%, #93c5fd 50%, #38bdf8 100%);
+      -webkit-background-clip: text; background-clip: text; color: transparent;
+      word-break: break-all;
+    }
+    .hero p.tagline { color: #cbd5e1; font-size: clamp(15px, 2.4vw, 19px); margin: 16px auto 0; max-width: 640px; line-height: 1.6; }
+
+    .features {
+      display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin: 30px 0;
+    }
+    .feature {
+      background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.12);
+      border-radius: var(--radius); padding: 18px 16px; color: #e2e8f0;
+    }
+    .feature .ft-title { font-weight: 800; margin: 0 0 6px; color: #f8fafc; font-size: 15px; }
+    .feature .ft-desc { margin: 0; color: #94a3b8; font-size: 13px; line-height: 1.55; }
+    .feature .ft-icon { font-size: 22px; margin-bottom: 8px; display: block; }
+
+    .card {
+      background: var(--panel); border-radius: 18px; padding: 28px;
+      box-shadow: 0 24px 60px rgba(2,8,23,.45); border: 1px solid rgba(255,255,255,.08);
+    }
+    .card h2 { margin: 0 0 4px; font-size: 22px; }
+    .card .sub { color: var(--muted); margin: 0 0 22px; font-size: 14px; }
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .field { display: grid; gap: 6px; }
+    .field.full { grid-column: 1 / -1; }
+    label { font-size: 13px; font-weight: 700; color: #334155; }
+    input, textarea, select {
+      width: 100%; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px;
+      font: inherit; background: #fff; color: var(--ink);
+    }
+    input:focus, textarea:focus { outline: 2px solid #93c5fd; border-color: var(--brand); }
+    textarea { min-height: 90px; resize: vertical; }
+    .req { color: #dc2626; }
+    .actions { display: flex; gap: 10px; align-items: center; margin-top: 18px; flex-wrap: wrap; }
+    button.submit {
+      background: linear-gradient(135deg, var(--brand), #1d4ed8); color: #fff; border: 0;
+      padding: 13px 26px; border-radius: 10px; font-weight: 800; font-size: 15px; cursor: pointer;
+      box-shadow: 0 10px 24px rgba(37,99,235,.35);
+    }
+    button.submit:hover { filter: brightness(1.06); }
+    button.submit:disabled { opacity: .6; cursor: not-allowed; }
+    .form-status { min-height: 22px; font-size: 13px; color: var(--muted); }
+    .form-status.error { color: #dc2626; }
+    .form-status.success { color: var(--green); }
+    .note { font-size: 12px; color: #94a3b8; margin-top: 14px; line-height: 1.5; }
+    a.contact-mail { color: var(--brand); font-weight: 700; text-decoration: none; word-break: break-all; }
+    a.contact-mail:hover { text-decoration: underline; }
+
+    .success-view { text-align: center; padding: 14px 6px 6px; }
+    .success-view .check {
+      width: 64px; height: 64px; border-radius: 50%; margin: 0 auto 16px;
+      background: #dcfce7; color: var(--green); display: grid; place-items: center; font-size: 32px;
+    }
+    .success-view h3 { margin: 0 0 8px; font-size: 22px; }
+    .success-view p { color: var(--muted); margin: 0 0 18px; line-height: 1.6; }
+    .success-view .contact-box {
+      display: inline-block; background: #f1f5f9; border: 1px dashed #cbd5e1; border-radius: 12px;
+      padding: 14px 20px; margin: 6px 0 18px;
+    }
+    .success-view .contact-box .lbl { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+    .success-view .contact-box .val { font-size: 18px; font-weight: 800; }
+    .success-view .soon { color: var(--green); font-weight: 700; }
+
+    footer { text-align: center; color: #94a3b8; font-size: 12px; margin-top: 34px; line-height: 1.6; }
+    footer a { color: #cbd5e1; }
+    @media (max-width: 640px) {
+      .features { grid-template-columns: 1fr; }
+      .grid { grid-template-columns: 1fr; }
+      .card { padding: 22px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand"><span class="dot"></span><span data-i18n="brand">域名出售</span></div>
+      <button class="lang-toggle" id="langToggle" type="button">English</button>
+    </header>
+
+    <section class="hero">
+      <span class="badge" data-i18n="badge">优质域名 · 诚意出售</span>
+      <h1 class="domain" id="domainName">bulidmate.com</h1>
+      <p class="tagline" data-i18n="tagline">该域名正在出售，欢迎提交询价。提交后将显示卖家邮箱，注册人将尽快与您联系。</p>
+    </section>
+
+    <section class="features">
+      <div class="feature">
+        <span class="ft-icon">🎯</span>
+        <p class="ft-title" data-i18n="ft1Title">品牌潜力</p>
+        <p class="ft-desc" data-i18n="ft1Desc">简短易记，契合建造/搭伴主题，适合工具、SaaS、社区类项目。</p>
+      </div>
+      <div class="feature">
+        <span class="ft-icon">⚡</span>
+        <p class="ft-title" data-i18n="ft2Title">即刻启用</p>
+        <p class="ft-desc" data-i18n="ft2Desc">交易完成后可立即解析使用，助力产品快速上线。</p>
+      </div>
+      <div class="feature">
+        <span class="ft-icon">🔒</span>
+        <p class="ft-title" data-i18n="ft3Title">安全交易</p>
+        <p class="ft-desc" data-i18n="ft3Desc">支持平台担保或自行协商，过户流程透明可靠。</p>
+      </div>
+    </section>
+
+    <section class="card" id="formCard">
+      <h2 data-i18n="formTitle">提交询价</h2>
+      <p class="sub" data-i18n="formSub">填写以下信息，我们收到后会尽快联系您。</p>
+      <form id="inquiryForm" novalidate>
+        <div class="grid">
+          <div class="field">
+            <label data-i18n="lblName">姓名 <span class="req">*</span></label>
+            <input id="fName" type="text" maxlength="100" required />
+          </div>
+          <div class="field">
+            <label data-i18n="lblPhone">联系电话 <span class="req">*</span></label>
+            <input id="fPhone" type="tel" maxlength="50" required />
+          </div>
+          <div class="field">
+            <label data-i18n="lblEmail">联系邮箱 <span class="req">*</span></label>
+            <input id="fEmail" type="email" maxlength="200" required />
+          </div>
+          <div class="field">
+            <label data-i18n="lblOffer">预计出价</label>
+            <input id="fOffer" type="text" maxlength="200" placeholder="如 ¥5000 / $800" />
+          </div>
+          <div class="field full">
+            <label data-i18n="lblMessage">留言（可选）</label>
+            <textarea id="fMessage" maxlength="1000" data-i18n-ph="phMessage" placeholder="想说点什么……"></textarea>
+          </div>
+        </div>
+        <div class="actions">
+          <button class="submit" id="submitBtn" type="submit" data-i18n="submitBtn">提交询价</button>
+          <span class="form-status" id="formStatus" role="status" aria-live="polite"></span>
+        </div>
+        <p class="note" data-i18n="note">提交后将显示卖家邮箱 wangpengroy@qq.com。我们承诺仅用于本次域名交易联络。</p>
+      </form>
+
+      <div class="success-view" id="successView" hidden>
+        <div class="check">✓</div>
+        <h3 data-i18n="successTitle">询价提交成功</h3>
+        <p data-i18n="successDesc">感谢您的关注！请通过下方邮箱与卖家直接联系，或等待注册人主动联系您。</p>
+        <div class="contact-box">
+          <span class="lbl" data-i18n="contactLabel">卖家邮箱</span>
+          <span class="val"><a class="contact-mail" href="mailto:wangpengroy@qq.com">wangpengroy@qq.com</a></span>
+        </div>
+        <p><span class="soon" data-i18n="soon">注册人将尽快联系您。</span></p>
+      </div>
+    </section>
+
+    <footer>
+      <span data-i18n="footer">© 2026 域名出售 · 联系邮箱</span>
+      <a class="contact-mail" href="mailto:wangpengroy@qq.com">wangpengroy@qq.com</a>
+    </footer>
+  </div>
+
+  <script>
+    const I18N = {
+      "zh-CN": {
+        brand: "域名出售",
+        badge: "优质域名 · 诚意出售",
+        tagline: "该域名正在出售，欢迎提交询价。提交后将显示卖家邮箱，注册人将尽快与您联系。",
+        ft1Title: "品牌潜力", ft1Desc: "简短易记，契合建造/搭伴主题，适合工具、SaaS、社区类项目。",
+        ft2Title: "即刻启用", ft2Desc: "交易完成后可立即解析使用，助力产品快速上线。",
+        ft3Title: "安全交易", ft3Desc: "支持平台担保或自行协商，过户流程透明可靠。",
+        formTitle: "提交询价",
+        formSub: "填写以下信息，我们收到后会尽快联系您。",
+        lblName: "姓名 *", lblPhone: "联系电话 *", lblEmail: "联系邮箱 *", lblOffer: "预计出价", lblMessage: "留言（可选）",
+        phMessage: "想说点什么……",
+        submitBtn: "提交询价",
+        note: "提交后将显示卖家邮箱 wangpengroy@qq.com。我们承诺仅用于本次域名交易联络。",
+        successTitle: "询价提交成功",
+        successDesc: "感谢您的关注！请通过下方邮箱与卖家直接联系，或等待注册人主动联系您。",
+        contactLabel: "卖家邮箱",
+        soon: "注册人将尽快联系您。",
+        footer: "© 2026 域名出售 · 联系邮箱：",
+        errName: "请填写姓名",
+        errPhone: "请填写联系电话",
+        errEmail: "请填写有效的联系邮箱",
+        submitting: "提交中…",
+        errNetwork: "提交失败，请稍后重试或直接发邮件联系卖家。"
+      },
+      "en": {
+        brand: "Domain For Sale",
+        badge: "Premium Domain · Open to Offers",
+        tagline: "This domain is for sale. Submit your offer below — the seller's email will be shown once submitted, and the registrant will contact you shortly.",
+        ft1Title: "Brand Potential", ft1Desc: "Short and memorable, fitting build/buddy themes — great for tools, SaaS or community products.",
+        ft2Title: "Ready to Use", ft2Desc: "Point DNS and launch immediately after the deal closes.",
+        ft3Title: "Safe Transfer", ft3Desc: "Escrow-supported or direct negotiation, with a transparent ownership transfer.",
+        formTitle: "Submit an Inquiry",
+        formSub: "Fill in the form and we'll get back to you soon.",
+        lblName: "Name *", lblPhone: "Phone *", lblEmail: "Email *", lblOffer: "Expected Offer", lblMessage: "Message (optional)",
+        phMessage: "Anything you'd like to add…",
+        submitBtn: "Submit Inquiry",
+        note: "The seller's email wangpengroy@qq.com will be shown after submission. Used only for this domain deal.",
+        successTitle: "Inquiry Submitted",
+        successDesc: "Thanks for your interest! Reach the seller via the email below, or wait for the registrant to contact you.",
+        contactLabel: "Seller Email",
+        soon: "The registrant will contact you soon.",
+        footer: "© 2026 Domain For Sale · Contact: ",
+        errName: "Please enter your name.",
+        errPhone: "Please enter your phone number.",
+        errEmail: "Please enter a valid email.",
+        submitting: "Submitting…",
+        errNetwork: "Submission failed. Please try again or email the seller directly."
+      }
+    };
+
+    const API_URL = "https://api.quizmate.vip/study-auth-api";
+    const SELLER_EMAIL = "wangpengroy@qq.com";
+
+    // 根据当前访问域名确定展示的售卖域名
+    function detectDomain() {
+      const host = (window.location.hostname || "").toLowerCase();
+      if (host.endsWith("bulidbuddy.com")) return "bulidbuddy.com";
+      return "bulidmate.com";
+    }
+
+    let lang = (navigator.language || "zh-CN").toLowerCase().startsWith("zh") ? "zh-CN" : "en";
+
+    function applyI18n() {
+      const dict = I18N[lang];
+      document.documentElement.lang = lang === "zh-CN" ? "zh-CN" : "en";
+      document.querySelectorAll("[data-i18n]").forEach((el) => {
+        const key = el.getAttribute("data-i18n");
+        if (dict[key] != null) el.innerHTML = dict[key];
+      });
+      document.querySelectorAll("[data-i18n-ph]").forEach((el) => {
+        const key = el.getAttribute("data-i18n-ph");
+        if (dict[key] != null) el.placeholder = dict[key];
+      });
+      document.getElementById("langToggle").textContent = lang === "zh-CN" ? "English" : "中文";
+    }
+
+    function t(key) { return I18N[lang][key] || key; }
+
+    document.getElementById("langToggle").addEventListener("click", () => {
+      lang = lang === "zh-CN" ? "en" : "zh-CN";
+      applyI18n();
+    });
+
+    const domain = detectDomain();
+    document.getElementById("domainName").textContent = domain;
+    document.title = domain + " · " + (lang === "zh-CN" ? "域名出售" : "Domain For Sale");
+
+    const form = document.getElementById("inquiryForm");
+    const statusEl = document.getElementById("formStatus");
+    const submitBtn = document.getElementById("submitBtn");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("fName").value.trim();
+      const phone = document.getElementById("fPhone").value.trim();
+      const email = document.getElementById("fEmail").value.trim();
+      const offer = document.getElementById("fOffer").value.trim();
+      const message = document.getElementById("fMessage").value.trim();
+
+      if (!name) { statusEl.textContent = t("errName"); statusEl.className = "form-status error"; return; }
+      if (!phone) { statusEl.textContent = t("errPhone"); statusEl.className = "form-status error"; return; }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { statusEl.textContent = t("errEmail"); statusEl.className = "form-status error"; return; }
+
+      submitBtn.disabled = true;
+      statusEl.textContent = t("submitting");
+      statusEl.className = "form-status";
+
+      try {
+        const resp = await fetch(API_URL, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action: "submitDomainInquiry",
+            domain, name, phone, email, offer, message,
+            userAgent: navigator.userAgent
+          })
+        });
+        let data = {};
+        try { data = await resp.json(); } catch (_) {}
+        if (!resp.ok || !data.ok) throw new Error((data && data.error) || "error");
+
+        // 提交成功：显示卖家邮箱 + 联系提示
+        form.style.display = "none";
+        document.getElementById("successView").hidden = false;
+        const contact = (data.data && data.data.contactEmail) || SELLER_EMAIL;
+        const mailLink = document.querySelector("#successView .contact-mail");
+        mailLink.textContent = contact;
+        mailLink.href = "mailto:" + contact;
+        document.querySelector("#successView .contact-box .val").innerHTML = '<a class="contact-mail" href="mailto:' + contact + '">' + contact + '</a>';
+        applyI18n();
+        statusEl.textContent = "";
+        window.scrollTo({ top: document.getElementById("formCard").offsetTop - 20, behavior: "smooth" });
+      } catch (err) {
+        statusEl.textContent = t("errNetwork");
+        statusEl.className = "form-status error";
+      } finally {
+        submitBtn.disabled = false;
+      }
+    });
+
+    applyI18n();
+  </script>
+</body>
+</html>

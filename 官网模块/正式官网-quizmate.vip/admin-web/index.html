@@ -1,0 +1,1775 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>答题悬浮助手后台</title>
+    <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <style>
+      [hidden] { display: none !important; }
+      :root {
+        color-scheme: light;
+        --bg: #eef3f8;
+        --panel: #fff;
+        --ink: #172033;
+        --muted: #667085;
+        --line: #d8e1ec;
+        --soft: #f7fafc;
+        --blue: #2563eb;
+        --blue-soft: #eaf2ff;
+        --green: #067647;
+        --red: #b42318;
+        --sidebar: #111827;
+      }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        font-family: "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
+        color: var(--ink);
+        background: var(--bg);
+      }
+      button, input, textarea, select { font: inherit; }
+      button {
+        border: 0;
+        border-radius: 8px;
+        padding: 10px 14px;
+        background: var(--blue);
+        color: #fff;
+        font-weight: 700;
+        cursor: pointer;
+      }
+      button:hover { filter: brightness(.96); }
+      button:disabled { cursor: not-allowed; opacity: .5; }
+      button.secondary { background: var(--blue-soft); color: #1e4f9a; }
+      button.danger { background: var(--red); }
+      button.small { padding: 6px 9px; font-size: 12px; }
+      input, textarea, select {
+        width: 100%;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        padding: 10px 12px;
+        background: #fff;
+        color: var(--ink);
+      }
+      input[type="checkbox"] { width: auto; }
+      textarea { min-height: 120px; resize: vertical; }
+      label { color: #344054; font-size: 13px; font-weight: 700; }
+      h2, h3 { margin-top: 0; }
+      p { color: var(--muted); }
+      .admin-shell { min-height: 100vh; display: grid; grid-template-columns: 250px minmax(0, 1fr); }
+      .login-view {
+        min-height: 100vh; display: grid; place-items: center;
+        background: linear-gradient(135deg, #1a2238 0%, #2d3a5c 100%);
+        padding: 20px;
+      }
+      .login-card {
+        width: min(420px, 100%); padding: 32px; border-radius: 16px;
+        background: #fff; box-shadow: 0 24px 60px rgba(0,0,0,.3);
+      }
+      .login-card .login-brand { text-align: center; margin-bottom: 24px; }
+      .login-card .login-brand strong { display: block; font-size: 22px; color: var(--ink); }
+      .login-card .login-brand span { display: block; margin-top: 4px; font-size: 13px; color: var(--muted); }
+      .login-card .field { margin-bottom: 14px; }
+      .login-card .login-actions { display: flex; gap: 8px; margin-top: 18px; }
+      .login-card .login-actions button { flex: 1; }
+      .login-card .login-status { min-height: 22px; margin-top: 12px; font-size: 13px; color: var(--muted); text-align: center; }
+      .login-card .login-status.error { color: var(--red); }
+      .login-card .login-status.success { color: var(--green); }
+      .sidebar {
+        position: sticky;
+        top: 0;
+        height: 100vh;
+        overflow-y: auto;
+        padding: 22px 16px;
+        background: var(--sidebar);
+        color: #dbe5f2;
+      }
+      .brand { display: grid; gap: 4px; margin: 0 6px 22px; }
+      .brand strong { color: #fff; font-size: 20px; }
+      .brand span { color: #9fb0c7; font-size: 13px; }
+      .side-tabs { display: grid; gap: 6px; }
+      .side-tabs button, .side-tabs a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        justify-content: flex-start;
+        width: 100%;
+        padding: 9px 11px;
+        border-radius: 8px;
+        background: transparent;
+        color: #c7d2e3;
+        font-weight: 700;
+        text-align: left;
+        text-decoration: none;
+      }
+      .side-tabs button.active { background: #243247; color: #fff; }
+      .side-tabs a:hover { background: #243247; color: #fff; }
+      .side-tabs svg { width: 18px; height: 18px; }
+      .main { min-width: 0; padding: 24px; }
+      .topbar {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(340px, 520px);
+        gap: 16px;
+        align-items: end;
+        margin-bottom: 18px;
+      }
+      .topbar h1 { margin: 0 0 6px; font-size: 28px; }
+      .topbar p { margin: 0; }
+      .connect-panel {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) auto auto;
+        gap: 8px;
+        align-items: end;
+      }
+      .panel {
+        margin-bottom: 16px;
+        padding: 18px;
+        border: 1px solid var(--line);
+        border-radius: 10px;
+        background: var(--panel);
+        box-shadow: 0 12px 28px rgba(23, 32, 51, .06);
+      }
+      .panel p { margin: 6px 0 0; }
+      .toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; }
+      .toolbar h2 { margin-bottom: 0; }
+      .field { display: grid; gap: 6px; }
+      .form-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+      .form-grid.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .form-grid .wide { grid-column: 1 / -1; }
+      .actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: end; }
+      .view { display: none; }
+      .view.active { display: block; }
+      .referral-subtabs { flex-wrap: wrap; }
+      .referral-subtabs button { min-width: auto; }
+      .referral-subview { margin-top: 0; }
+      .grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+      .metric { padding: 16px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+      .metric span { display: block; color: var(--muted); font-size: 13px; }
+      .metric strong { display: block; margin-top: 6px; font-size: 26px; }
+      .visit-chart-panel { overflow: hidden; }
+      .visit-chart-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+      .visit-chart-head h2 { margin-bottom: 0; }
+      .visit-chart-summary { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; color: var(--muted); font-size: 13px; }
+      .visit-chart-summary strong { color: var(--ink); font-size: 15px; }
+      .period-tabs { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+      .period-tabs button { min-width: 58px; padding: 7px 11px; background: transparent; color: var(--muted); }
+      .period-tabs button.active { background: var(--blue); color: #fff; }
+      .visit-chart { min-height: 310px; margin-top: 14px; }
+      .visit-chart svg { display: block; width: 100%; height: auto; min-height: 280px; }
+      .visit-chart .grid-line { stroke: #e7edf4; stroke-width: 1; }
+      .visit-chart .axis-label { fill: #667085; font-size: 11px; }
+      .visit-chart .trend-area { fill: rgba(37, 99, 235, .08); }
+      .visit-chart .trend-line { fill: none; stroke: var(--blue); stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+      .visit-chart .trend-point { fill: #fff; stroke: var(--blue); stroke-width: 2; }
+      .visit-chart-empty { display: grid; min-height: 260px; place-items: center; color: var(--muted); }
+      .chart-controls { display: flex; flex-direction: column; gap: 8px; align-items: flex-end; }
+      .chart-source-tabs { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+      .chart-source-tabs button { min-width: 78px; padding: 7px 11px; background: transparent; color: var(--muted); }
+      .chart-source-tabs button.active { background: var(--blue); color: #fff; }
+      .chart-legend { display: flex; flex-wrap: wrap; gap: 18px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+      .chart-legend .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+      .chart-legend .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+      .chart-legend .legend-dot.text { background: var(--blue); }
+      .chart-legend .legend-dot.image { background: #f59e0b; }
+      .visit-chart .trend-line.text { stroke: var(--blue); }
+      .visit-chart .trend-line.image { stroke: #f59e0b; }
+      .visit-chart .trend-area.text { fill: rgba(37, 99, 235, .08); }
+      .visit-chart .trend-area.image { fill: rgba(245, 158, 11, .08); }
+      .visit-chart .trend-point.text { fill: #fff; stroke: var(--blue); stroke-width: 2; }
+      .visit-chart .trend-point.image { fill: #fff; stroke: #f59e0b; stroke-width: 2; }
+      .download-panel { overflow: hidden; }
+      .download-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+      .download-head h2 { margin-bottom: 0; }
+      .download-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+      .download-metric { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); display: flex; align-items: center; gap: 12px; }
+      .download-metric .dm-icon { width: 38px; height: 38px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; }
+      .download-metric .dm-icon svg { width: 20px; height: 20px; }
+      .download-metric .dm-icon.android { background: #e6f4ea; color: #067647; }
+      .download-metric .dm-icon.windows { background: #eaf2ff; color: #2563eb; }
+      .download-metric .dm-icon.mac { background: #f3f0ff; color: #6d28d9; }
+      .download-metric .dm-icon.diskpilot { background: #fff4e6; color: #c2410c; }
+      .download-metric .dm-body { min-width: 0; }
+      .download-metric .dm-label { display: block; color: var(--muted); font-size: 12px; }
+      .download-metric .dm-value { display: block; font-size: 22px; font-weight: 800; line-height: 1.2; }
+      .download-metric .dm-sub { display: block; color: var(--muted); font-size: 11px; margin-top: 2px; }
+      .download-chart { min-height: 280px; margin-top: 14px; }
+      .download-chart svg { display: block; width: 100%; height: auto; min-height: 260px; }
+      .download-legend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+      .download-legend .legend-item { display: inline-flex; align-items: center; gap: 6px; }
+      .download-legend .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+      @media (max-width: 1080px) { .download-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+      @media (max-width: 820px) { .download-metrics { grid-template-columns: 1fr; } }
+      .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
+      table { width: 100%; min-width: 980px; border-collapse: collapse; font-size: 13px; }
+      th, td { padding: 10px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; word-break: break-all; }
+      th { background: #f7f9fc; color: #344054; white-space: nowrap; }
+      tbody tr:last-child td { border-bottom: 0; }
+      .row-actions { display: flex; gap: 6px; white-space: nowrap; }
+      .pagination {
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 12px 4px 0;
+        color: var(--muted);
+        font-size: 13px;
+      }
+      .pagination select { width: auto; padding: 6px 26px 6px 8px; }
+      .pagination button { padding: 7px 10px; }
+      .status { min-height: 22px; color: var(--muted); }
+      .status.success { color: var(--green); }
+      .status.error { color: var(--red); }
+      .badge { display: inline-flex; align-items: center; min-height: 24px; padding: 2px 8px; border-radius: 999px; background: #eef4ff; color: #1e4f9a; font-weight: 700; }
+      .code-output { min-height: 92px; }
+      .section-heading { margin: 20px 0 10px; padding-top: 16px; border-top: 1px solid var(--line); }
+      .section-heading:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+      .iframe-shell { overflow: hidden; padding: 0; }
+      .iframe-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 18px; border-bottom: 1px solid var(--line); }
+      .customer-frame { display: block; width: 100%; height: calc(100vh - 185px); min-height: 680px; border: 0; background: #fff; }
+      .inline-check { display: flex; align-items: center; gap: 8px; min-height: 42px; }
+      .modal-overlay {
+        position: fixed; inset: 0; background: rgba(15, 23, 42, .55);
+        display: none; align-items: center; justify-content: center; z-index: 1000;
+      }
+      .modal-overlay.active { display: flex; }
+      .modal-card {
+        width: min(440px, calc(100vw - 32px)); padding: 22px;
+        border-radius: 12px; background: #fff; box-shadow: 0 24px 60px rgba(15, 23, 42, .25);
+      }
+      .modal-card h3 { margin: 0 0 6px; font-size: 18px; }
+      .modal-card .modal-meta { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
+      .modal-card .modal-meta strong { color: var(--ink); }
+      .modal-card .field { margin-bottom: 12px; }
+      .modal-card .segmented { display: inline-flex; gap: 4px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); }
+      .modal-card .segmented button { min-width: 72px; padding: 8px 12px; background: transparent; color: var(--muted); }
+      .modal-card .segmented button.active.add { background: var(--green); color: #fff; }
+      .modal-card .segmented button.active.subtract { background: var(--red); color: #fff; }
+      .modal-card .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 18px; }
+      .modal-card .modal-status { min-height: 20px; margin-top: 10px; font-size: 13px; color: var(--muted); }
+      .modal-card .modal-status.error { color: var(--red); }
+      .modal-card .modal-status.success { color: var(--green); }
+      @media (max-width: 1080px) {
+        .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+        .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      }
+      @media (max-width: 820px) {
+        .admin-shell { grid-template-columns: 1fr; }
+        .sidebar { position: static; height: auto; }
+        .topbar, .connect-panel, .grid-4, .form-grid, .form-grid.two { grid-template-columns: 1fr; }
+        .toolbar, .pagination { align-items: stretch; flex-direction: column; }
+        .visit-chart-head { align-items: stretch; flex-direction: column; }
+        .period-tabs { align-self: flex-start; }
+        .main { padding: 16px; }
+      }
+      .metric-clickable { cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
+      .metric-clickable:hover { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,0.12); }
+      .modal-box { background: #fff; border-radius: 12px; max-height: 80vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.15); }
+      .modal-head { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; border-bottom: 1px solid #e2e8f0; }
+      .modal-head h2 { margin: 0; font-size: 18px; }
+      .modal-close { background: none; border: none; font-size: 24px; cursor: pointer; color: #64748b; padding: 0; line-height: 1; }
+      .modal-close:hover { color: #1e293b; }
+      .modal-body { padding: 16px 20px; }
+      .btn-sm { padding: 4px 10px; font-size: 12px; border: none; border-radius: 6px; cursor: pointer; color: #fff; }
+      .btn-success { background: #16a34a; }
+      .btn-success:hover { background: #15803d; }
+      .btn-warning { background: #ea580c; }
+      .btn-warning:hover { background: #c2410c; }
+      .btn-primary { padding: 6px 14px; font-size: 13px; border: none; border-radius: 6px; cursor: pointer; background: #2563eb; color: #fff; }
+      .btn-primary:hover { background: #1d4ed8; }
+      .input { padding: 6px 10px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; }
+    </style>
+  </head>
+  <body>
+    <div id="loginView" class="login-view">
+      <div class="login-card">
+        <div class="login-brand">
+          <strong>答题悬浮助手后台</strong>
+          <span>请输入管理员邮箱和密码登录</span>
+        </div>
+        <div class="field"><label for="loginApiEndpoint">接口地址</label><input id="loginApiEndpoint" /></div>
+        <div class="field"><label for="loginEmail">管理员邮箱</label><input id="loginEmail" type="email" autocomplete="email" /></div>
+        <div class="field"><label for="loginPassword">管理员密码</label><input id="loginPassword" type="password" autocomplete="current-password" /></div>
+        <div class="login-actions">
+          <button id="loginSubmitBtn" type="button">登录</button>
+        </div>
+        <p id="loginStatus" class="login-status" aria-live="polite"></p>
+      </div>
+    </div>
+
+    <div id="adminShell" class="admin-shell" hidden>
+      <aside class="sidebar">
+        <div class="brand">
+          <strong>答题悬浮助手后台</strong>
+          <span>统一运营与积分管理</span>
+        </div>
+        <nav class="side-tabs" aria-label="后台导航">
+          <button class="active" type="button" data-view-tab="dashboard"><i data-lucide="layout-dashboard"></i>概览</button>
+          <button type="button" data-view-tab="accounts"><i data-lucide="users"></i>积分用户</button>
+          <button type="button" data-view-tab="creditLogs"><i data-lucide="list-tree"></i>积分流水</button>
+          <button hidden type="button" data-view-tab="licenses"><i data-lucide="key-round"></i>历史授权</button>
+          <button hidden type="button" data-view-tab="devices"><i data-lucide="monitor-smartphone"></i>历史设备</button>
+          <button type="button" data-view-tab="orders"><i data-lucide="receipt-text"></i>订单</button>
+          <button type="button" data-view-tab="domainInquiries"><i data-lucide="globe"></i>域名询价</button>
+          <button type="button" data-view-tab="knowledge"><i data-lucide="files"></i>用户知识库</button>
+          <button type="button" data-view-tab="aiConfig"><i data-lucide="bot"></i>AI 配置</button>
+          <button type="button" data-view-tab="cuotiConfig"><i data-lucide="book-open"></i>错题集配置</button>
+          <button type="button" data-view-tab="operations"><i data-lucide="sliders-horizontal"></i>运营配置</button>
+          <button type="button" data-view-tab="referral"><i data-lucide="users-round"></i>邀请和代理</button>
+          <button type="button" data-view-tab="adminSettings"><i data-lucide="shield-check"></i>管理员设置</button>
+          <button type="button" data-view-tab="customerService"><i data-lucide="headset"></i>客服助手配置</button>
+          <a href="https://www.quizmate.vip/" target="_blank" rel="noopener noreferrer" aria-label="访问官网（新窗口打开）"><i data-lucide="external-link"></i>访问官网</a>
+        </nav>
+      </aside>
+
+      <main class="main">
+        <section class="topbar">
+          <div>
+            <h1>管理中心</h1>
+            <p>积分账户、充值订单、AI、知识库与运营配置统一维护。</p>
+          </div>
+          <div class="connect-panel panel">
+            <div class="field"><label for="apiEndpoint">接口地址</label><input id="apiEndpoint" /></div>
+            <div class="field">
+              <label>当前登录</label>
+              <input id="currentAdminEmail" type="text" disabled />
+            </div>
+            <button id="logoutBtn" type="button">退出登录</button>
+          </div>
+        </section>
+
+        <p id="globalStatus" class="status" aria-live="polite"></p>
+
+        <section class="view active" data-view="dashboard">
+          <div class="grid-4" id="metrics"></div>
+          <div class="panel visit-chart-panel">
+            <div class="visit-chart-head">
+              <div>
+                <h2 id="chartTitle">官网访问趋势</h2>
+                <p id="chartDesc">每次官网页面加载计为 1 次访问，按上海时区统计。</p>
+                <div class="visit-chart-summary"><span>当前区间 <strong id="periodVisitCount">0</strong> 次</span><span id="visitRange">-</span></div>
+              </div>
+              <div class="chart-controls">
+                <div class="chart-source-tabs" role="group" aria-label="图表数据源">
+                  <button class="active" type="button" data-chart-source="visit">官网访问</button>
+                  <button type="button" data-chart-source="model">模型调用</button>
+                </div>
+                <div class="period-tabs" role="group" aria-label="访问量统计粒度">
+                  <button class="active" type="button" data-visit-period="day" aria-pressed="true">按天</button>
+                  <button type="button" data-visit-period="week" aria-pressed="false">按周</button>
+                  <button type="button" data-visit-period="month" aria-pressed="false">按月</button>
+                </div>
+              </div>
+            </div>
+            <div id="chartLegend" class="chart-legend"></div>
+            <div id="visitChart" class="visit-chart" aria-live="polite"></div>
+          </div>
+          <div class="panel download-panel">
+            <div class="download-head">
+              <div>
+                <h2>客户端下载量</h2>
+                <p>统计 QuizMate 安卓 / Windows / Mac 客户端与磁盘轻扩 Windows 客户端的下载次数，按上海时区统计。</p>
+                <div class="visit-chart-summary"><span>累计下载 <strong id="downloadGrandTotal">0</strong> 次</span><span id="downloadRange">-</span></div>
+              </div>
+              <div class="period-tabs" role="group" aria-label="下载量统计粒度">
+                <button class="active" type="button" data-download-period="day" aria-pressed="true">按天</button>
+                <button type="button" data-download-period="week" aria-pressed="false">按周</button>
+                <button type="button" data-download-period="month" aria-pressed="false">按月</button>
+              </div>
+            </div>
+            <div class="download-metrics" id="downloadMetrics"></div>
+            <div id="downloadLegend" class="download-legend"></div>
+            <div id="downloadChart" class="download-chart" aria-live="polite"></div>
+          </div>
+          <div class="panel toolbar">
+            <div><h2>后台说明</h2><p>表格默认每页 20 条，可在每张表底部调整分页；危险操作均需二次确认。</p></div>
+            <button type="button" data-refresh="dashboard">刷新概览</button>
+          </div>
+        </section>
+
+        <!-- 访问明细弹窗 -->
+        <div id="visitModal" class="modal-overlay" style="display:none">
+          <div class="modal-box" style="max-width:860px">
+            <div class="modal-head">
+              <h2>今日访问明细</h2>
+              <button type="button" class="modal-close" data-close="visitModal">&times;</button>
+            </div>
+            <div class="modal-body">
+              <div id="visitDetailsContent" class="visit-details"></div>
+              <div style="margin-top:16px;border-top:1px solid #e2e8f0;padding-top:12px">
+                <h3 style="font-size:14px;margin:0 0 8px">白名单管理</h3>
+                <div id="whitelistContent" class="whitelist-list"></div>
+                <div style="display:flex;gap:8px;margin-top:8px">
+                  <input id="whitelistIpInput" class="input" placeholder="输入 IP 地址" style="flex:1" />
+                  <input id="whitelistNoteInput" class="input" placeholder="备注（可选）" style="flex:1" />
+                  <button type="button" id="addWhitelistBtn" class="btn-primary">添加白名单</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <section class="view" data-view="accounts">
+          <div class="panel toolbar"><div><h2>积分用户</h2><p>查看邮箱账户、余额、累计充值和消耗。</p></div><button type="button" data-refresh="accounts">刷新用户</button></div>
+          <div class="table-wrap"><table><thead data-head="accounts"></thead><tbody data-body="accounts"></tbody></table></div>
+          <div class="pagination" data-pagination="accounts"></div>
+        </section>
+
+        <section class="view" data-view="creditLogs">
+          <div class="panel toolbar"><div><h2>积分流水</h2><p>注册赠送、充值到账和模型消耗记录；可单条删除，删除后不会回滚账户余额。</p></div><button type="button" data-refresh="creditLogs">刷新流水</button></div>
+          <div class="table-wrap"><table><thead data-head="creditLogs"></thead><tbody data-body="creditLogs"></tbody></table></div>
+          <div class="pagination" data-pagination="creditLogs"></div>
+        </section>
+
+        <section class="view" data-view="licenses" hidden>
+          <div class="panel">
+            <div class="toolbar"><div><h2>序列号管理</h2><p>生成序列号，并直接绑定或解绑用户设备。</p></div><button type="button" data-refresh="licenses">刷新序列号</button></div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field"><label for="licenseDays">授权时长</label><select id="licenseDays"><option value="1">1 天</option><option value="30">30 天</option><option value="60">60 天</option><option value="90">90 天</option><option value="365">365 天</option><option value="0">无限期</option></select></div>
+              <div class="field"><label for="licenseCount">生成数量</label><input id="licenseCount" type="number" min="1" max="200" value="1" /></div>
+              <div class="field"><label>&nbsp;</label><button id="createLicenseBtn" type="button">生成序列号</button></div>
+            </div>
+            <div class="field" style="margin-top:12px"><label for="generatedLicenses">本次生成结果</label><textarea id="generatedLicenses" class="code-output" readonly></textarea></div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="licenses"></thead><tbody data-body="licenses"></tbody></table></div>
+          <div class="pagination" data-pagination="licenses"></div>
+        </section>
+
+        <section class="view" data-view="devices" hidden>
+          <div class="panel toolbar"><div><h2>设备绑定记录</h2><p>查看序列号关联设备及最后在线时间。</p></div><button type="button" data-refresh="devices">刷新设备</button></div>
+          <div class="table-wrap"><table><thead data-head="devices"></thead><tbody data-body="devices"></tbody></table></div>
+          <div class="pagination" data-pagination="devices"></div>
+        </section>
+
+        <section class="view" data-view="orders">
+          <div class="panel">
+            <div class="toolbar"><div><h2>充值订单</h2><p>新订单统一为积分充值；历史授权订单仅作为迁移记录保留。支持按状态、类型、通道、邮箱、订单号、创建时间筛选；可单条删除，关联的支付回调事件也会一并清除。</p></div><button type="button" data-refresh="orders">刷新订单</button></div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field"><label for="orderStatus">订单状态</label>
+                <select id="orderStatus">
+                  <option value="">全部</option>
+                  <option value="paid">已支付</option>
+                  <option value="waiting">待支付</option>
+                  <option value="created">已创建</option>
+                  <option value="closed">已关闭</option>
+                  <option value="failed">失败</option>
+                  <option value="refunded">已退款</option>
+                </select>
+              </div>
+              <div class="field"><label for="orderType">订单类型</label>
+                <select id="orderType">
+                  <option value="">全部</option>
+                  <option value="credits">积分充值</option>
+                  <option value="license">历史授权</option>
+                </select>
+              </div>
+              <div class="field"><label for="orderProvider">支付通道</label>
+                <select id="orderProvider">
+                  <option value="">全部</option>
+                  <option value="alipay">支付宝</option>
+                  <option value="wechat">微信</option>
+                  <option value="payjs">PayJS</option>
+                  <option value="epay">易支付</option>
+                </select>
+              </div>
+              <div class="field"><label for="orderEmail">邮箱</label><input id="orderEmail" placeholder="模糊匹配，可留空" /></div>
+              <div class="field"><label for="orderNo">订单号</label><input id="orderNo" placeholder="模糊匹配，可留空" /></div>
+              <div class="field"><label for="orderStartDate">开始日期</label><input id="orderStartDate" type="date" /></div>
+              <div class="field"><label for="orderEndDate">结束日期</label><input id="orderEndDate" type="date" /></div>
+              <div class="actions" style="grid-column:auto;align-self:end"><button id="searchOrdersBtn" type="button">查询</button><button id="clearOrdersFilterBtn" class="secondary" type="button">清空条件</button></div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="orders"></thead><tbody data-body="orders"></tbody></table></div>
+          <div class="pagination" data-pagination="orders"></div>
+        </section>
+
+        <section class="view" data-view="domainInquiries">
+          <div class="panel">
+            <div class="toolbar"><div><h2>域名询价</h2><p>bulidmate.com / bulidbuddy.com 售卖页公开提交的询价信息。提交后会自动发邮件通知 wangpengroy@qq.com。</p></div><button type="button" data-refresh="domainInquiries">刷新</button></div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field"><label for="domainInquiryDomain">域名</label>
+                <select id="domainInquiryDomain">
+                  <option value="">全部</option>
+                  <option value="bulidmate.com">bulidmate.com</option>
+                  <option value="bulidbuddy.com">bulidbuddy.com</option>
+                </select>
+              </div>
+              <div class="actions" style="align-self:end"><button id="searchDomainInquiriesBtn" type="button">查询</button><button id="clearDomainInquiriesFilterBtn" class="secondary" type="button">清空条件</button></div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="domainInquiries"></thead><tbody data-body="domainInquiries"></tbody></table></div>
+          <div class="pagination" data-pagination="domainInquiries"></div>
+        </section>
+
+        <section class="view" data-view="knowledge">
+          <div class="panel">
+            <div class="toolbar"><div><h2>用户知识库文件</h2><p>按文件名查询用户上传资料；删除会同时清理文档分块。</p></div><button type="button" data-refresh="knowledge">刷新文件</button></div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field" hidden><label for="knowledgeLicenseCode">历史授权</label><input id="knowledgeLicenseCode" /></div>
+              <div class="field" hidden><label for="knowledgeDeviceId">历史设备 ID</label><input id="knowledgeDeviceId" /></div>
+              <div class="field"><label for="knowledgeFileName">文件名</label><input id="knowledgeFileName" placeholder="完整文件名，可留空" /></div>
+              <div class="actions wide"><button id="searchKnowledgeBtn" type="button">查询</button><button id="clearKnowledgeFilterBtn" class="secondary" type="button">清空条件</button></div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="knowledge"></thead><tbody data-body="knowledge"></tbody></table></div>
+          <div class="pagination" data-pagination="knowledge"></div>
+        </section>
+
+        <section class="view" data-view="aiConfig">
+          <div class="panel">
+            <div class="toolbar"><div><h2>AI 配置</h2><p>API 参数和提示词分区维护；API Key 留空表示保留当前线上值。</p></div><button id="reloadAiBtn" class="secondary" type="button">读取当前配置</button></div>
+            <h3 class="section-heading">文本模型配置（纯文本题目时调用）</h3>
+            <div class="form-grid two">
+              <div class="field"><label for="modelBaseUrl">模型 URL</label><input id="modelBaseUrl" /></div>
+              <div class="field"><label for="modelApiPath">接口路径</label><input id="modelApiPath" /></div>
+              <div class="field"><label for="modelName">模型名</label><input id="modelName" /></div>
+              <div class="field"><label for="modelApiFormat">API 格式</label><select id="modelApiFormat"><option value="openai">OpenAI Chat Completions</option><option value="anthropic">Anthropic Messages</option></select></div>
+              <div class="field"><label for="modelTemperature">温度（0-2）</label><input id="modelTemperature" type="number" min="0" max="2" step="0.1" /></div>
+              <div class="field wide"><label for="modelApiKey">API Key（<span id="modelKeyStatus">未读取</span>）</label><input id="modelApiKey" type="password" autocomplete="off" placeholder="不修改可留空" /></div>
+            </div>
+            <h3 class="section-heading">系统提示词</h3>
+            <div class="field"><label for="modelSystemPrompt">模型角色与安全边界</label><textarea id="modelSystemPrompt" style="min-height:220px"></textarea></div>
+            <div class="actions" style="margin-top:12px"><button id="saveModelBtn" type="button">保存文本模型配置</button></div>
+
+            <h3 class="section-heading">图片模型配置（截图/带图题目时调用，独立于文本模型）</h3>
+            <div class="form-grid two">
+              <div class="field"><label for="imageModelBaseUrl">模型 URL</label><input id="imageModelBaseUrl" placeholder="如 https://ark.cn-beijing.volces.com/api/v3" /></div>
+              <div class="field"><label for="imageModelApiPath">接口路径</label><input id="imageModelApiPath" placeholder="/chat/completions" /></div>
+              <div class="field"><label for="imageModelName">模型名 / 接入点 ID</label><input id="imageModelName" placeholder="如 ep-xxxxxxxx 或 doubao-vision 系列模型名" /></div>
+              <div class="field"><label for="imageModelApiFormat">API 格式</label><select id="imageModelApiFormat"><option value="openai">OpenAI Chat Completions</option><option value="anthropic">Anthropic Messages</option></select></div>
+              <div class="field"><label for="imageModelTemperature">温度（0-2）</label><input id="imageModelTemperature" type="number" min="0" max="2" step="0.1" /></div>
+              <div class="field wide"><label for="imageModelApiKey">API Key（<span id="imageModelKeyStatus">未读取</span>）</label><input id="imageModelApiKey" type="password" autocomplete="off" placeholder="不修改可留空" /></div>
+            </div>
+            <div class="field"><label for="imageModelSystemPrompt">模型角色与安全边界</label><textarea id="imageModelSystemPrompt" style="min-height:220px"></textarea></div>
+            <div class="actions" style="margin-top:12px"><button id="saveImageModelBtn" type="button">保存图片模型配置</button></div>
+
+            <h3 class="section-heading">语音模型配置（语音播报模式专用视觉模型）</h3>
+            <p style="margin:0 0 12px;color:#64748b;font-size:13px">语音播报模式下使用的视觉模型，独立于图片模型配置。提示词默认只输出答案（不输出题目摘要和解析），答案以"请注意答案是"开头。不配置时自动回退到图片模型配置。API Key 留空表示保留当前线上值。</p>
+            <div class="form-grid two">
+              <div class="field"><label for="voiceModelBaseUrl">模型 URL</label><input id="voiceModelBaseUrl" placeholder="如 https://ark.cn-beijing.volces.com/api/v3" /></div>
+              <div class="field"><label for="voiceModelApiPath">接口路径</label><input id="voiceModelApiPath" placeholder="/chat/completions" /></div>
+              <div class="field"><label for="voiceModelName">模型名 / 接入点 ID</label><input id="voiceModelName" placeholder="如 ep-xxxxxxxx 或 doubao-vision 系列模型名" /></div>
+              <div class="field"><label for="voiceModelApiFormat">API 格式</label><select id="voiceModelApiFormat"><option value="openai">OpenAI Chat Completions</option><option value="anthropic">Anthropic Messages</option></select></div>
+              <div class="field"><label for="voiceModelTemperature">温度（0-2）</label><input id="voiceModelTemperature" type="number" min="0" max="2" step="0.1" /></div>
+              <div class="field wide"><label for="voiceModelApiKey">API Key（<span id="voiceModelKeyStatus">未读取</span>）</label><input id="voiceModelApiKey" type="password" autocomplete="off" placeholder="不修改可留空" /></div>
+            </div>
+            <div class="field"><label for="voiceModelSystemPrompt">系统提示词（留空使用默认值：只输出答案，以"请注意答案是"开头）</label><textarea id="voiceModelSystemPrompt" style="min-height:220px"></textarea></div>
+            <div class="actions" style="margin-top:12px"><button id="saveVoiceModelBtn" type="button">保存语音模型配置</button></div>
+
+            <h3 class="section-heading">实时语音识别配置（豆包 Seed ASR 2.0）</h3>
+            <p style="margin:0 0 12px;color:#64748b;font-size:13px">面试助手听写专用配置。新版 Agent Plan 只需专属 API Key，无需 App ID；密钥仅保存在后端，留空表示保留当前值。</p>
+            <div class="inline-check"><input id="asrEnabled" type="checkbox" /><label for="asrEnabled">启用实时语音识别</label></div>
+            <div class="form-grid two">
+              <div class="field wide"><label for="asrWsUrl">WebSocket URL</label><input id="asrWsUrl" value="wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async" /></div>
+              <div class="field"><label for="asrResourceId">Resource-Id</label><input id="asrResourceId" value="volc.seedasr.sauc.duration" /></div>
+              <div class="field"><label for="asrModelName">模型名</label><input id="asrModelName" value="bigmodel" /></div>
+              <div class="field wide"><label for="asrApiKey">专属 API Key（<span id="asrKeyStatus">未读取</span>）</label><input id="asrApiKey" type="password" autocomplete="off" placeholder="不修改可留空" /></div>
+            </div>
+            <div class="actions" style="margin-top:12px"><button id="saveAsrConfigBtn" type="button">保存实时语音模型</button></div>
+
+            <h3 class="section-heading">回答格式提示词</h3>
+            <div class="inline-check"><input id="answerFormatEnabled" type="checkbox" /><label for="answerFormatEnabled">启用回答格式提示词</label></div>
+            <div class="field"><label for="answerFormatPrompt">输出结构要求</label><textarea id="answerFormatPrompt" style="min-height:220px"></textarea></div>
+            <div class="field" style="margin-top:12px"><label for="androidFallbackMode">安卓端无法自动填入时</label><select id="androidFallbackMode"><option value="show_answer">展示答案</option><option value="silent">静默处理</option></select></div>
+            <div class="actions" style="margin-top:12px"><button id="saveAnswerFormatBtn" type="button">保存回答格式</button></div>
+          </div>
+        </section>
+
+        <section class="view" data-view="cuotiConfig">
+          <div class="panel">
+            <div class="toolbar"><div><h2>错题集配置</h2><p>错题集小程序的 AI 提示词配置，复用上方文本模型和图片模型配置。</p></div><button id="reloadCuotiBtn" class="secondary" type="button">读取当前配置</button></div>
+
+            <h3 class="section-heading">错题还原提示词（拍照识别时调用图片模型）</h3>
+            <div class="field"><textarea id="cuotiRestorePrompt" style="min-height:160px"></textarea></div>
+
+            <h3 class="section-heading">错题讲解提示词（调用文本模型）</h3>
+            <div class="field"><textarea id="cuotiExplainPrompt" style="min-height:160px"></textarea></div>
+
+            <h3 class="section-heading">知识点关联提示词（调用文本模型）</h3>
+            <div class="field"><textarea id="cuotiKnowledgePrompt" style="min-height:160px"></textarea></div>
+
+            <h3 class="section-heading">举一反三提示词（调用文本模型）</h3>
+            <div class="field"><textarea id="cuotiSimilarPrompt" style="min-height:160px"></textarea></div>
+
+            <h3 class="section-heading">试卷生成提示词（调用文本模型）</h3>
+            <div class="field"><textarea id="cuotiPaperPrompt" style="min-height:160px"></textarea></div>
+
+            <div class="actions" style="margin-top:12px"><button id="saveCuotiBtn" type="button">保存错题集配置</button></div>
+          </div>
+        </section>
+
+        <section class="view" data-view="operations">
+          <div class="panel">
+            <div class="toolbar"><div><h2>运营配置</h2><p>恢复原后台的购买咨询和教学视频配置。</p></div><button id="reloadOperationsBtn" class="secondary" type="button">读取当前配置</button></div>
+            <h3 class="section-heading">购买与客服入口</h3>
+            <div class="form-grid two">
+              <div class="field"><label for="purchaseTitle">标题</label><input id="purchaseTitle" /></div>
+              <div class="field"><label for="purchaseButtonText">按钮文字</label><input id="purchaseButtonText" /></div>
+              <div class="field wide"><label for="purchaseDescription">说明</label><textarea id="purchaseDescription"></textarea></div>
+              <div class="field"><label for="purchaseImageUrl">客服图片 URL</label><input id="purchaseImageUrl" /></div>
+              <div class="field"><label for="purchaseUrl">购买链接</label><input id="purchaseUrl" /></div>
+              <div class="field wide"><label for="contactInfo">联系说明</label><input id="contactInfo" /></div>
+            </div>
+            <div class="actions" style="margin-top:12px"><button id="savePurchaseBtn" type="button">保存购买配置</button></div>
+            <h3 class="section-heading">教学视频</h3>
+            <div class="form-grid two">
+              <div class="field"><label for="tutorialTitle">标题</label><input id="tutorialTitle" /></div>
+              <div class="field"><label for="tutorialVideoUrl">视频 URL</label><input id="tutorialVideoUrl" /></div>
+            </div>
+            <div class="actions" style="margin-top:12px"><button id="saveTutorialBtn" type="button">保存教学配置</button></div>
+          </div>
+        </section>
+
+        <section class="view" data-view="referral">
+          <div class="panel">
+            <div class="toolbar"><div><h2>邀请和代理</h2><p>邀请关系、提成记录、提现审核与风险标记管理。</p></div><button type="button" data-refresh="referral">刷新</button></div>
+            <div class="period-tabs referral-subtabs" role="group" aria-label="邀请和代理子模块">
+              <button class="active" type="button" data-referral-subtab="summary">邀请总览</button>
+              <button type="button" data-referral-subtab="referrals">邀请关系</button>
+              <button type="button" data-referral-subtab="commissions">提成记录</button>
+              <button type="button" data-referral-subtab="withdrawals">提现审核</button>
+              <button type="button" data-referral-subtab="riskFlags">风险标记</button>
+            </div>
+          </div>
+
+          <div class="referral-subview" data-referral-subview="summary">
+            <div class="grid-4" id="referralMetrics"></div>
+          </div>
+
+          <div class="referral-subview" data-referral-subview="referrals" style="display:none">
+            <div class="panel">
+              <div class="form-grid" style="margin-top:0">
+                <div class="field"><label for="referralStatus">邀请状态</label>
+                  <select id="referralStatus">
+                    <option value="">全部</option>
+                    <option value="pending">等待注册</option>
+                    <option value="registered">已注册</option>
+                    <option value="used">已使用</option>
+                    <option value="rewarded">已奖励</option>
+                    <option value="same_device">同设备不计入</option>
+                  </select>
+                </div>
+                <div class="field"><label for="referralEmail">邮箱</label><input id="referralEmail" placeholder="模糊匹配，可留空" /></div>
+                <div class="actions" style="align-self:end"><button id="searchReferralsBtn" type="button">查询</button><button id="clearReferralsFilterBtn" class="secondary" type="button">清空条件</button></div>
+              </div>
+            </div>
+            <div class="table-wrap"><table><thead data-head="referrals"></thead><tbody data-body="referrals"></tbody></table></div>
+            <div class="pagination" data-pagination="referrals"></div>
+          </div>
+
+          <div class="referral-subview" data-referral-subview="commissions" style="display:none">
+            <div class="panel">
+              <div class="toolbar">
+                <div class="form-grid two" style="margin-top:0">
+                  <div class="field"><label for="commissionStatus">提成状态</label>
+                    <select id="commissionStatus">
+                      <option value="">全部</option>
+                      <option value="settling">待结算</option>
+                      <option value="settled">已结算</option>
+                    </select>
+                  </div>
+                  <div class="actions" style="align-self:end">
+                    <button id="searchCommissionsBtn" type="button">查询</button>
+                    <button id="clearCommissionsFilterBtn" class="secondary" type="button">清空条件</button>
+                    <button id="batchClearCommissionsBtn" class="danger" type="button">批量清零</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div class="table-wrap"><table><thead data-head="commissions"></thead><tbody data-body="commissions"></tbody></table></div>
+            <div class="pagination" data-pagination="commissions"></div>
+          </div>
+
+          <div class="referral-subview" data-referral-subview="withdrawals" style="display:none">
+            <div class="panel">
+              <div class="form-grid two" style="margin-top:0">
+                <div class="field"><label for="withdrawalStatus">提现状态</label>
+                  <select id="withdrawalStatus">
+                    <option value="">全部</option>
+                    <option value="pending_review">待审核</option>
+                    <option value="approved">审核通过</option>
+                    <option value="paid">已打款</option>
+                    <option value="rejected">已驳回</option>
+                  </select>
+                </div>
+                <div class="actions" style="align-self:end"><button id="searchWithdrawalsBtn" type="button">查询</button><button id="clearWithdrawalsFilterBtn" class="secondary" type="button">清空条件</button></div>
+              </div>
+            </div>
+            <div class="table-wrap"><table><thead data-head="withdrawals"></thead><tbody data-body="withdrawals"></tbody></table></div>
+            <div class="pagination" data-pagination="withdrawals"></div>
+          </div>
+
+          <div class="referral-subview" data-referral-subview="riskFlags" style="display:none">
+            <div class="panel toolbar"><div><h2>风险标记列表</h2><p>同设备多账号等风险记录。</p></div></div>
+            <div class="table-wrap"><table><thead data-head="riskFlags"></thead><tbody data-body="riskFlags"></tbody></table></div>
+            <div class="pagination" data-pagination="riskFlags"></div>
+          </div>
+        </section>
+
+        <section class="view" data-view="customerService">
+          <div class="panel iframe-shell">
+            <div class="iframe-toolbar"><div><strong>客服助手配置</strong><p style="margin:4px 0 0">原客服后台已嵌入；首次使用需登录客服后台。</p></div><button id="openCustomerServiceBtn" class="secondary" type="button">新窗口打开</button></div>
+            <iframe class="customer-frame" src="https://kefu.quizmate.vip/" title="客服助手配置后台"></iframe>
+          </div>
+        </section>
+
+        <section class="view" data-view="adminSettings">
+          <div class="panel">
+            <div class="toolbar"><div><h2>管理员设置</h2><p>重置管理员邮箱和密码。重置后当前登录会失效，需要使用新凭据重新登录。</p></div></div>
+            <h3 class="section-heading">重置管理员凭据</h3>
+            <div class="form-grid two">
+              <div class="field"><label for="resetAdminEmail">新管理员邮箱</label><input id="resetAdminEmail" type="email" autocomplete="email" /></div>
+              <div class="field"><label for="resetAdminPassword">新密码（至少 8 位）</label><input id="resetAdminPassword" type="password" autocomplete="new-password" /></div>
+              <div class="field"><label for="resetAdminPasswordConfirm">确认新密码</label><input id="resetAdminPasswordConfirm" type="password" autocomplete="new-password" /></div>
+            </div>
+            <div class="actions" style="margin-top:12px"><button id="resetAdminCredentialsBtn" type="button">确认重置</button></div>
+            <p id="resetAdminStatus" class="status" style="margin-top:12px"></p>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="creditModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="creditModalTitle">
+      <div class="modal-card">
+        <h3 id="creditModalTitle">调整积分</h3>
+        <p class="modal-meta">账户：<strong id="creditModalEmail">-</strong>　当前余额：<strong id="creditModalBalance">-</strong></p>
+        <div class="field">
+          <label>调整类型</label>
+          <div class="segmented" role="group" aria-label="调整类型">
+            <button class="active add" type="button" data-credit-op="add">增加</button>
+            <button class="subtract" type="button" data-credit-op="subtract">减少</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="creditModalAmount">积分数量（正整数）</label>
+          <input id="creditModalAmount" type="number" min="1" step="1" placeholder="例如 10" />
+        </div>
+        <div class="field">
+          <label for="creditModalReason">备注（可选，最多 200 字）</label>
+          <input id="creditModalReason" maxlength="200" placeholder="如：客服补发、误操作回滚" />
+        </div>
+        <p id="creditModalStatus" class="modal-status" aria-live="polite"></p>
+        <div class="modal-actions">
+          <button id="creditModalCancel" class="secondary" type="button">取消</button>
+          <button id="creditModalConfirm" type="button">确认调整</button>
+        </div>
+      </div>
+    </div>
+
+    <script>
+      const API_DEFAULT = "https://api.quizmate.vip/study-auth-api";
+      const CUSTOMER_SERVICE_URL = "https://kefu.quizmate.vip/";
+      const tableActions = {
+        accounts: "adminListCreditAccounts",
+        creditLogs: "adminListCreditLogs",
+        licenses: "adminListLicenses",
+        devices: "adminListDevices",
+        orders: "adminListOrders",
+        domainInquiries: "adminListDomainInquiries",
+        knowledge: "adminListKnowledge",
+        referrals: "adminListReferrals",
+        commissions: "adminListCommissions",
+        withdrawals: "adminListWithdrawals",
+        riskFlags: "adminListRiskFlags"
+      };
+      const state = {
+        activeView: "dashboard",
+        visitPeriod: "day",
+        chartSource: "visit",
+        downloadPeriod: "day",
+        accountToken: localStorage.getItem("study_admin_token") || "",
+        accountEmail: localStorage.getItem("study_admin_email") || "",
+        tables: Object.fromEntries(Object.keys(tableActions).map((key) => [key, { page: 1, pageSize: 20, total: 0, totalPages: 1, items: [] }])),
+        creditModal: { open: false, accountId: "", email: "", credits: 0, operation: "add" },
+        referralSubtab: "summary",
+        selectedCommissions: new Set()
+      };
+      const $ = (selector) => document.querySelector(selector);
+      const els = {
+        apiEndpoint: $("#apiEndpoint"), status: $("#globalStatus"), metrics: $("#metrics"),
+        visitChart: $("#visitChart"), periodVisitCount: $("#periodVisitCount"), visitRange: $("#visitRange"),
+        chartTitle: $("#chartTitle"), chartDesc: $("#chartDesc"), chartLegend: $("#chartLegend"),
+        downloadMetrics: $("#downloadMetrics"), downloadChart: $("#downloadChart"), downloadLegend: $("#downloadLegend"),
+        downloadGrandTotal: $("#downloadGrandTotal"), downloadRange: $("#downloadRange"),
+        generatedLicenses: $("#generatedLicenses"), licenseDays: $("#licenseDays"), licenseCount: $("#licenseCount"),
+        modelBaseUrl: $("#modelBaseUrl"), modelApiPath: $("#modelApiPath"), modelName: $("#modelName"), modelApiKey: $("#modelApiKey"),
+        modelTemperature: $("#modelTemperature"), modelSystemPrompt: $("#modelSystemPrompt"), modelKeyStatus: $("#modelKeyStatus"), modelApiFormat: $("#modelApiFormat"),
+        imageModelBaseUrl: $("#imageModelBaseUrl"), imageModelApiPath: $("#imageModelApiPath"), imageModelName: $("#imageModelName"), imageModelApiKey: $("#imageModelApiKey"),
+        imageModelTemperature: $("#imageModelTemperature"), imageModelSystemPrompt: $("#imageModelSystemPrompt"), imageModelKeyStatus: $("#imageModelKeyStatus"), imageModelApiFormat: $("#imageModelApiFormat"),
+        voiceModelBaseUrl: $("#voiceModelBaseUrl"), voiceModelApiPath: $("#voiceModelApiPath"), voiceModelName: $("#voiceModelName"), voiceModelApiKey: $("#voiceModelApiKey"),
+        voiceModelTemperature: $("#voiceModelTemperature"), voiceModelSystemPrompt: $("#voiceModelSystemPrompt"), voiceModelKeyStatus: $("#voiceModelKeyStatus"), voiceModelApiFormat: $("#voiceModelApiFormat"),
+        asrEnabled: $("#asrEnabled"), asrWsUrl: $("#asrWsUrl"), asrResourceId: $("#asrResourceId"), asrModelName: $("#asrModelName"), asrApiKey: $("#asrApiKey"), asrKeyStatus: $("#asrKeyStatus"),
+        answerFormatEnabled: $("#answerFormatEnabled"), answerFormatPrompt: $("#answerFormatPrompt"), androidFallbackMode: $("#androidFallbackMode"),
+        knowledgeLicenseCode: $("#knowledgeLicenseCode"), knowledgeDeviceId: $("#knowledgeDeviceId"), knowledgeFileName: $("#knowledgeFileName"),
+        orderStatus: $("#orderStatus"), orderType: $("#orderType"), orderProvider: $("#orderProvider"),
+        orderEmail: $("#orderEmail"), orderNo: $("#orderNo"), orderStartDate: $("#orderStartDate"), orderEndDate: $("#orderEndDate"),
+        purchaseTitle: $("#purchaseTitle"), purchaseDescription: $("#purchaseDescription"), purchaseImageUrl: $("#purchaseImageUrl"),
+        purchaseUrl: $("#purchaseUrl"), purchaseButtonText: $("#purchaseButtonText"), contactInfo: $("#contactInfo"),
+        tutorialTitle: $("#tutorialTitle"), tutorialVideoUrl: $("#tutorialVideoUrl"),
+        logoutBtn: $("#logoutBtn"),
+        loginView: $("#loginView"), adminShell: $("#adminShell"),
+        loginApiEndpoint: $("#loginApiEndpoint"), loginEmail: $("#loginEmail"), loginPassword: $("#loginPassword"),
+        loginSubmitBtn: $("#loginSubmitBtn"), loginStatus: $("#loginStatus"),
+        currentAdminEmail: $("#currentAdminEmail"),
+        resetAdminEmail: $("#resetAdminEmail"), resetAdminPassword: $("#resetAdminPassword"),
+        resetAdminPasswordConfirm: $("#resetAdminPasswordConfirm"), resetAdminCredentialsBtn: $("#resetAdminCredentialsBtn"),
+        resetAdminStatus: $("#resetAdminStatus")
+      };
+
+      const columns = {
+        accounts: [["email", "邮箱"], ["credits", "余额"], ["totalChargedCredits", "累计充值"], ["totalConsumedCredits", "累计消耗"], ["registerBonusCredits", "注册赠送"], ["status", "状态"], ["role", "角色"], ["lastLoginAt", "最后登录"], ["createdAt", "注册时间"], ["__actions", "操作"]],
+        creditLogs: [["email", "邮箱"], ["type", "类型"], ["credits", "积分变化"], ["balanceAfter", "变化后余额"], ["orderNo", "订单号"], ["packageId", "套餐"], ["source", "来源"], ["deviceId", "设备"], ["createdAt", "时间"], ["__actions", "操作"]],
+        licenses: [["code", "序列号"], ["days", "天数"], ["status", "状态"], ["source", "来源"], ["deviceId", "绑定设备"], ["activatedAt", "激活时间"], ["expiresAt", "到期时间"], ["createdAt", "创建时间"], ["__actions", "操作"]],
+        devices: [["licenseCode", "序列号"], ["deviceId", "设备 ID"], ["lastSeenAt", "最后在线"], ["createdAt", "首次绑定"], ["updatedAt", "更新时间"]],
+        orders: [["outTradeNo", "订单号"], ["orderType", "订单类型"], ["status", "状态"], ["provider", "通道"], ["amount", "金额"], ["email", "邮箱"], ["packageId", "套餐"], ["totalCredits", "充值积分"], ["creditBalanceAfter", "到账后余额"], ["paidAt", "付款时间"], ["createdAt", "创建时间"], ["error", "错误"], ["__actions", "操作"]],
+        domainInquiries: [["domain", "域名"], ["name", "姓名"], ["phone", "联系电话"], ["email", "联系邮箱"], ["offer", "预计出价"], ["message", "留言"], ["clientIp", "来源 IP"], ["createdAt", "提交时间"]],
+        knowledge: [["fileName", "文件名"], ["size", "大小"], ["textLength", "文本长度"], ["chunkCount", "分块数"], ["textPreview", "内容预览"], ["createdAt", "上传时间"], ["__actions", "操作"]],
+        referrals: [["email", "被邀请人邮箱"], ["status", "状态"], ["registeredAt", "注册时间"], ["usedAt", "使用时间"], ["totalCharged", "充值总额"], ["totalCommission", "提成总额"]],
+        commissions: [["__select", "选择"], ["email", "被邀请人邮箱"], ["orderNo", "订单号"], ["chargeAmount", "充值金额"], ["commissionRate", "提成比例"], ["commissionAmount", "提成金额"], ["status", "状态"], ["createdAt", "时间"]],
+        withdrawals: [["email", "邮箱"], ["amount", "金额"], ["alipayAccount", "支付宝账号"], ["alipayName", "支付宝实名"], ["status", "状态"], ["payOrderNo", "打款订单号"], ["paidAt", "打款时间"], ["createdAt", "申请时间"], ["__actions", "操作"]],
+        riskFlags: [["email", "邮箱"], ["type", "类型"], ["detail", "详情"], ["createdAt", "标记时间"]]
+      };
+
+      els.apiEndpoint.value = localStorage.getItem("study_api_endpoint") || API_DEFAULT;
+      els.loginApiEndpoint.value = els.apiEndpoint.value;
+      els.loginEmail.value = state.accountEmail;
+
+      function updateLoginUI() {
+        const loggedIn = !!state.accountToken;
+        if (loggedIn) {
+          els.loginView.hidden = true;
+          els.adminShell.hidden = false;
+          els.currentAdminEmail.value = state.accountEmail;
+          setStatus(`已登录：${state.accountEmail}`, "success");
+        } else {
+          els.loginView.hidden = false;
+          els.adminShell.hidden = true;
+          els.loginPassword.value = "";
+          setLoginStatus("请输入管理员邮箱和密码登录。");
+        }
+      }
+
+      function setLoginStatus(text, type = "") { els.loginStatus.textContent = text; els.loginStatus.className = `login-status ${type}`.trim(); }
+
+      els.loginSubmitBtn.addEventListener("click", () => runLogin(loginAdmin));
+      els.loginPassword.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); runLogin(loginAdmin); } });
+      $("#logoutBtn").addEventListener("click", () => run(logoutAdmin));
+      $("#createLicenseBtn").addEventListener("click", () => run(createLicenses));
+      $("#saveModelBtn").addEventListener("click", () => run(saveModel));
+      $("#saveImageModelBtn").addEventListener("click", () => run(saveImageModel));
+      $("#saveVoiceModelBtn").addEventListener("click", () => run(saveVoiceModel));
+      $("#saveAsrConfigBtn").addEventListener("click", () => run(saveAsrConfig));
+      $("#reloadAiBtn").addEventListener("click", () => run(loadAiConfig));
+      $("#saveAnswerFormatBtn").addEventListener("click", () => run(saveAnswerFormat));
+      $("#reloadCuotiBtn").addEventListener("click", () => run(loadCuotiConfig));
+      $("#saveCuotiBtn").addEventListener("click", () => run(saveCuotiConfig));
+      $("#reloadOperationsBtn").addEventListener("click", () => run(loadOperationsConfig));
+      $("#savePurchaseBtn").addEventListener("click", () => run(savePurchaseConfig));
+      $("#saveTutorialBtn").addEventListener("click", () => run(saveTutorialConfig));
+      els.resetAdminCredentialsBtn.addEventListener("click", () => run(resetAdminCredentials));
+      $("#searchKnowledgeBtn").addEventListener("click", () => { state.tables.knowledge.page = 1; run(() => loadTable("knowledge")); });
+      $("#clearKnowledgeFilterBtn").addEventListener("click", () => { els.knowledgeLicenseCode.value = ""; els.knowledgeDeviceId.value = ""; els.knowledgeFileName.value = ""; state.tables.knowledge.page = 1; run(() => loadTable("knowledge")); });
+      $("#searchOrdersBtn").addEventListener("click", () => { state.tables.orders.page = 1; run(() => loadTable("orders")); });
+      $("#clearOrdersFilterBtn").addEventListener("click", () => {
+        els.orderStatus.value = ""; els.orderType.value = ""; els.orderProvider.value = "";
+        els.orderEmail.value = ""; els.orderNo.value = ""; els.orderStartDate.value = ""; els.orderEndDate.value = "";
+        state.tables.orders.page = 1; run(() => loadTable("orders"));
+      });
+      $("#searchDomainInquiriesBtn").addEventListener("click", () => { state.tables.domainInquiries.page = 1; run(() => loadTable("domainInquiries")); });
+      $("#clearDomainInquiriesFilterBtn").addEventListener("click", () => {
+        $("#domainInquiryDomain").value = "";
+        state.tables.domainInquiries.page = 1; run(() => loadTable("domainInquiries"));
+      });
+      $("#openCustomerServiceBtn").addEventListener("click", () => window.open(CUSTOMER_SERVICE_URL, "_blank", "noopener"));
+      $("#creditModalCancel").addEventListener("click", closeCreditModal);
+      $("#creditModalConfirm").addEventListener("click", () => run(confirmCreditAdjust));
+      $("#creditModalAmount").addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); run(confirmCreditAdjust); } });
+      document.querySelectorAll("[data-credit-op]").forEach((button) => button.addEventListener("click", () => switchCreditOp(button.dataset.creditOp)));
+      $("#creditModal").addEventListener("click", (event) => { if (event.target === event.currentTarget) closeCreditModal(); });
+      document.addEventListener("keydown", (event) => { if (event.key === "Escape" && $("#creditModal").classList.contains("active")) closeCreditModal(); });
+
+      // 邀请和代理：子模块切换
+      document.querySelectorAll("[data-referral-subtab]").forEach((button) => button.addEventListener("click", () => switchReferralSubtab(button.dataset.referralSubtab)));
+      // 邀请关系筛选
+      $("#searchReferralsBtn").addEventListener("click", () => { state.tables.referrals.page = 1; run(() => loadTable("referrals")); });
+      $("#clearReferralsFilterBtn").addEventListener("click", () => {
+        $("#referralStatus").value = ""; $("#referralEmail").value = "";
+        state.tables.referrals.page = 1; run(() => loadTable("referrals"));
+      });
+      // 提成记录筛选 + 批量清零
+      $("#searchCommissionsBtn").addEventListener("click", () => { state.tables.commissions.page = 1; run(() => loadTable("commissions")); });
+      $("#clearCommissionsFilterBtn").addEventListener("click", () => {
+        $("#commissionStatus").value = "";
+        state.tables.commissions.page = 1; run(() => loadTable("commissions"));
+      });
+      $("#batchClearCommissionsBtn").addEventListener("click", () => run(batchClearCommissions));
+      // 提现审核筛选
+      $("#searchWithdrawalsBtn").addEventListener("click", () => { state.tables.withdrawals.page = 1; run(() => loadTable("withdrawals")); });
+      $("#clearWithdrawalsFilterBtn").addEventListener("click", () => {
+        $("#withdrawalStatus").value = "";
+        state.tables.withdrawals.page = 1; run(() => loadTable("withdrawals"));
+      });
+      // 提成记录复选框
+      document.addEventListener("change", handleCommissionCheckboxChange);
+
+      document.querySelectorAll("[data-view-tab]").forEach((button) => button.addEventListener("click", () => switchView(button.dataset.viewTab)));
+      document.querySelectorAll("[data-refresh]").forEach((button) => button.addEventListener("click", () => run(() => loadView(button.dataset.refresh))));
+      document.querySelectorAll("[data-chart-source]").forEach((button) => button.addEventListener("click", () => {
+        state.chartSource = button.dataset.chartSource;
+        document.querySelectorAll("[data-chart-source]").forEach((item) => item.classList.toggle("active", item === button));
+        run(loadChart);
+      }));
+      document.querySelectorAll("[data-visit-period]").forEach((button) => button.addEventListener("click", () => {
+        state.visitPeriod = button.dataset.visitPeriod;
+        run(loadChart);
+      }));
+      document.querySelectorAll("[data-download-period]").forEach((button) => button.addEventListener("click", () => {
+        state.downloadPeriod = button.dataset.downloadPeriod;
+        document.querySelectorAll("[data-download-period]").forEach((item) => {
+          const active = item === button;
+          item.classList.toggle("active", active);
+          item.setAttribute("aria-pressed", String(active));
+        });
+        run(loadDownloadStats);
+      }));
+      document.addEventListener("click", handleActionClick);
+      // 官网访问量点击打开明细弹窗
+      els.metrics.addEventListener("click", (e) => {
+        const metric = e.target.closest("[data-action='visitDetails']");
+        if (metric) run(openVisitDetails);
+      });
+      // 弹窗关闭
+      document.querySelectorAll("[data-close]").forEach((btn) => btn.addEventListener("click", () => {
+        const id = btn.dataset.close;
+        if (id) document.getElementById(id).style.display = "none";
+      }));
+      // 白名单添加
+      document.getElementById("addWhitelistBtn")?.addEventListener("click", () => run(addWhitelist));
+      document.addEventListener("change", handlePageSizeChange);
+
+      updateLoginUI();
+      if (state.accountToken) {
+        switchView("dashboard");
+      }
+      window.lucide?.createIcons();
+
+      function switchView(view) {
+        state.activeView = view;
+        document.querySelectorAll("[data-view-tab]").forEach((button) => button.classList.toggle("active", button.dataset.viewTab === view));
+        document.querySelectorAll("[data-view]").forEach((section) => section.classList.toggle("active", section.dataset.view === view));
+        run(() => loadView(view));
+      }
+
+      async function loadView(view) {
+        if (view === "dashboard") return loadDashboard();
+        if (tableActions[view]) return loadTable(view);
+        if (view === "aiConfig") return loadAiConfig();
+        if (view === "cuotiConfig") return loadCuotiConfig();
+        if (view === "operations") return loadOperationsConfig();
+        if (view === "referral") return loadReferralView();
+        if (view === "adminSettings") { els.resetAdminEmail.value = state.accountEmail; els.resetAdminStatus.textContent = ""; }
+      }
+
+      async function loadDashboard() {
+        const data = await api("adminDashboardSummary", {});
+        const metrics = [["官网访问量", data.websiteVisitCount, true], ["积分用户", data.accountCount, false], ["用户积分余额", data.totalCreditsBalance, false], ["已支付积分订单", data.paidCreditOrderCount, false], ["待支付订单", data.waitingOrderCount, false], ["积分流水", data.creditLogCount, false]];
+        els.metrics.innerHTML = metrics.map(([label, value, clickable]) => `<div class="metric${clickable ? " metric-clickable" : ""}"${clickable ? ' data-action="visitDetails"' : ""}><span>${label}</span><strong>${formatNumber(value)}</strong></div>`).join("");
+        await Promise.all([loadChart(), loadDownloadStats()]);
+        setStatus("概览已刷新。", "success");
+      }
+
+      // 访问明细弹窗：打开并加载数据
+      async function openVisitDetails() {
+        document.getElementById("visitModal").style.display = "flex";
+        await Promise.all([loadVisitDetails(), loadWhitelist()]);
+      }
+
+      async function loadVisitDetails() {
+        const data = await api("adminGetVisitDetails", {});
+        const container = document.getElementById("visitDetailsContent");
+        if (!data.items || data.items.length === 0) {
+          container.innerHTML = `<div style="text-align:center;padding:24px;color:#64748b">今日暂无访问记录</div>`;
+          return;
+        }
+        container.innerHTML = `<table style="width:100%;font-size:13px;border-collapse:collapse"><thead><tr style="text-align:left;border-bottom:2px solid #e2e8f0"><th style="padding:6px">IP 地址</th><th style="padding:6px">访问次数</th><th style="padding:6px">最后访问路径</th><th style="padding:6px">最后访问时间</th><th style="padding:6px">操作</th></tr></thead><tbody>${data.items.map((item) => `<tr style="border-bottom:1px solid #f1f5f9${item.isWhitelisted ? ";opacity:0.5" : ""}"><td style="padding:6px">${escapeHtml(item.clientIp)}${item.isWhitelisted ? ' <span style="color:#16a34a;font-size:11px">白名单</span>' : ""}</td><td style="padding:6px">${formatNumber(item.visitCount)}</td><td style="padding:6px;color:#64748b">${escapeHtml(item.pagePath)}</td><td style="padding:6px;color:#64748b;font-size:12px">${escapeHtml(item.lastVisit || "")}</td><td style="padding:6px">${item.isWhitelisted ? `<button type="button" class="btn-sm btn-warning" data-remove-whitelist="${escapeHtml(item.clientIp)}">移除白名单</button>` : `<button type="button" class="btn-sm btn-success" data-add-whitelist="${escapeHtml(item.clientIp)}">加入白名单</button>`}</td></tr>`).join("")}</tbody></table>`;
+        // 绑定白名单按钮
+        container.querySelectorAll("[data-add-whitelist]").forEach((btn) => btn.addEventListener("click", () => run(() => addWhitelistIp(btn.dataset.addWhitelist))));
+        container.querySelectorAll("[data-remove-whitelist]").forEach((btn) => btn.addEventListener("click", () => run(() => removeWhitelist(btn.dataset.removeWhitelist))));
+      }
+
+      async function loadWhitelist() {
+        const data = await api("adminGetVisitWhitelist", {});
+        const container = document.getElementById("whitelistContent");
+        if (!data.items || data.items.length === 0) {
+          container.innerHTML = `<div style="font-size:13px;color:#64748b;padding:4px 0">暂无白名单 IP</div>`;
+          return;
+        }
+        container.innerHTML = data.items.map((item) => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px"><span style="font-weight:600">${escapeHtml(item.clientIp)}</span>${item.note ? `<span style="color:#64748b">(${escapeHtml(item.note)})</span>` : ""}<button type="button" class="btn-sm btn-warning" data-remove-wl="${escapeHtml(item.clientIp)}">移除</button></div>`).join("");
+        container.querySelectorAll("[data-remove-wl]").forEach((btn) => btn.addEventListener("click", () => run(() => removeWhitelist(btn.dataset.removeWl))));
+      }
+
+      async function addWhitelist() {
+        const ip = document.getElementById("whitelistIpInput").value.trim();
+        const note = document.getElementById("whitelistNoteInput").value.trim();
+        if (!ip) { setStatus("请输入 IP 地址", "error"); return; }
+        await api("adminAddVisitWhitelist", { clientIp: ip, note });
+        document.getElementById("whitelistIpInput").value = "";
+        document.getElementById("whitelistNoteInput").value = "";
+        await Promise.all([loadWhitelist(), loadVisitDetails()]);
+        setStatus(`已将 ${ip} 加入白名单`, "success");
+      }
+
+      async function addWhitelistIp(ip) {
+        await api("adminAddVisitWhitelist", { clientIp: ip, note: "从明细标注" });
+        await Promise.all([loadWhitelist(), loadVisitDetails()]);
+        setStatus(`已将 ${ip} 加入白名单`, "success");
+      }
+
+      async function removeWhitelist(ip) {
+        await api("adminRemoveVisitWhitelist", { clientIp: ip });
+        await Promise.all([loadWhitelist(), loadVisitDetails()]);
+        setStatus(`已移除 ${ip} 的白名单`, "success");
+      }
+
+      // 下载量看板：各产品累计下载量 + 按天/周/月趋势
+      async function loadDownloadStats() {
+        const data = await api("adminDownloadStats", { period: state.downloadPeriod });
+        renderDownloadStats(data);
+        setStatus("下载量看板已刷新。", "success");
+      }
+
+      const DOWNLOAD_PRODUCTS = [
+        { key: "quizmate-android", label: "QuizMate 安卓", icon: "smartphone", cls: "android", color: "#067647" },
+        { key: "quizmate-windows", label: "QuizMate Windows", icon: "monitor", cls: "windows", color: "#2563eb" },
+        { key: "quizmate-mac", label: "QuizMate Mac", icon: "apple", cls: "mac", color: "#6d28d9" },
+        { key: "diskpilot-windows", label: "磁盘轻扩 Windows", icon: "hard-drive", cls: "diskpilot", color: "#c2410c" }
+      ];
+
+      function renderDownloadStats(data) {
+        document.querySelectorAll("[data-download-period]").forEach((button) => {
+          const active = button.dataset.downloadPeriod === data.period;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-pressed", String(active));
+        });
+        els.downloadGrandTotal.textContent = formatNumber(data.grandTotal);
+        els.downloadRange.textContent = `${formatDate(data.rangeStart)} 至 ${formatDate(data.rangeEnd)}`;
+        els.downloadMetrics.innerHTML = DOWNLOAD_PRODUCTS.map((item) => {
+          const total = data.totals[item.key] ?? 0;
+          const periodCount = data.series[item.key]?.periodCount ?? 0;
+          return `<div class="download-metric"><div class="dm-icon ${item.cls}"><i data-lucide="${item.icon}"></i></div><div class="dm-body"><span class="dm-label">${item.label}</span><strong class="dm-value">${formatNumber(total)}</strong><span class="dm-sub">当前区间 ${formatNumber(periodCount)} 次</span></div></div>`;
+        }).join("");
+        window.lucide?.createIcons();
+        // 图例
+        els.downloadLegend.innerHTML = DOWNLOAD_PRODUCTS.map((item) => {
+          const total = data.totals[item.key] ?? 0;
+          return `<span class="legend-item"><i class="legend-dot" style="background:${item.color}"></i>${item.label} <strong>${formatNumber(total)}</strong></span>`;
+        }).join("");
+        renderDownloadChart(data);
+      }
+
+      function renderDownloadChart(data) {
+        const series = DOWNLOAD_PRODUCTS.map((item) => ({ ...item, points: data.series[item.key]?.points ?? [] }));
+        const hasData = series.some((item) => item.points.length);
+        if (!hasData) {
+          els.downloadChart.innerHTML = `<div class="visit-chart-empty">暂无下载量数据</div>`;
+          return;
+        }
+        const width = 960;
+        const height = 300;
+        const margin = { top: 20, right: 24, bottom: 46, left: 58 };
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+        const len = Math.max(...series.map((item) => item.points.length)) || 1;
+        const maximum = Math.max(1, ...series.flatMap((item) => item.points.map((point) => Number(point.count || 0))));
+        const xAt = (index) => margin.left + (len === 1 ? plotWidth / 2 : index * plotWidth / (len - 1));
+        const yAt = (count) => margin.top + plotHeight - Number(count || 0) / maximum * plotHeight;
+        const lineOf = (points) => points.length ? points.map((point, i) => `${i ? "L" : "M"} ${xAt(i).toFixed(1)} ${yAt(point.count).toFixed(1)}`).join(" ") : "";
+        const labelStep = len > 16 ? 5 : 1;
+        const refPoints = series.find((item) => item.points.length)?.points ?? [];
+        const grid = Array.from({ length: 5 }, (_, index) => {
+          const ratio = index / 4;
+          const y = margin.top + ratio * plotHeight;
+          const value = Math.round(maximum * (1 - ratio));
+          return `<line class="grid-line" x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}"></line><text class="axis-label" x="${margin.left - 10}" y="${y + 4}" text-anchor="end">${formatNumber(value)}</text>`;
+        }).join("");
+        const labels = refPoints.map((point, index) => (index % labelStep === 0 || index === refPoints.length - 1)
+          ? `<text class="axis-label" x="${xAt(index)}" y="${height - 14}" text-anchor="middle">${escapeHtml(point.label)}</text>`
+          : "").join("");
+        const paths = series.map((item) => {
+          if (!item.points.length) return "";
+          const line = lineOf(item.points);
+          const circles = item.points.map((point, index) => `<circle class="trend-point" cx="${xAt(index)}" cy="${yAt(point.count)}" r="3" fill="#fff" stroke="${item.color}" stroke-width="2"><title>${escapeHtml(item.label)} ${escapeHtml(point.label)}：${formatNumber(point.count)} 次</title></circle>`).join("");
+          return `<path fill="none" stroke="${item.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="${line}"></path>${circles}`;
+        }).join("");
+        const periodLabel = { day: "日", week: "周", month: "月" }[data.period] || "日";
+        els.downloadChart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="客户端下载量按${periodLabel}趋势图，累计 ${formatNumber(data.grandTotal)} 次">${grid}${paths}${labels}</svg>`;
+      }
+
+      // 根据当前数据源（官网访问 / 模型调用）加载对应趋势并渲染
+      async function loadChart() {
+        if (state.chartSource === "model") {
+          const trend = await api("adminModelCallTrend", { period: state.visitPeriod });
+          renderModelCallTrend(trend);
+          setStatus("模型调用趋势已刷新。", "success");
+        } else {
+          const trend = await api("adminWebsiteVisitTrend", { period: state.visitPeriod });
+          renderWebsiteVisitTrend(trend);
+          setStatus("官网访问趋势已刷新。", "success");
+        }
+      }
+
+      function syncChartTabs(source, period) {
+        document.querySelectorAll("[data-chart-source]").forEach((button) => button.classList.toggle("active", button.dataset.chartSource === source));
+        document.querySelectorAll("[data-visit-period]").forEach((button) => {
+          const active = button.dataset.visitPeriod === period;
+          button.classList.toggle("active", active);
+          button.setAttribute("aria-pressed", String(active));
+        });
+      }
+
+      function renderWebsiteVisitTrend(data) {
+        syncChartTabs("visit", data.period);
+        els.chartTitle.textContent = "官网访问趋势";
+        els.chartDesc.textContent = "每次官网页面加载计为 1 次访问，按上海时区统计。";
+        els.chartLegend.innerHTML = "";
+        const points = Array.isArray(data.points) ? data.points : [];
+        els.periodVisitCount.textContent = formatNumber(data.periodVisits);
+        els.visitRange.textContent = `${formatDate(data.rangeStart)} 至 ${formatDate(data.rangeEnd)}`;
+        if (!points.length) {
+          els.visitChart.innerHTML = `<div class="visit-chart-empty">暂无访问数据</div>`;
+          return;
+        }
+
+        const width = 960;
+        const height = 340;
+        const margin = { top: 30, right: 24, bottom: 60, left: 58 };
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+        const maximum = Math.max(1, ...points.map((point) => Number(point.count || 0)));
+        const xAt = (index) => margin.left + (points.length === 1 ? plotWidth / 2 : index * plotWidth / (points.length - 1));
+        const yAt = (count) => margin.top + plotHeight - Number(count || 0) / maximum * plotHeight;
+        const linePath = points.map((point, index) => `${index ? "L" : "M"} ${xAt(index).toFixed(1)} ${yAt(point.count).toFixed(1)}`).join(" ");
+        const areaPath = `${linePath} L ${xAt(points.length - 1).toFixed(1)} ${(margin.top + plotHeight).toFixed(1)} L ${xAt(0).toFixed(1)} ${(margin.top + plotHeight).toFixed(1)} Z`;
+        const labelStep = points.length > 16 ? 5 : points.length > 8 ? 3 : 1;
+        const grid = Array.from({ length: 5 }, (_, index) => {
+          const ratio = index / 4;
+          const y = margin.top + ratio * plotHeight;
+          const value = Math.round(maximum * (1 - ratio));
+          return `<line class="grid-line" x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}"></line><text class="axis-label" x="${margin.left - 10}" y="${y + 4}" text-anchor="end">${formatNumber(value)}</text>`;
+        }).join("");
+        const labels = points.map((point, index) => (index % labelStep === 0 || index === points.length - 1)
+          ? `<text class="axis-label" x="${xAt(index)}" y="${height - 28}" text-anchor="middle">${escapeHtml(point.label)}：${formatNumber(point.count)}</text>`
+          : "").join("");
+        const valueLabels = points.map((point, index) => {
+          const count = Number(point.count || 0);
+          if (count === 0) return "";
+          return `<text class="trend-value-label" x="${xAt(index)}" y="${yAt(point.count) - 10}" text-anchor="middle" style="font-size:11px;fill:#2563eb;font-weight:600">${formatNumber(count)}</text>`;
+        }).join("");
+        const circles = points.map((point, index) => `<circle class="trend-point" cx="${xAt(index)}" cy="${yAt(point.count)}" r="4"><title>${escapeHtml(point.label)}：${formatNumber(point.count)} 次</title></circle>`).join("");
+        const periodLabel = { day: "日", week: "周", month: "月" }[data.period] || "日";
+        els.visitChart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="官网按${periodLabel}访问量折线图，当前区间共 ${formatNumber(data.periodVisits)} 次">${grid}<path class="trend-area" d="${areaPath}"></path><path class="trend-line" d="${linePath}"></path>${circles}${valueLabels}${labels}</svg>`;
+      }
+
+      // 模型调用趋势：文本模型 + 图片模型 两条曲线，与官网访问共用同一图表（切换数据源）
+      function renderModelCallTrend(data) {
+        syncChartTabs("model", data.period);
+        els.chartTitle.textContent = "模型调用趋势";
+        els.chartDesc.textContent = "成功调用文本/图片模型生成答案的次数，按上海时区统计。";
+        const textPoints = Array.isArray(data.textPoints) ? data.textPoints : [];
+        const imagePoints = Array.isArray(data.imagePoints) ? data.imagePoints : [];
+        els.chartLegend.innerHTML = `<span class="legend-item"><i class="legend-dot text"></i>文本模型 <strong>${formatNumber(data.periodTextCalls || 0)}</strong> 次</span><span class="legend-item"><i class="legend-dot image"></i>图片模型 <strong>${formatNumber(data.periodImageCalls || 0)}</strong> 次</span>`;
+        els.periodVisitCount.textContent = formatNumber((data.periodTextCalls || 0) + (data.periodImageCalls || 0));
+        els.visitRange.textContent = `${formatDate(data.rangeStart)} 至 ${formatDate(data.rangeEnd)}`;
+        if (!textPoints.length && !imagePoints.length) {
+          els.visitChart.innerHTML = `<div class="visit-chart-empty">暂无模型调用数据</div>`;
+          return;
+        }
+
+        const width = 960;
+        const height = 310;
+        const margin = { top: 24, right: 24, bottom: 46, left: 58 };
+        const plotWidth = width - margin.left - margin.right;
+        const plotHeight = height - margin.top - margin.bottom;
+        const len = Math.max(textPoints.length, imagePoints.length) || 1;
+        const maximum = Math.max(1, ...textPoints.map((p) => Number(p.count || 0)), ...imagePoints.map((p) => Number(p.count || 0)));
+        const xAt = (index) => margin.left + (len === 1 ? plotWidth / 2 : index * plotWidth / (len - 1));
+        const yAt = (count) => margin.top + plotHeight - Number(count || 0) / maximum * plotHeight;
+        const lineOf = (points) => points.length ? points.map((p, i) => `${i ? "L" : "M"} ${xAt(i).toFixed(1)} ${yAt(p.count).toFixed(1)}`).join(" ") : "";
+        const areaOf = (points) => points.length ? `${lineOf(points)} L ${xAt(points.length - 1).toFixed(1)} ${(margin.top + plotHeight).toFixed(1)} L ${xAt(0).toFixed(1)} ${(margin.top + plotHeight).toFixed(1)} Z` : "";
+        const textLine = lineOf(textPoints);
+        const imageLine = lineOf(imagePoints);
+        const labelStep = len > 16 ? 5 : 1;
+        const refPoints = textPoints.length ? textPoints : imagePoints;
+        const grid = Array.from({ length: 5 }, (_, index) => {
+          const ratio = index / 4;
+          const y = margin.top + ratio * plotHeight;
+          const value = Math.round(maximum * (1 - ratio));
+          return `<line class="grid-line" x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}"></line><text class="axis-label" x="${margin.left - 10}" y="${y + 4}" text-anchor="end">${formatNumber(value)}</text>`;
+        }).join("");
+        const labels = refPoints.map((p, index) => (index % labelStep === 0 || index === refPoints.length - 1)
+          ? `<text class="axis-label" x="${xAt(index)}" y="${height - 14}" text-anchor="middle">${escapeHtml(p.label)}</text>`
+          : "").join("");
+        const textCircles = textPoints.map((p, i) => `<circle class="trend-point text" cx="${xAt(i)}" cy="${yAt(p.count)}" r="4"><title>文本模型 ${escapeHtml(p.label)}：${formatNumber(p.count)} 次</title></circle>`).join("");
+        const imageCircles = imagePoints.map((p, i) => `<circle class="trend-point image" cx="${xAt(i)}" cy="${yAt(p.count)}" r="4"><title>图片模型 ${escapeHtml(p.label)}：${formatNumber(p.count)} 次</title></circle>`).join("");
+        els.visitChart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="模型调用趋势图，文本模型 ${formatNumber(data.periodTextCalls || 0)} 次，图片模型 ${formatNumber(data.periodImageCalls || 0)} 次">${grid}${textLine ? `<path class="trend-area text" d="${areaOf(textPoints)}"></path>` : ""}${imageLine ? `<path class="trend-area image" d="${areaOf(imagePoints)}"></path>` : ""}${textLine ? `<path class="trend-line text" d="${textLine}"></path>` : ""}${imageLine ? `<path class="trend-line image" d="${imageLine}"></path>` : ""}${textCircles}${imageCircles}${labels}</svg>`;
+      }
+
+      function knowledgeFilters() {
+        return { licenseCode: els.knowledgeLicenseCode.value.trim(), deviceId: els.knowledgeDeviceId.value.trim(), fileName: els.knowledgeFileName.value.trim() };
+      }
+
+      function orderFilters() {
+        return {
+          status: els.orderStatus.value.trim(),
+          orderType: els.orderType.value.trim(),
+          provider: els.orderProvider.value.trim(),
+          email: els.orderEmail.value.trim(),
+          outTradeNo: els.orderNo.value.trim(),
+          startDate: els.orderStartDate.value,
+          endDate: els.orderEndDate.value
+        };
+      }
+      function domainInquiryFilters() {
+        return { domain: $("#domainInquiryDomain").value.trim() };
+      }
+
+      async function loadTable(type) {
+        const table = state.tables[type];
+        const extra = type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : {};
+        const payload = { page: table.page, pageSize: table.pageSize, ...extra };
+        const data = await api(tableActions[type], payload);
+        table.items = data.items || [];
+        table.page = Number(data.page || table.page || 1);
+        table.pageSize = Number(data.pageSize || table.pageSize || 20);
+        table.total = Number(data.total ?? table.items.length);
+        table.totalPages = Number(data.totalPages || Math.max(1, Math.ceil(table.total / table.pageSize)));
+        renderTable(type, table.items);
+        renderPagination(type);
+        setStatus(`已读取 ${table.total} 条记录，当前第 ${table.page}/${table.totalPages} 页。`, "success");
+      }
+
+      async function createLicenses() {
+        const data = await api("adminCreateLicenses", { days: els.licenseDays.value, count: els.licenseCount.value });
+        const items = data.items || [];
+        els.generatedLicenses.value = items.map((item) => item.code).join("\n");
+        setStatus(`已生成 ${items.length} 个序列号。`, "success");
+        state.tables.licenses.page = 1;
+        await loadTable("licenses");
+      }
+
+      async function bindLicense(code) {
+        const deviceId = window.prompt(`请输入序列号 ${code} 要绑定的设备 ID：`, "");
+        if (!deviceId?.trim()) return;
+        await api("adminBindLicense", { code, deviceId: deviceId.trim() });
+        setStatus(`序列号 ${code} 已绑定设备。`, "success");
+        await Promise.all([loadTable("licenses"), state.activeView === "devices" ? loadTable("devices") : Promise.resolve()]);
+      }
+
+      async function unbindLicense(code) {
+        if (!window.confirm(`确认解绑序列号 ${code} 的设备吗？授权有效期会保留。`)) return;
+        await api("adminUnbindLicense", { code });
+        setStatus(`序列号 ${code} 已解绑设备。`, "success");
+        await loadTable("licenses");
+      }
+
+      async function deleteUserKnowledge(docId, fileName) {
+        if (!window.confirm(`确认删除用户知识库文件“${fileName || docId}”吗？删除后无法恢复。`)) return;
+        await api("adminDeleteKnowledge", { docId });
+        setStatus(`知识库文件 ${fileName || docId} 已删除。`, "success");
+        await loadTable("knowledge");
+      }
+
+      async function deleteCreditLog(logId) {
+        if (!logId) { setStatus("缺少积分流水 ID。", "error"); return; }
+        if (!window.confirm(`确认删除该条积分流水吗？删除后无法恢复，且不会回滚账户余额。`)) return;
+        await api("adminDeleteCreditLog", { logId });
+        setStatus(`积分流水 ${logId} 已删除。`, "success");
+        await loadTable("creditLogs");
+      }
+
+      async function deleteOrder(outTradeNo) {
+        if (!outTradeNo) { setStatus("缺少订单号。", "error"); return; }
+        if (!window.confirm(`确认删除订单“${outTradeNo}”吗？删除后无法恢复，关联的支付回调事件也会一并清除。`)) return;
+        await api("adminDeleteOrder", { outTradeNo });
+        setStatus(`订单 ${outTradeNo} 已删除。`, "success");
+        await loadTable("orders");
+      }
+
+      function openCreditModal(account) {
+        state.creditModal = { open: true, accountId: account.accountId, email: account.email, credits: Number(account.credits || 0), operation: "add" };
+        $("#creditModalEmail").textContent = account.email || "-";
+        $("#creditModalBalance").textContent = formatNumber(account.credits || 0);
+        $("#creditModalAmount").value = "";
+        $("#creditModalReason").value = "";
+        setCreditModalStatus("");
+        switchCreditOp("add");
+        $("#creditModal").classList.add("active");
+        setTimeout(() => $("#creditModalAmount").focus(), 30);
+      }
+
+      function closeCreditModal() {
+        state.creditModal.open = false;
+        $("#creditModal").classList.remove("active");
+        setCreditModalStatus("");
+      }
+
+      function switchCreditOp(operation) {
+        state.creditModal.operation = operation;
+        document.querySelectorAll("[data-credit-op]").forEach((button) => {
+          const active = button.dataset.creditOp === operation;
+          button.classList.toggle("active", active);
+        });
+      }
+
+      function setCreditModalStatus(text, type = "") {
+        const node = $("#creditModalStatus");
+        node.textContent = text || "";
+        node.className = `modal-status ${type}`.trim();
+      }
+
+      async function confirmCreditAdjust() {
+        if (!state.creditModal.open) return;
+        const amount = Math.floor(Number($("#creditModalAmount").value || 0));
+        if (!Number.isFinite(amount) || amount <= 0) {
+          setCreditModalStatus("请输入大于 0 的整数。", "error");
+          return;
+        }
+        const operation = state.creditModal.operation;
+        if (operation === "subtract" && amount > state.creditModal.credits) {
+          setCreditModalStatus(`当前余额 ${state.creditModal.credits}，无法减少 ${amount}。`, "error");
+          return;
+        }
+        const reason = $("#creditModalReason").value.trim();
+        setCreditModalStatus("提交中...");
+        const data = await api("adminAdjustCredits", {
+          accountId: state.creditModal.accountId, operation, credits: amount, reason
+        });
+        const opLabel = operation === "add" ? "增加" : "减少";
+        setStatus(`已为 ${data.account.email} ${opLabel} ${amount} 积分，新余额 ${data.account.credits}。`, "success");
+        closeCreditModal();
+        if (state.activeView === "accounts") await loadTable("accounts");
+        if (state.activeView === "creditLogs") await loadTable("creditLogs");
+      }
+
+      async function loadAiConfig() {
+        const [model, imageModel, answerFormat, fallback, voiceModel, asr] = await Promise.all([
+          api("adminGetModelConfig", {}), api("adminGetImageModelConfig", {}), api("adminGetAnswerFormatConfig", {}), api("adminGetAndroidAnswerFallbackConfig", {}), api("adminGetVoiceModelConfig", {}), api("adminGetAsrConfig", {})
+        ]);
+        els.modelBaseUrl.value = model.baseUrl || "";
+        els.modelApiPath.value = model.apiPath || "";
+        els.modelName.value = model.model || "";
+        els.modelApiFormat.value = model.apiFormat || "openai";
+        els.modelTemperature.value = model.temperature ?? 0.2;
+        els.modelSystemPrompt.value = model.systemPrompt || "";
+        els.modelApiKey.value = "";
+        els.modelKeyStatus.textContent = model.hasApiKey ? `已配置 ${model.apiKeyMasked || ""}` : "未配置";
+        els.imageModelBaseUrl.value = imageModel.baseUrl || "";
+        els.imageModelApiPath.value = imageModel.apiPath || "";
+        els.imageModelName.value = imageModel.model || "";
+        els.imageModelApiFormat.value = imageModel.apiFormat || "openai";
+        els.imageModelTemperature.value = imageModel.temperature ?? 0.2;
+        els.imageModelSystemPrompt.value = imageModel.systemPrompt || "";
+        els.imageModelApiKey.value = "";
+        els.imageModelKeyStatus.textContent = imageModel.hasApiKey ? `已配置 ${imageModel.apiKeyMasked || ""}` : "未配置";
+        els.voiceModelBaseUrl.value = voiceModel.baseUrl || "";
+        els.voiceModelApiPath.value = voiceModel.apiPath || "";
+        els.voiceModelName.value = voiceModel.model || "";
+        els.voiceModelApiFormat.value = voiceModel.apiFormat || "openai";
+        els.voiceModelTemperature.value = voiceModel.temperature ?? 0.2;
+        els.voiceModelSystemPrompt.value = voiceModel.systemPrompt || "";
+        els.voiceModelApiKey.value = "";
+        els.voiceModelKeyStatus.textContent = voiceModel.hasApiKey ? `已配置 ${voiceModel.apiKeyMasked || ""}` : "未配置";
+        els.asrWsUrl.value = asr.wsUrl || "wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async";
+        els.asrEnabled.checked = asr.enabled !== false;
+        els.asrResourceId.value = asr.resourceId || "volc.seedasr.sauc.duration";
+        els.asrModelName.value = asr.model || "bigmodel";
+        els.asrApiKey.value = "";
+        els.asrKeyStatus.textContent = asr.hasApiKey ? `已配置 ${asr.apiKeyMasked || ""}` : "未配置";
+        els.answerFormatEnabled.checked = answerFormat.enabled !== false;
+        els.answerFormatPrompt.value = answerFormat.prompt || "";
+        els.androidFallbackMode.value = fallback.mode || "show_answer";
+        setStatus("AI 配置已读取。", "success");
+      }
+
+      async function saveModel() {
+        const data = await api("adminSetModelConfig", {
+          baseUrl: els.modelBaseUrl.value.trim(), apiPath: els.modelApiPath.value.trim(), model: els.modelName.value.trim(),
+          apiFormat: els.modelApiFormat.value, apiKey: els.modelApiKey.value.trim(), temperature: Number(els.modelTemperature.value), systemPrompt: els.modelSystemPrompt.value.trim()
+        });
+        els.modelApiKey.value = "";
+        els.modelKeyStatus.textContent = data.hasApiKey ? `已配置 ${data.apiKeyMasked || ""}` : "未配置";
+        setStatus(`文本模型配置已保存：${data.model || els.modelName.value}`, "success");
+      }
+
+      async function saveImageModel() {
+        const data = await api("adminSetImageModelConfig", {
+          baseUrl: els.imageModelBaseUrl.value.trim(), apiPath: els.imageModelApiPath.value.trim(), model: els.imageModelName.value.trim(),
+          apiFormat: els.imageModelApiFormat.value, apiKey: els.imageModelApiKey.value.trim(), temperature: Number(els.imageModelTemperature.value), systemPrompt: els.imageModelSystemPrompt.value.trim()
+        });
+        els.imageModelApiKey.value = "";
+        els.imageModelKeyStatus.textContent = data.hasApiKey ? `已配置 ${data.apiKeyMasked || ""}` : "未配置";
+        setStatus(`图片模型配置已保存：${data.model || els.imageModelName.value}`, "success");
+      }
+
+      async function saveVoiceModel() {
+        const data = await api("adminSetVoiceModelConfig", {
+          baseUrl: els.voiceModelBaseUrl.value.trim(),
+          apiPath: els.voiceModelApiPath.value.trim(),
+          model: els.voiceModelName.value.trim(),
+          apiKey: els.voiceModelApiKey.value.trim(),
+          apiFormat: els.voiceModelApiFormat.value,
+          temperature: parseFloat(els.voiceModelTemperature.value) || 0.2,
+          systemPrompt: els.voiceModelSystemPrompt.value.trim()
+        });
+        els.voiceModelApiKey.value = "";
+        els.voiceModelKeyStatus.textContent = data.hasApiKey ? `已配置 ${data.apiKeyMasked || ""}` : "未配置";
+        setStatus(`语音模型配置已保存：${data.model || els.voiceModelName.value || "(空)"}`, "success");
+      }
+
+      async function saveAsrConfig() {
+        const data = await api("adminSetAsrConfig", {
+          wsUrl: els.asrWsUrl.value.trim(),
+          resourceId: els.asrResourceId.value.trim(), model: els.asrModelName.value.trim(),
+          apiKey: els.asrApiKey.value.trim(), enabled: els.asrEnabled.checked
+        });
+        els.asrApiKey.value = "";
+        els.asrKeyStatus.textContent = data.hasApiKey ? `已配置 ${data.apiKeyMasked || ""}` : "未配置";
+        setStatus("实时语音模型配置已保存。", "success");
+      }
+
+      async function saveAnswerFormat() {
+        await Promise.all([
+          api("adminSetAnswerFormatConfig", { enabled: els.answerFormatEnabled.checked, prompt: els.answerFormatPrompt.value.trim() }),
+          api("adminSetAndroidAnswerFallbackConfig", { mode: els.androidFallbackMode.value })
+        ]);
+        setStatus("回答格式提示词已保存。", "success");
+      }
+
+      async function loadCuotiConfig() {
+        const res = await api("adminGetCuotiConfig", {});
+        document.getElementById("cuotiRestorePrompt").value = res.restorePrompt || "";
+        document.getElementById("cuotiExplainPrompt").value = res.explainPrompt || "";
+        document.getElementById("cuotiKnowledgePrompt").value = res.knowledgePrompt || "";
+        document.getElementById("cuotiSimilarPrompt").value = res.similarPrompt || "";
+        document.getElementById("cuotiPaperPrompt").value = res.paperPrompt || "";
+        setStatus("错题集配置已读取。", "success");
+      }
+
+      async function saveCuotiConfig() {
+        await api("adminSetCuotiConfig", {
+          restorePrompt: document.getElementById("cuotiRestorePrompt").value,
+          explainPrompt: document.getElementById("cuotiExplainPrompt").value,
+          knowledgePrompt: document.getElementById("cuotiKnowledgePrompt").value,
+          similarPrompt: document.getElementById("cuotiSimilarPrompt").value,
+          paperPrompt: document.getElementById("cuotiPaperPrompt").value
+        });
+        setStatus("错题集配置已保存。", "success");
+      }
+
+      async function loadOperationsConfig() {
+        const [purchase, tutorial] = await Promise.all([api("getPurchaseConfig", {}), api("adminGetTutorialConfig", {})]);
+        els.purchaseTitle.value = purchase.title || "";
+        els.purchaseDescription.value = purchase.description || "";
+        els.purchaseImageUrl.value = purchase.imageUrl || "";
+        els.purchaseUrl.value = purchase.purchaseUrl || "";
+        els.purchaseButtonText.value = purchase.buttonText || "";
+        els.contactInfo.value = purchase.contactInfo || "";
+        els.tutorialTitle.value = tutorial.title || "";
+        els.tutorialVideoUrl.value = tutorial.videoUrl || "";
+        setStatus("运营配置已读取。", "success");
+      }
+
+      async function savePurchaseConfig() {
+        await api("adminSetPurchaseConfig", { title: els.purchaseTitle.value.trim(), description: els.purchaseDescription.value.trim(), imageUrl: els.purchaseImageUrl.value.trim(), purchaseUrl: els.purchaseUrl.value.trim(), buttonText: els.purchaseButtonText.value.trim(), contactInfo: els.contactInfo.value.trim() });
+        setStatus("购买与客服入口配置已保存。", "success");
+      }
+
+      async function saveTutorialConfig() {
+        await api("adminSetTutorialConfig", { title: els.tutorialTitle.value.trim(), videoUrl: els.tutorialVideoUrl.value.trim() });
+        setStatus("教学视频配置已保存。", "success");
+      }
+
+      function renderTable(type, items) {
+        const head = document.querySelector(`[data-head="${type}"]`);
+        const body = document.querySelector(`[data-body="${type}"]`);
+        const config = columns[type] || [];
+        head.innerHTML = `<tr>${config.map(([, label]) => `<th>${label}</th>`).join("")}</tr>`;
+        if (!items.length) { body.innerHTML = `<tr><td colspan="${config.length}">暂无数据</td></tr>`; return; }
+        body.innerHTML = items.map((item) => `<tr>${config.map(([key]) => `<td>${key === "__actions" ? renderRowActions(type, item) : key === "__select" ? renderSelectCheckbox(type, item) : formatCell(item[key], key)}</td>`).join("")}</tr>`).join("");
+      }
+
+      function renderSelectCheckbox(type, item) {
+        if (type === "commissions") {
+          const id = String(item.commissionId || item.id || "");
+          const checked = state.selectedCommissions.has(id) ? "checked" : "";
+          return `<input type="checkbox" data-commission-id="${escapeHtml(id)}" ${checked} />`;
+        }
+        return "";
+      }
+
+      function renderRowActions(type, item) {
+        if (type === "accounts") {
+          return `<div class="row-actions"><button class="small secondary" type="button" data-action="adjust-credits" data-account-id="${escapeHtml(item.accountId || "")}" data-email="${escapeHtml(item.email || "")}" data-credits="${escapeHtml(String(item.credits ?? 0))}">调整积分</button></div>`;
+        }
+        if (type === "creditLogs") {
+          return `<div class="row-actions"><button class="small danger" type="button" data-action="delete-credit-log" data-log-id="${escapeHtml(item.logId || "")}">删除</button></div>`;
+        }
+        if (type === "orders") {
+          return `<div class="row-actions"><button class="small danger" type="button" data-action="delete-order" data-out-trade-no="${escapeHtml(item.outTradeNo || "")}">删除</button></div>`;
+        }
+        if (type === "licenses") {
+          const code = escapeHtml(item.code || "");
+          return `<div class="row-actions"><button class="small secondary" type="button" data-action="bind-license" data-code="${code}">绑定</button><button class="small danger" type="button" data-action="unbind-license" data-code="${code}" ${item.deviceId ? "" : "disabled"}>解绑</button></div>`;
+        }
+        if (type === "knowledge") {
+          return `<div class="row-actions"><button class="small danger" type="button" data-action="delete-knowledge" data-doc-id="${escapeHtml(item.docId || "")}" data-file-name="${escapeHtml(item.fileName || "")}">删除</button></div>`;
+        }
+        if (type === "withdrawals") {
+          const id = escapeHtml(String(item.withdrawalId || item.id || ""));
+          const status = item.status || "";
+          const actions = [];
+          if (status === "pending_review") {
+            actions.push(`<button class="small secondary" type="button" data-action="approve-withdrawal" data-withdrawal-id="${id}">审核通过</button>`);
+            actions.push(`<button class="small danger" type="button" data-action="reject-withdrawal" data-withdrawal-id="${id}">驳回</button>`);
+          }
+          if (status === "approved") {
+            actions.push(`<button class="small" type="button" data-action="mark-withdrawal-paid" data-withdrawal-id="${id}">打款标记</button>`);
+            actions.push(`<button class="small danger" type="button" data-action="reject-withdrawal" data-withdrawal-id="${id}">驳回</button>`);
+          }
+          return `<div class="row-actions">${actions.join("") || "-"}</div>`;
+        }
+        return "-";
+      }
+
+      function renderPagination(type) {
+        const table = state.tables[type];
+        const root = document.querySelector(`[data-pagination="${type}"]`);
+        root.innerHTML = `<span>共 ${table.total} 条</span><label>每页 <select data-page-size="${type}">${[10, 20, 50, 100].map((size) => `<option value="${size}" ${size === table.pageSize ? "selected" : ""}>${size}</option>`).join("")}</select> 条</label><button class="secondary" type="button" data-page-action="first" data-table="${type}" ${table.page <= 1 ? "disabled" : ""}>首页</button><button class="secondary" type="button" data-page-action="prev" data-table="${type}" ${table.page <= 1 ? "disabled" : ""}>上一页</button><span>第 ${table.page} / ${table.totalPages} 页</span><button class="secondary" type="button" data-page-action="next" data-table="${type}" ${table.page >= table.totalPages ? "disabled" : ""}>下一页</button><button class="secondary" type="button" data-page-action="last" data-table="${type}" ${table.page >= table.totalPages ? "disabled" : ""}>末页</button>`;
+      }
+
+      function handleActionClick(event) {
+        const button = event.target.closest("button");
+        if (!button || button.disabled) return;
+        const action = button.dataset.action;
+        if (action === "adjust-credits") return openCreditModal({ accountId: button.dataset.accountId, email: button.dataset.email, credits: Number(button.dataset.credits || 0) });
+        if (action === "bind-license") return run(() => bindLicense(button.dataset.code));
+        if (action === "unbind-license") return run(() => unbindLicense(button.dataset.code));
+        if (action === "delete-credit-log") return run(() => deleteCreditLog(button.dataset.logId));
+        if (action === "delete-order") return run(() => deleteOrder(button.dataset.outTradeNo));
+        if (action === "delete-knowledge") return run(() => deleteUserKnowledge(button.dataset.docId, button.dataset.fileName));
+        if (action === "approve-withdrawal") return run(() => approveWithdrawal(button.dataset.withdrawalId));
+        if (action === "mark-withdrawal-paid") return run(() => markWithdrawalPaid(button.dataset.withdrawalId));
+        if (action === "reject-withdrawal") return run(() => rejectWithdrawal(button.dataset.withdrawalId));
+        const pageAction = button.dataset.pageAction;
+        const type = button.dataset.table;
+        if (!pageAction || !type) return;
+        const table = state.tables[type];
+        if (pageAction === "first") table.page = 1;
+        if (pageAction === "prev") table.page = Math.max(1, table.page - 1);
+        if (pageAction === "next") table.page = Math.min(table.totalPages, table.page + 1);
+        if (pageAction === "last") table.page = table.totalPages;
+        run(() => loadTable(type));
+      }
+
+      function handlePageSizeChange(event) {
+        const type = event.target.dataset.pageSize;
+        if (!type) return;
+        state.tables[type].pageSize = Number(event.target.value || 20);
+        state.tables[type].page = 1;
+        run(() => loadTable(type));
+      }
+
+      async function api(action, payload) {
+        saveLocal();
+        const response = await fetch(els.apiEndpoint.value.trim() || API_DEFAULT, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action, accountToken: state.accountToken, ...payload })
+        });
+        let data;
+        try { data = await response.json(); } catch { throw new Error(`接口返回异常（HTTP ${response.status}）`); }
+        if (!response.ok || !data.ok) throw new Error(data.error || "请求失败");
+        return data.data || {};
+      }
+
+      async function loginAdmin() {
+        const email = els.loginEmail.value.trim();
+        const password = els.loginPassword.value.trim();
+        if (!email || !password) throw new Error("请输入邮箱和密码。");
+        const endpoint = els.loginApiEndpoint.value.trim() || API_DEFAULT;
+        els.apiEndpoint.value = endpoint;
+        localStorage.setItem("study_api_endpoint", endpoint);
+        setLoginStatus("正在登录...");
+        const data = await fetch(endpoint, {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "loginAccount", email, password })
+        });
+        const result = await data.json();
+        if (!data.ok || !result.ok) throw new Error(result.error || "登录失败");
+        if (result.data.account.role !== "admin") throw new Error("该账户没有管理员权限。");
+        state.accountToken = result.data.token;
+        state.accountEmail = result.data.account.email;
+        localStorage.setItem("study_admin_token", state.accountToken);
+        localStorage.setItem("study_admin_email", state.accountEmail);
+        updateLoginUI();
+        setStatus("登录成功！", "success");
+        await loadView(state.activeView);
+      }
+
+      async function logoutAdmin() {
+        try { await api("logoutAccount", {}); } catch { /* ignore */ }
+        state.accountToken = "";
+        state.accountEmail = "";
+        localStorage.removeItem("study_admin_token");
+        localStorage.removeItem("study_admin_email");
+        updateLoginUI();
+      }
+
+      async function resetAdminCredentials() {
+        const newEmail = els.resetAdminEmail.value.trim();
+        const newPassword = els.resetAdminPassword.value;
+        const confirmPassword = els.resetAdminPasswordConfirm.value;
+        if (!newEmail) throw new Error("请输入新邮箱。");
+        if (newPassword.length < 8) throw new Error("密码长度至少 8 位。");
+        if (newPassword !== confirmPassword) throw new Error("两次输入的密码不一致。");
+        if (!window.confirm(`确认将管理员邮箱重置为 ${newEmail} 吗？重置后当前登录会失效，需要使用新凭据重新登录。`)) return;
+        els.resetAdminStatus.textContent = "正在重置...";
+        els.resetAdminStatus.className = "status";
+        const data = await api("adminResetAdminCredentials", { newEmail, newPassword });
+        els.resetAdminStatus.textContent = `已重置为 ${data.email}，即将退出登录...`;
+        els.resetAdminStatus.className = "status success";
+        // 重置后 token 已失效，清除本地状态并返回登录界面
+        setTimeout(() => {
+          state.accountToken = "";
+          state.accountEmail = "";
+          localStorage.removeItem("study_admin_token");
+          localStorage.removeItem("study_admin_email");
+          els.loginEmail.value = newEmail;
+          updateLoginUI();
+        }, 2000);
+      }
+
+      // ===================== 邀请和代理管理 =====================
+
+      function referralFilters() {
+        return { status: $("#referralStatus").value.trim(), email: $("#referralEmail").value.trim() };
+      }
+      function commissionFilters() {
+        return { status: $("#commissionStatus").value.trim() };
+      }
+      function withdrawalFilters() {
+        return { status: $("#withdrawalStatus").value.trim() };
+      }
+
+      function loadReferralView() {
+        switchReferralSubtab(state.referralSubtab || "summary");
+      }
+
+      function switchReferralSubtab(subtab) {
+        state.referralSubtab = subtab;
+        document.querySelectorAll("[data-referral-subtab]").forEach((button) => {
+          button.classList.toggle("active", button.dataset.referralSubtab === subtab);
+        });
+        document.querySelectorAll("[data-referral-subview]").forEach((section) => {
+          section.style.display = section.dataset.referralSubview === subtab ? "" : "none";
+        });
+        if (subtab === "summary") return loadReferralSummary();
+        if (subtab === "referrals") { state.tables.referrals.page = 1; return run(() => loadTable("referrals")); }
+        if (subtab === "commissions") { state.tables.commissions.page = 1; return run(() => loadTable("commissions")); }
+        if (subtab === "withdrawals") { state.tables.withdrawals.page = 1; return run(() => loadTable("withdrawals")); }
+        if (subtab === "riskFlags") { state.tables.riskFlags.page = 1; return run(() => loadTable("riskFlags")); }
+      }
+
+      async function loadReferralSummary() {
+        const data = await api("adminReferralSummary", {});
+        const metrics = [
+          ["邀请总数", formatNumber(data.totalReferrals)],
+          ["已注册", formatNumber(data.registeredCount)],
+          ["已使用", formatNumber(data.usedCount)],
+          ["提成总额", `¥${formatNumber(data.totalCommission || 0)}`],
+          ["待结算提成", `¥${formatNumber(data.pendingCommission || 0)}`],
+          ["已结算提成", `¥${formatNumber(data.settledCommission || 0)}`],
+          ["提现申请", formatNumber(data.totalWithdrawals)],
+          ["待审核提现", formatNumber(data.pendingWithdrawals)]
+        ];
+        $("#referralMetrics").innerHTML = metrics.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
+        setStatus("邀请总览已刷新。", "success");
+      }
+
+      async function approveWithdrawal(id) {
+        if (!window.confirm(`确认审核通过该提现申请吗？`)) return;
+        await api("adminApproveWithdrawal", { withdrawalId: id });
+        setStatus("提现申请已审核通过。", "success");
+        await loadTable("withdrawals");
+      }
+
+      async function markWithdrawalPaid(id) {
+        const payOrderNo = window.prompt(`请输入打款订单号：`, "");
+        if (!payOrderNo?.trim()) return;
+        await api("adminMarkWithdrawalPaid", { withdrawalId: id, payOrderNo: payOrderNo.trim() });
+        setStatus("已标记打款。", "success");
+        await loadTable("withdrawals");
+      }
+
+      async function rejectWithdrawal(id) {
+        const reason = window.prompt(`请输入驳回原因：`, "");
+        if (reason === null) return;
+        await api("adminRejectWithdrawal", { withdrawalId: id, reason: reason.trim() });
+        setStatus("提现申请已驳回。", "success");
+        await loadTable("withdrawals");
+      }
+
+      async function batchClearCommissions() {
+        const ids = Array.from(state.selectedCommissions);
+        if (!ids.length) { setStatus("请先勾选要清零的提成记录。", "error"); return; }
+        if (!window.confirm(`确认将选中的 ${ids.length} 条提成记录清零吗？此操作不可撤销。`)) return;
+        await api("adminClearCommissions", { commissionIds: ids });
+        state.selectedCommissions.clear();
+        setStatus(`已清零 ${ids.length} 条提成记录。`, "success");
+        await loadTable("commissions");
+      }
+
+      function handleCommissionCheckboxChange(event) {
+        const checkbox = event.target;
+        if (!checkbox.dataset.commissionId) return;
+        const id = checkbox.dataset.commissionId;
+        if (checkbox.checked) state.selectedCommissions.add(id);
+        else state.selectedCommissions.delete(id);
+      }
+
+      function saveLocal() {
+        localStorage.setItem("study_api_endpoint", els.apiEndpoint.value.trim() || API_DEFAULT);
+      }
+
+      async function run(task) {
+        try { await task(); } catch (error) { setStatus(error.message || String(error), "error"); }
+      }
+
+      async function runLogin(task) {
+        try { await task(); } catch (error) { setLoginStatus(error.message || String(error), "error"); }
+      }
+
+      function setStatus(text, type = "") { els.status.textContent = text; els.status.className = `status ${type}`.trim(); }
+
+      const REFERRAL_STATUS_MAP = {
+        pending: "等待注册", registered: "已注册", used: "已使用", rewarded: "已奖励", same_device: "同设备不计入",
+        settling: "待结算", settled: "已结算",
+        pending_review: "待审核", approved: "审核通过", paid: "已打款", rejected: "已驳回"
+      };
+
+      function formatCell(value, key) {
+        if (value === undefined || value === null || value === "") return "-";
+        if (/At$/.test(key)) { const time = new Date(value).getTime(); if (Number.isFinite(time)) return new Date(value).toLocaleString("zh-CN"); }
+        if (key === "status") return `<span class="badge">${escapeHtml(REFERRAL_STATUS_MAP[value] || value)}</span>`;
+        if (key === "orderType") return `<span class="badge">${escapeHtml(value)}</span>`;
+        if (key === "size") return formatBytes(value);
+        if (key === "chargeAmount" || key === "amount" || key === "totalCharged" || key === "totalCommission" || key === "commissionAmount") return `¥${escapeHtml(String(value))}`;
+        if (key === "commissionRate") return `${escapeHtml(String(value))}%`;
+        return escapeHtml(value);
+      }
+
+      function formatBytes(value) { const size = Number(value || 0); if (size < 1024) return `${size} B`; if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`; return `${(size / 1024 / 1024).toFixed(1)} MB`; }
+      function formatDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value).replaceAll("-", "/") : "-"; }
+      function formatNumber(value) { return Number(value || 0).toLocaleString("zh-CN"); }
+      function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
+    </script>
+  </body>
+</html>

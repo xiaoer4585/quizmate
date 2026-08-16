@@ -1,0 +1,21 @@
+HTTP/1.1 301 Moved Permanently
+Server: nginx
+Date: Sat, 18 Jul 2026 17:45:42 GMT
+Content-Type: text/html; charset=UTF-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+X-Redirect-By: WordPress
+Location: https://www.playoffer.cn/wp-content/uploads/cdn/qz_mac_jiaocheng.mp4
+Strict-Transport-Security: max-age=31536000
+
+HTTP/1.1 206 Partial Content
+Server: nginx
+Date: Sat, 18 Jul 2026 17:45:42 GMT
+Content-Type: video/mp4
+Content-Length: 2048
+Last-Modified: Sat, 17 Jan 2026 11:47:59 GMT
+Connection: keep-alive
+ETag: "696b76ef-7309dba"
+Strict-Transport-Security: max-age=31536000
+Content-Range: bytes 0-2047/120626618
+

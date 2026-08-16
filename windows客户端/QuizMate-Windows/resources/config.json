@@ -1,0 +1,38 @@
+{
+  "apiBaseUrl": "https://api.quizmate.vip/study-auth-api",
+  "webBaseUrl": "https://www.quizmate.vip",
+  "adminWebUrl": "https://www.quizmate.vip/admin-web/index.html",
+  "websocketUrl": "",
+  "environment": "production",
+  "version": "1.0.0",
+  "registerUrl": "https://www.quizmate.vip/#credits",
+  "resetPasswordUrl": "https://www.quizmate.vip/#credits",
+  "rechargeUrl": "https://www.quizmate.vip/recharge.html",
+  "tutorialUrl": "https://www.quizmate.vip/",
+  "allowedExternalHosts": ["quizmate.vip", "www.quizmate.vip", "offer.quizmate.cn", "www.offer.quizmate.cn"],
+  "creditCostPerSuccess": 10,
+  "creditCostPerInterview": 30,
+  "maxScreenshots": 5,
+  "minScreenshotIntervalMs": 300,
+  "defaultBackgroundOpacity": 0.8,
+  "defaultTheme": "dark",
+  "httpTimeoutMs": 60000,
+  "ttsTimeoutMs": 45000,
+  "sseConnectTimeoutMs": 30000,
+  "screenshotHideDelayMs": 300,
+  "screenshotRestoreDelayMs": 200,
+  "minResolution": { "width": 1280, "height": 720 },
+  "aiModels": {
+    "examText": { "provider": "server-managed", "note": "笔试AI文字模型-由后台统一配置" },
+    "interviewRealtimeVoice": { "provider": "server-managed", "note": "面试实时语音模型-由后台统一配置", "configUrl": "https://www.quizmate.vip/admin-web/index.html#/ai/interview-voice" }
+  },
+  "windowDefaults": {
+    "loginWidth": 520,
+    "loginHeight": 640,
+    "configWidth": 1200,
+    "configHeight": 800,
+    "overlayWidth": 800,
+    "overlayHeight": 600,
+    "overlayMinHeight": 40
+  }
+}

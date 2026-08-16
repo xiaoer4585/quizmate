@@ -1,0 +1,156 @@
+name: Build QuizMate Mac
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - mac-build-*
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: macOS ${{ matrix.label }}
+    runs-on: macos-14
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: x64
+            label: Intel
+            expected: x86_64
+            uploadKey: intel
+            logUploadKey: intelLog
+          - arch: arm64
+            label: Apple-Silicon
+            expected: arm64
+            uploadKey: apple
+            logUploadKey: appleLog
+
+    defaults:
+      run:
+        working-directory: mac客户端/QuizMate-Mac
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: mac客户端/QuizMate-Mac/package-lock.json
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -o pipefail
+          npm ci 2>&1 | tee -a build.log
+
+      - name: Validate source
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            npm run typecheck:node
+            npm run typecheck:web
+            npm audit
+          } 2>&1 | tee -a build.log
+
+      - name: Build DMG
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: |
+          set -o pipefail
+          {
+            npm run build
+            npx electron-builder --mac dmg --${{ matrix.arch }} --publish never
+          } 2>&1 | tee -a build.log
+
+      - name: Re-sign app for local distribution
+        shell: bash
+        run: |
+          set -euo pipefail
+          exec > >(tee -a build.log) 2>&1
+          APP_PATH=$(find release -maxdepth 2 -name 'QuizMate.app' -type d -print -quit)
+          test -d "$APP_PATH"
+          codesign --force --deep --sign - --timestamp=none "$APP_PATH"
+          codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+          rm -f release/QuizMate-Mac-${{ matrix.arch }}-*.dmg
+          npx electron-builder --mac dmg --${{ matrix.arch }} --prepackaged "$APP_PATH" --publish never
+
+      - name: Verify DMG and executable architecture
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          exec > >(tee -a build.log) 2>&1
+          DMG=$(find release -maxdepth 1 -name "QuizMate-Mac-${{ matrix.arch }}-*.dmg" -print -quit)
+          test -n "$DMG"
+          hdiutil verify "$DMG"
+          MOUNT_DIR=$(mktemp -d)
+          hdiutil attach "$DMG" -mountpoint "$MOUNT_DIR" -nobrowse -readonly
+          APP_BIN=$(find "$MOUNT_DIR" -path "*/Contents/MacOS/QuizMate" -type f -print -quit)
+          test -n "$APP_BIN"
+          APP_PATH=$(find "$MOUNT_DIR" -maxdepth 1 -name 'QuizMate.app' -type d -print -quit)
+          test -n "$APP_PATH"
+          codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+          codesign -dv --verbose=4 "$APP_PATH" 2>&1 | tee codesign.txt
+          file "$APP_BIN" | tee architecture.txt
+          grep -q "${{ matrix.expected }}" architecture.txt
+          hdiutil detach "$MOUNT_DIR"
+          shasum -a 256 "$DMG" | tee sha256.txt
+          echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+
+      - name: Upload Actions artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuizMate-Mac-${{ matrix.label }}-2026.8.12
+          path: |
+            mac客户端/QuizMate-Mac/${{ steps.artifact.outputs.dmg }}
+            mac客户端/QuizMate-Mac/architecture.txt
+            mac客户端/QuizMate-Mac/codesign.txt
+            mac客户端/QuizMate-Mac/sha256.txt
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload delivery package
+        if: startsWith(github.ref, 'refs/tags/mac-build-')
+        shell: bash
+        env:
+          BUILD_ARCH: ${{ matrix.arch }}
+          UPLOAD_KEY: ${{ matrix.uploadKey }}
+          DMG_PATH: ${{ steps.artifact.outputs.dmg }}
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          TAG_PAYLOAD_B64=$(git cat-file tag "$GITHUB_REF_NAME" | sed '1,/^$/d' | tr -d '\n')
+          UPLOAD_URL=$(TAG_PAYLOAD_B64="$TAG_PAYLOAD_B64" node -e "const p=JSON.parse(Buffer.from(process.env.TAG_PAYLOAD_B64, 'base64').toString('utf8')); process.stdout.write(p[process.env.UPLOAD_KEY])")
+          test -n "$UPLOAD_URL"
+          echo "::add-mask::$UPLOAD_URL"
+          curl --fail --silent --show-error --retry 3 \
+            -X PUT \
+            -H "Content-Type: application/x-apple-diskimage" \
+            --upload-file "$DMG_PATH" \
+            "$UPLOAD_URL"
+
+      - name: Upload diagnostic log
+        if: always() && startsWith(github.ref, 'refs/tags/mac-build-')
+        shell: bash
+        env:
+          LOG_UPLOAD_KEY: ${{ matrix.logUploadKey }}
+        run: |
+          set -euo pipefail
+          test -f build.log || printf 'Build stopped before the logged steps.\n' > build.log
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          TAG_PAYLOAD_B64=$(git cat-file tag "$GITHUB_REF_NAME" | sed '1,/^$/d' | tr -d '\n')
+          UPLOAD_URL=$(TAG_PAYLOAD_B64="$TAG_PAYLOAD_B64" node -e "const p=JSON.parse(Buffer.from(process.env.TAG_PAYLOAD_B64, 'base64').toString('utf8')); process.stdout.write(p[process.env.LOG_UPLOAD_KEY])")
+          test -n "$UPLOAD_URL"
+          echo "::add-mask::$UPLOAD_URL"
+          curl --fail --silent --show-error --retry 3 \
+            -X PUT \
+            -H "Content-Type: text/plain; charset=utf-8" \
+            --upload-file build.log \
+            "$UPLOAD_URL"

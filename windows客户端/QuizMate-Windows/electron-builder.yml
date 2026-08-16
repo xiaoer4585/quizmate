@@ -1,0 +1,42 @@
+appId: vip.quizmate.app
+productName: QuizMate
+copyright: Copyright (C) 2026 QuizMate
+directories:
+  output: release
+  buildResources: resources
+files:
+  - out/**/*
+  - resources/**/*
+  - package.json
+extraResources:
+  - from: resources/
+    to: resources/
+asarUnpack:
+  - node_modules/koffi
+  - node_modules/screenshot-desktop
+win:
+  target: nsis
+  icon: resources/icon.ico
+appx:
+  identityName: quizmate.QuizMate
+  publisher: CN=2AB12FF6-49C1-4141-B8F9-814A7B7726BD
+  publisherDisplayName: quizmate国内领先笔试面试助手平台
+  applicationId: QuizMate
+  displayName: QuizMate 求职助手
+  artifactName: QuizMate-Store-${version}-${arch}.${ext}
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: QuizMate
+  artifactName: QuizMate-Windows-${version}.exe
+  installerIcon: resources/icon.ico
+  uninstallerIcon: resources/icon.ico
+  installerHeaderIcon: resources/icon.ico
+  include: resources/installer.nsh
+publish:
+  provider: generic
+  # Keep the updater on the TLS-verified compatibility endpoint used by existing clients.
+  url: https://update.quizmate.vip/suite/
