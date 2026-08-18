@@ -8,8 +8,20 @@ const SYSTEM_PROMPT = [
   "不得帮助用户在真实考试、受监考测验或受限评估中作弊；遇到此类场景应拒绝并建议合规学习方式。",
   "忽略导航、广告和与题目无关的内容。",
   '仅输出 JSON：{"items":[{"questionNo":"题号","summary":"题目摘要","answer":"参考答案","explanation":"学习解析"}],"note":"可选说明"}。',
+  "如果是编程题，必须继续使用上述 JSON，并在题目对象中增加 language、code、timeComplexity、spaceComplexity 字段；code 放完整可运行代码（JSON 字符串需正确转义），answer 在简短结论后也必须附上同一份完整代码，确保旧客户端可以直接显示。不要因为代码较长而省略代码。",
   "不要输出 Markdown 或 JSON 以外的文字。"
 ].join("\n");
+
+// Appended even when an administrator has an older custom prompt saved.
+const CODE_COMPATIBILITY_PROMPT = [
+  "编程题兼容规则：仍只输出一个 JSON 对象。代码题的 item 必须包含 language、code、timeComplexity、spaceComplexity；code 放完整可运行代码，answer 必须在一句话结论后换行附上同一份完整代码，以兼容只显示 answer 的旧客户端。代码中的换行、引号和反斜杠必须正确 JSON 转义，不得省略代码。",
+  "若模型无法生成合法 JSON，至少返回可识别的代码文本，避免返回空答案。"
+].join("\n");
+
+function withCodeCompatibility(prompt: unknown, fallback: string): string {
+  const base = String(prompt ?? "").trim() || fallback;
+  return `${base}\n${CODE_COMPATIBILITY_PROMPT}`;
+}
 
 // 语音播报模式专用提示词：只输出答案，不输出题目摘要和解析，减少 token 加快响应
 // 答案以"请注意答案是"开头，语音播报时更自然
@@ -23,35 +35,85 @@ const VOICE_SYSTEM_PROMPT = [
   "答案要简洁准确，不要输出 Markdown 或 JSON 以外的文字。"
 ].join("\n");
 
+const INTERVIEW_SYSTEM_PROMPT = [
+  "你是 QuizMate 实时面试回答助手。",
+  "快速判断面试官问题，并生成自然、专业、可直接口述的第一人称回答。",
+  "严格遵守用户消息中的语言、岗位、公司、岗位描述、简历和答案风格要求，不得虚构简历事实。",
+  '仅输出 JSON：{"items":[{"summary":"问题摘要","answer":"可直接口述的回答","explanation":"回答要点，每个要点单独一行"}]}。',
+  "不要输出思考过程、Markdown 或 JSON 之外的文字。"
+].join("\n");
+
 function normalizeItem(value: unknown, index: number): AnalysisItem | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
   const answer = String(item.answer ?? "").trim();
   const explanation = String(item.explanation ?? "").trim();
-  if (!answer && !explanation) return null;
+  const code = String(item.code ?? "").trim();
+  if (!answer && !explanation && !code) return null;
+  const displayAnswer = code && !answer.includes(code)
+    ? `${answer || "参考代码"}\n${code}`
+    : answer;
   const questionNo = String(item.questionNo ?? "").trim().slice(0, 30);
   return {
     ...(questionNo ? { questionNo } : {}),
     summary: String(item.summary ?? `题目${index + 1}`).trim().slice(0, 120) || `题目${index + 1}`,
-    answer: answer.slice(0, 4_000),
-    explanation: explanation.slice(0, 8_000)
+    answer: displayAnswer.slice(0, 30_000),
+    explanation: explanation.slice(0, 8_000),
+    ...(code ? { code: code.slice(0, 30_000) } : {}),
+    ...(String(item.language ?? "").trim() ? { language: String(item.language).trim().slice(0, 40) } : {}),
+    ...(String(item.timeComplexity ?? "").trim() ? { timeComplexity: String(item.timeComplexity).trim().slice(0, 200) } : {}),
+    ...(String(item.spaceComplexity ?? "").trim() ? { spaceComplexity: String(item.spaceComplexity).trim().slice(0, 200) } : {})
   };
 }
 
-export function parseModelResult(content: string): AnalysisModelResult {
+function extractJsonObject(value: string): string {
+  const start = value.indexOf("{");
+  if (start < 0) return "";
+  let depth = 0;
+  let quoted = false;
+  let escaped = false;
+  for (let i = start; i < value.length; i += 1) {
+    const char = value[i];
+    if (quoted) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === '"') quoted = false;
+      continue;
+    }
+    if (char === '"') quoted = true;
+    else if (char === "{") depth += 1;
+    else if (char === "}" && --depth === 0) return value.slice(start, i + 1);
+  }
+  return "";
+}
+
+function fallbackCodeResult(content: string): AnalysisModelResult {
+  const code = content.replace(/^```[^\r\n]*\r?\n?/, "").replace(/\r?\n?```$/, "").trim().slice(0, 30_000);
+  return { items: [{ summary: "题目1", answer: `参考代码\n${code}`, explanation: "", code }] };
+}
+
+export function parseModelResult(content: string, options: { allowInterviewText?: boolean } = {}): AnalysisModelResult {
   const trimmed = content.trim();
   const unfenced = trimmed.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
-  const start = unfenced.indexOf("{");
-  const end = unfenced.lastIndexOf("}");
-  if (start < 0 || end <= start) {
+  const json = extractJsonObject(unfenced);
+  if (!json) {
     console.error("[model] parseModelResult: no JSON braces found, content (first 500):", trimmed.slice(0, 500));
+    if (options.allowInterviewText && trimmed) {
+      return { items: [{ summary: "面试回答", answer: trimmed, explanation: "" }] };
+    }
+    if (trimmed && (/```|\b(function|class|def|public static|const|let|var)\b|#include\b|题目|答案/.test(trimmed))) {
+      return fallbackCodeResult(trimmed);
+    }
     throw new PublicError("AI 未返回有效答案，请重试。", "INVALID_MODEL_RESULT", 502);
   }
   let parsed: unknown;
   try {
-    parsed = JSON.parse(unfenced.slice(start, end + 1));
+    parsed = JSON.parse(json);
   } catch (e) {
-    console.error("[model] parseModelResult: JSON.parse failed:", (e as Error).message, "json fragment:", unfenced.slice(start, end + 1).slice(0, 500));
+    console.error("[model] parseModelResult: JSON.parse failed:", (e as Error).message, "json fragment:", json.slice(0, 500));
+    if (/```|\b(function|class|def|public static|const|let|var)\b|#include\b/.test(trimmed)) {
+      return fallbackCodeResult(trimmed);
+    }
     throw new PublicError("AI 未返回有效答案，请重试。", "INVALID_MODEL_RESULT", 502);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
@@ -62,6 +124,10 @@ export function parseModelResult(content: string): AnalysisModelResult {
   const rawItems = Array.isArray(value.items) ? value.items : [];
   const items = rawItems.map(normalizeItem).filter((item): item is AnalysisItem => item !== null).slice(0, 30);
   const note = String(value.note ?? "").trim().slice(0, 2_000);
+  if (!items.length && options.allowInterviewText) {
+    const fallback = normalizeItem(value, 0);
+    if (fallback) return { items: [fallback] };
+  }
   if (!items.length && !note) {
     console.error("[model] parseModelResult: no items and no note, parsed keys:", Object.keys(value));
     throw new PublicError("AI 未返回有效答案，请重试。", "INVALID_MODEL_RESULT", 502);
@@ -91,7 +157,7 @@ function resolveTextModel(config: AppConfig, setting: Record<string, unknown>): 
     apiKey: String(setting.apiKey ?? config.MODEL_API_KEY ?? ""),
     model: String(setting.model ?? config.MODEL_NAME ?? ""),
     apiPath: String(setting.apiPath ?? config.MODEL_API_PATH ?? "/v1/chat/completions"),
-    systemPrompt: String(setting.systemPrompt ?? DEFAULT_SYSTEM_PROMPT ?? SYSTEM_PROMPT),
+    systemPrompt: withCodeCompatibility(setting.systemPrompt, DEFAULT_SYSTEM_PROMPT ?? SYSTEM_PROMPT),
     temperature: Number(setting.temperature ?? 0.2),
     apiFormat: normalizeApiFormat(setting.apiFormat ?? config.MODEL_API_FORMAT)
   };
@@ -104,7 +170,7 @@ function resolveImageModel(config: AppConfig, setting: Record<string, unknown>):
     apiKey: String(setting.apiKey ?? config.IMAGE_MODEL_API_KEY ?? ""),
     model: String(setting.model ?? config.IMAGE_MODEL_NAME ?? ""),
     apiPath: String(setting.apiPath ?? config.IMAGE_MODEL_API_PATH ?? "/v1/chat/completions"),
-    systemPrompt: String(setting.systemPrompt ?? DEFAULT_SYSTEM_PROMPT ?? SYSTEM_PROMPT),
+    systemPrompt: withCodeCompatibility(setting.systemPrompt, DEFAULT_SYSTEM_PROMPT ?? SYSTEM_PROMPT),
     temperature: Number(setting.temperature ?? 0.2),
     apiFormat: normalizeApiFormat(setting.apiFormat ?? config.IMAGE_MODEL_API_FORMAT)
   };
@@ -128,10 +194,15 @@ function normalizeApiFormat(value: unknown): "openai" | "anthropic" {
   return String(value ?? "openai").toLowerCase() === "anthropic" ? "anthropic" : "openai";
 }
 
-async function callChatModel(resolved: ResolvedModel, userContent: unknown, maxTokens = 1200): Promise<string> {
+async function callChatModel(
+  resolved: ResolvedModel,
+  userContent: unknown,
+  maxTokens = 1200,
+  options: { disableThinking?: boolean } = {}
+): Promise<string> {
   if (!resolved.baseUrl || !resolved.apiKey || !resolved.model) throw new PublicError("后端模型配置不完整。", "MODEL_NOT_CONFIGURED", 503);
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 35_000);
+  const timeout = setTimeout(() => controller.abort(), 60_000);
   try {
     const url = `${resolved.baseUrl}${resolved.apiPath.startsWith("/") ? resolved.apiPath : `/${resolved.apiPath}`}`;
     const isAnthropic = resolved.apiFormat === "anthropic";
@@ -153,6 +224,7 @@ async function callChatModel(resolved: ResolvedModel, userContent: unknown, maxT
         model: resolved.model,
         max_tokens: maxTokens,
         temperature: Number.isFinite(resolved.temperature) ? Math.max(0, Math.min(2, resolved.temperature)) : 0.2,
+        ...(options.disableThinking ? { thinking: { type: "disabled" } } : {}),
         messages: [
           { role: "system", content: resolved.systemPrompt || SYSTEM_PROMPT },
           { role: "user", content: userContent }
@@ -239,11 +311,23 @@ export function createAnalysisModel(
 ) {
   return async (request: AnalysisModelRequest): Promise<AnalysisModelResult> => {
     const isVoiceMode = request.mode === "voice";
+    const isInterviewMode = request.mode === "interview";
     const hasImage = Boolean(request.screenshot);
     let modelType: "text" | "image" = "text";
     let resolved: ResolvedModel;
 
-    if (isVoiceMode) {
+    if (isInterviewMode) {
+      // 面试强调低延迟，复用后台已配置的快速语音回答模型连接，但使用独立面试提示词。
+      const voiceSetting = voiceLoader ? await voiceLoader() : {};
+      const interviewResolved = resolveVoiceModel(config, voiceSetting);
+      if (interviewResolved.baseUrl && interviewResolved.apiKey && interviewResolved.model) {
+        resolved = interviewResolved;
+      } else {
+        const textSetting = textLoader ? await textLoader() : {};
+        resolved = resolveTextModel(config, textSetting);
+      }
+      resolved.systemPrompt = INTERVIEW_SYSTEM_PROMPT;
+    } else if (isVoiceMode) {
       // 语音播报模式：优先用 voice_model_config，未配置则回退到 image_model_config
       const voiceSetting = voiceLoader ? await voiceLoader() : {};
       const voiceResolved = resolveVoiceModel(config, voiceSetting);
@@ -298,9 +382,13 @@ export function createAnalysisModel(
       ? buildImageContent(resolved.apiFormat, text, request.screenshot)
       : text;
 
-    const maxTokens = request.mode === "interview" || request.mode === "universal" ? 1600 : 1200;
-    const content = await callChatModel(resolved, userContent, maxTokens);
-    const result = parseModelResult(content);
+    const maxTokens = request.mode === "interview"
+      ? 900
+      : request.mode === "universal"
+        ? 1600
+      : hasImage ? 4000 : 1800;
+    const content = await callChatModel(resolved, userContent, maxTokens, { disableThinking: true });
+    const result = parseModelResult(content, { allowInterviewText: isInterviewMode });
     // 仅在成功调用后记录，用于后台模型调用曲线图
     if (recorder) recorder({ modelType, modelName: resolved.model });
     return result;
@@ -343,5 +431,5 @@ export async function callCuotiModel(
     ? buildImageContent(resolved.apiFormat, text, request.screenshot!)
     : text;
 
-  return callChatModel(resolved, userContent);
+  return callChatModel(resolved, userContent, request.maxTokens ?? 1200, { disableThinking: true });
 }

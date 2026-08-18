@@ -65,6 +65,16 @@ export interface ClientSettings {
   [k: string]: unknown;
 }
 
+export interface SavedInterviewContext {
+  position?: string;
+  company?: string;
+  jobDescription?: string;
+  jobDescriptionHtml?: string;
+  answerStyle?: 'concise' | 'detailed';
+  audioMode?: 'demo' | 'formal';
+  resumeId?: string;
+}
+
 export interface UserConfig {
   authToken: string | null;
   windowPosition: { x: number; y: number } | null;
@@ -85,6 +95,8 @@ interface StoreSchema {
   windowSize?: { width: number; height: number };
   backgroundOpacity?: number;
   theme?: 'dark' | 'light';
+  interviewContexts?: Record<string, SavedInterviewContext>;
+  onboardingGuideStates?: Record<string, boolean>;
 }
 
 export class ConfigHelper {
@@ -137,18 +149,18 @@ export class ConfigHelper {
     }
     return {
       apiBaseUrl: 'https://api.quizmate.vip/study-auth-api',
-      webBaseUrl: 'https://www.quizmate.vip',
+      webBaseUrl: 'https://quizmate.cn',
       adminWebUrl: 'https://www.quizmate.vip/admin-web/index.html',
       websocketUrl: '',
       environment: 'production',
       version: app.getVersion(),
-      registerUrl: 'https://www.quizmate.vip/#credits',
-      resetPasswordUrl: 'https://www.quizmate.vip/#credits',
-      rechargeUrl: 'https://www.quizmate.vip/recharge.html',
-      tutorialUrl: 'https://www.quizmate.vip/',
-      allowedExternalHosts: ['quizmate.vip', 'offer.quizmate.cn'],
+      registerUrl: 'https://quizmate.cn/#credits',
+      resetPasswordUrl: 'https://quizmate.cn/#credits',
+      rechargeUrl: 'https://quizmate.cn/recharge.html',
+      tutorialUrl: 'https://quizmate.cn/',
+      allowedExternalHosts: ['quizmate.cn', 'www.quizmate.vip', 'offer.quizmate.cn'],
       creditCostPerSuccess: 10,
-      creditCostPerInterview: 30,
+      creditCostPerInterview: 20,
       maxScreenshots: 5,
       minScreenshotIntervalMs: 300,
       defaultBackgroundOpacity: 0.8,
@@ -204,6 +216,47 @@ export class ConfigHelper {
   }
   updateClientSettings(patch: Partial<ClientSettings>) {
     this.store.set('clientSettings', { ...this.getClientSettings(), ...patch });
+  }
+
+  getInterviewAccountScope(): string {
+    const email = String(this.getUserInfo()?.email ?? '').trim().toLowerCase();
+    return email || '__anonymous__';
+  }
+
+  getInterviewContext(): SavedInterviewContext {
+    const contexts = this.store.get('interviewContexts') || {};
+    return { ...(contexts[this.getInterviewAccountScope()] || {}) };
+  }
+
+  setInterviewContext(context: SavedInterviewContext): SavedInterviewContext {
+    const current = this.getInterviewContext();
+    const next: SavedInterviewContext = {
+      ...current,
+      position: String(context.position ?? current.position ?? '').trim().slice(0, 100),
+      company: String(context.company ?? current.company ?? '').trim().slice(0, 100),
+      jobDescription: String(context.jobDescription ?? current.jobDescription ?? '').trim().slice(0, 8_000),
+      jobDescriptionHtml: String(context.jobDescriptionHtml ?? current.jobDescriptionHtml ?? '').slice(0, 16_000),
+      answerStyle: context.answerStyle === 'detailed' ? 'detailed' : 'concise',
+      audioMode: context.audioMode === 'formal' ? 'formal' : 'demo',
+      ...(context.resumeId ? { resumeId: String(context.resumeId).slice(0, 200) } : {}),
+    };
+    const contexts = this.store.get('interviewContexts') || {};
+    this.store.set('interviewContexts', { ...contexts, [this.getInterviewAccountScope()]: next });
+    return next;
+  }
+
+  getOnboardingGuideState(): { completed: boolean } {
+    const states = this.store.get('onboardingGuideStates') || {};
+    return { completed: states[this.getInterviewAccountScope()] === true };
+  }
+
+  setOnboardingGuideCompleted(completed = true): { completed: boolean } {
+    const states = this.store.get('onboardingGuideStates') || {};
+    this.store.set('onboardingGuideStates', {
+      ...states,
+      [this.getInterviewAccountScope()]: Boolean(completed),
+    });
+    return this.getOnboardingGuideState();
   }
 
   // ===== User Config（兼容原考试插件 API） =====

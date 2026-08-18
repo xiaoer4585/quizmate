@@ -23,6 +23,15 @@ export interface RegisterResult {
   inviteCode?: string;
 }
 
+export interface SendRegisterCodeResult {
+  success: boolean;
+  error?: string;
+  code?: string;
+  cooldown?: number;
+  reused?: boolean;
+  message?: string;
+}
+
 export interface ProfileResult {
   success: boolean;
   error?: string;
@@ -84,12 +93,27 @@ export class AuthManager {
     }
   }
 
-  async register(email: string, password: string, inviteCode?: string): Promise<RegisterResult> {
+  async sendRegisterCode(email: string): Promise<SendRegisterCodeResult> {
+    try {
+      const data = await postAction<{ cooldown?: number; reused?: boolean; message?: string }>(
+        this.apiEndpoint,
+        'sendRegisterCode',
+        { email },
+        { timeoutMs: 30000 }
+      );
+      return { success: true, ...data };
+    } catch (e) {
+      if (e instanceof ApiError) return { success: false, error: e.message, code: e.code };
+      return { success: false, error: `网络错误: ${(e as Error).message}`, code: 'NETWORK_ERROR' };
+    }
+  }
+
+  async register(email: string, code: string, password: string, inviteCode?: string): Promise<RegisterResult> {
     try {
       const data = await postAction<{ inviteCode?: string; account?: UserInfo; token?: string }>(
         this.apiEndpoint,
         'registerAccount',
-        { email, password, deviceId: this.deviceId, platform: 'win32', appVersion: this.configHelper.getAppConfig().version, inviteCode: inviteCode || '' },
+        { email, code, password, deviceId: this.deviceId, platform: 'win32', appVersion: this.configHelper.getAppConfig().version, inviteCode: inviteCode || '' },
         { timeoutMs: 30000 }
       );
       // 注册成功后直接登录

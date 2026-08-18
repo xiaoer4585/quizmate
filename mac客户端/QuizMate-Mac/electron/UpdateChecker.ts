@@ -1,5 +1,5 @@
 // 客户端版本更新检测管理器
-// 基于 electron-updater 实现（项目已配置 generic publish provider: https://update.quizmate.vip/suite/）
+// 基于 electron-updater 实现（项目已配置 generic publish provider: https://quizmate.cn/mac/）
 // electron-updater reads latest-mac.yml and selects the matching Mac architecture.
 import { app, BrowserWindow } from 'electron';
 import { createRequire } from 'module';

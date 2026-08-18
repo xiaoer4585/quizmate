@@ -1,13 +1,14 @@
 // 主框架布局 - 左侧导航 + 顶部状态栏 + 内容区
 import { useEffect, useState, type ReactNode } from 'react';
-import { NavLink, useNavigate } from 'react-router-dom';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, PenLine, Mic,
   User, Wallet, Menu, X,
-  Download, Loader2, CheckCircle2, AlertCircle, BookOpen, Chrome
+  Download, Loader2, CheckCircle2, AlertCircle, BookOpen, Chrome, HelpCircle
 } from 'lucide-react';
 import { api, useProfile, useUpdateStatus } from '../lib/ipc';
 import RechargeModal from './RechargeModal';
+import ReleaseNotice from './ReleaseNotice';
 
 interface NavItem { to: string; label: string; icon: ReactNode; badge?: string; }
 
@@ -20,6 +21,7 @@ const NAV: NavItem[] = [
 
 export default function MainLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { data: profile } = useProfile();
   const [collapsed, setCollapsed] = useState(false);
   const [version, setVersion] = useState('');
@@ -46,6 +48,13 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   const handleUpdateClick = () => api.update.download();
   const handleRetryUpdate = () => api.update.check();
   const handleDismissUpdate = () => setDismissedKey(updateKey);
+  const openGuide = () => {
+    if (location.pathname === '/exam' || location.pathname === '/interview') {
+      window.dispatchEvent(new CustomEvent('quizmate:open-feature-guide', { detail: { page: location.pathname.slice(1) } }));
+      return;
+    }
+    navigate('/exam?guide=1');
+  };
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100">
@@ -168,11 +177,14 @@ export default function MainLayout({ children }: { children: ReactNode }) {
           <div className="text-sm text-slate-400">QuizMate 考试助手 · 笔试与面试实时辅助</div>
           <div className="ml-auto flex items-center gap-2">
             <button
-              onClick={() => api.system.openExternal('https://quizmate.vip/docs.html')}
+              onClick={() => api.system.openExternal('https://quizmate.cn/docs.html')}
               className="btn-outline text-xs flex items-center gap-1.5"
               title="操作文档"
             >
               <BookOpen size={14} /> 操作文档
+            </button>
+            <button onClick={openGuide} className="btn-outline text-xs" title="重新打开操作指引">
+              <HelpCircle size={14} /> 操作指引
             </button>
             <button onClick={() => setRechargeOpen(true)} className="btn-outline text-xs" title="充值积分">
               <Wallet size={14} /> <span className="text-amber-400 font-semibold">{credits}</span> 积分
@@ -186,6 +198,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
       </div>
       {/* 充值弹窗 */}
       <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
+      <ReleaseNotice appVersion={version} />
     </div>
   );
 }

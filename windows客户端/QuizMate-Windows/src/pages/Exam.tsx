@@ -8,6 +8,7 @@ import {
 import { useTheme } from '../contexts/ThemeContext';
 import { defaultShortcutBindings, examOverlayShortcutActions, examVoiceShortcutActions } from '../../shared/shortcuts';
 import ShortcutSettings from '../components/ShortcutSettings';
+import FeatureGuide, { type FeatureGuideStep } from '../components/FeatureGuide';
 
 type ProcessingMode = 'overlay' | 'voice';
 
@@ -33,6 +34,7 @@ export default function Exam() {
   // 快捷键绑定
   const [shortcutBindings, setShortcutBindings] = useState<Record<string, string>>(defaultShortcutBindings);
   const [ttsTesting, setTtsTesting] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
 
   // 加载初始配置数据
   const loadData = useCallback(async () => {
@@ -81,6 +83,28 @@ export default function Exam() {
       unsubs.forEach((u) => u && u());
     };
   }, [api, loadData]);
+
+  const guideAccount = userInfo?.email || userInfo?.username || 'current';
+  const guideStorageKey = `quizmate.feature-guide.exam.${guideAccount}`;
+  useEffect(() => {
+    if (!userInfo) return;
+    const forced = window.location.hash.includes('guide=1');
+    if (forced || window.localStorage.getItem(guideStorageKey) !== 'done') setGuideOpen(true);
+  }, [guideStorageKey, userInfo]);
+
+  useEffect(() => {
+    const openGuide = (event: Event) => {
+      const page = (event as CustomEvent<{ page?: string }>).detail?.page;
+      if (page === 'exam') setGuideOpen(true);
+    };
+    window.addEventListener('quizmate:open-feature-guide', openGuide);
+    return () => window.removeEventListener('quizmate:open-feature-guide', openGuide);
+  }, []);
+
+  const finishGuide = () => {
+    window.localStorage.setItem(guideStorageKey, 'done');
+    setGuideOpen(false);
+  };
 
   // 启动笔试悬浮窗
   const handleStartExam = async () => {
@@ -147,7 +171,7 @@ export default function Exam() {
 
   // 打开官网
   const handleOpenWebsite = () => {
-    api.app.openExternal('https://www.quizmate.vip');
+    api.app.openExternal('https://quizmate.cn');
   };
 
   return (
@@ -165,7 +189,7 @@ export default function Exam() {
               {credits !== null && <span className="text-amber-400 font-bold">{credits}</span>}
             </p>
           </div>
-          <div className="flex gap-2 flex-wrap justify-end items-center">
+          <div data-guide-target="exam-start" className="flex gap-2 flex-wrap justify-end items-center">
             {!overlayActive ? (
               <button onClick={handleStartExam} className="btn-exam">
                 <Play size={14} /> 开始使用
@@ -193,7 +217,7 @@ export default function Exam() {
       </div>
 
       {/* 工作模式选择 */}
-      <div className="card">
+      <div className="card" data-guide-target="exam-mode">
         <h3 className="text-sm font-semibold mb-1">工作模式</h3>
         <p className="text-xs text-slate-400 mb-3">
           选择答案呈现方式，切换后会自动调整悬浮框与快捷键
@@ -211,7 +235,7 @@ export default function Exam() {
               )}
             </div>
             <p className="text-xs text-slate-400">
-              截图后答案显示在防捕获悬浮框，适合单机位
+              先按全屏截图快捷键，再按搜题快捷键；答案显示在悬浮框
             </p>
           </button>
           {/* 语音播报 */}
@@ -226,7 +250,7 @@ export default function Exam() {
               )}
             </div>
             <p className="text-xs text-slate-400">
-              按搜题快捷键自动截图+播报答案，适合双机位，无悬浮框
+              只需按搜题快捷键，即可自动截图、搜题并语音播报答案
             </p>
             {processingMode === 'voice' && (
               <p className="text-xs mt-1 text-exam font-medium">
@@ -239,7 +263,7 @@ export default function Exam() {
 
       {/* 悬浮框控制（仅 overlay 模式）：显示开关 + 透明度滑块 */}
       {processingMode === 'overlay' && (
-        <div className="card">
+        <div className="card" data-guide-target="exam-overlay-settings">
           <h3 className="text-sm font-semibold mb-3">悬浮框控制</h3>
           <div className="flex items-center gap-6 flex-wrap">
             {/* 显示/隐藏开关 */}
@@ -338,12 +362,14 @@ export default function Exam() {
         </div>
       )}
 
-      <ShortcutSettings
-        commonActions={processingMode === 'overlay' ? examOverlayShortcutActions : examVoiceShortcutActions}
-        bindings={shortcutBindings}
-        onBindingsChange={setShortcutBindings}
-        accentClass="bg-exam"
-      />
+      <div data-guide-target="exam-shortcuts">
+        <ShortcutSettings
+          commonActions={processingMode === 'overlay' ? examOverlayShortcutActions : examVoiceShortcutActions}
+          bindings={shortcutBindings}
+          onBindingsChange={setShortcutBindings}
+          accentClass="bg-exam"
+        />
+      </div>
 
       {/* 操作提示 */}
       <div className="card bg-slate-900/40">
@@ -365,6 +391,24 @@ export default function Exam() {
         </ul>
       </div>
 
+      <FeatureGuide
+        open={guideOpen}
+        title={processingMode === 'voice' ? '笔试助手 · 语音播报模式' : '笔试助手 · 悬浮框文字模式'}
+        steps={(processingMode === 'voice' ? [
+          { title: '选择语音播报模式并确认快捷键', description: '选择“语音播报”。下方常用快捷键中重点确认“搜题”和“重听答案”，需要修改时点击对应的更改按钮。', target: '[data-guide-target="exam-mode"]' },
+          { title: '开始使用', description: '点击“开始使用”启用笔试助手。语音播报模式不会打开文字悬浮框。', target: '[data-guide-target="exam-start"]' },
+          { title: '启动搜题', description: `按 ${shortcutBindings.search || '搜题快捷键'} 即可自动完成全屏截图、识别题目、生成答案和语音播报，不需要先按全屏截图。`, target: '[data-guide-target="shortcut-search"]' },
+          { title: '重听答案', description: `没有听清时按 ${shortcutBindings.replay || '重听快捷键'}，可重新播报上一条答案。`, target: '[data-guide-target="shortcut-replay"]' },
+        ] : [
+          { title: '选择工作模式并设置常用快捷键', description: '选择“悬浮框文字呈现”。下方常用快捷键可以逐项修改，重点确认全屏截图、搜题和显示/隐藏悬浮框。', target: '[data-guide-target="exam-mode"]' },
+          { title: '开始使用', description: '点击“开始使用”打开笔试悬浮框。之后主要通过快捷键操作，不需要切回客户端。', target: '[data-guide-target="exam-start"]' },
+          { title: '先全屏截图', description: `题目完整显示后，先按 ${shortcutBindings.screenshot || '全屏截图快捷键'} 保存当前题目截图。`, target: '[data-guide-target="shortcut-screenshot"]' },
+          { title: '再启动搜题', description: `截图完成后，再按 ${shortcutBindings.search || '搜题快捷键'}。AI 答案会显示在悬浮框中。`, target: '[data-guide-target="shortcut-search"]' },
+          { title: '按需设置悬浮框', description: '可在这里显示或隐藏悬浮框，并调整透明度；下方还能切换深色或浅色主题。', target: '[data-guide-target="exam-overlay-settings"]' },
+        ]) as FeatureGuideStep[]}
+        onClose={finishGuide}
+        onComplete={finishGuide}
+      />
     </div>
   );
 }

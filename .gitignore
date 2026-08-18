@@ -79,6 +79,7 @@ windows客户端/QuizMate-Windows/dist/
 windows客户端/QuizMate-Windows/build/
 windows客户端/QuizMate-Windows/out/
 windows客户端/QuizMate-Windows/release*/
+测试安装包/
 扩展插件版/发布包/
 
 # === 官网模块大资源文件（部署到 OSS，不进 git）===

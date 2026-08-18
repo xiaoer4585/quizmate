@@ -3,7 +3,7 @@
 // API: wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async
 // 认证: X-Api-Key + X-Api-Resource-Id + X-Api-Request-Id + X-Api-Connect-Id
 // 协议: WebSocket二进制协议 (4字节header + 4字节sequence + 4字节payload_size + payload)
-import { BrowserWindow, session } from 'electron';
+import { BrowserWindow, desktopCapturer, session } from 'electron';
 import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
@@ -87,6 +87,11 @@ export class RealtimeVoiceHelper {
     ses.setPermissionCheckHandler((_wc, permission) => {
       return permission === 'media';
     });
+    ses.setDisplayMediaRequestHandler((_request, callback) => {
+      desktopCapturer.getSources({ types: ['screen'] })
+        .then((sources) => callback({ video: sources[0], audio: 'loopback' }))
+        .catch(() => callback({}));
+    });
 
     // 注入 ASR API 鉴权头到 WebSocket 握手请求
     ses.webRequest.onBeforeSendHeaders(
@@ -128,7 +133,11 @@ export class RealtimeVoiceHelper {
   }
 
   /** 开始实时语音识别 */
-  async start(onText: (text: string, isFinal: boolean) => void, onError?: (error: string) => void): Promise<void> {
+  async start(
+    onText: (text: string, isFinal: boolean) => void,
+    onError?: (error: string) => void,
+    options: { audioMode?: 'demo' | 'formal' } = {}
+  ): Promise<void> {
     await this.init();
     if (!this.audioWindow || this.audioWindow.isDestroyed()) {
       throw new Error('实时语音识别窗口未准备完成');
@@ -139,7 +148,8 @@ export class RealtimeVoiceHelper {
     this.running = true;
 
     // 启动隐藏窗口中的识别
-    await this.audioWindow.webContents.executeJavaScript('startListening()', true).catch((e) => {
+    const audioMode = options.audioMode === 'formal' ? 'formal' : 'demo';
+    await this.audioWindow.webContents.executeJavaScript(`startListening(${JSON.stringify(audioMode)})`, true).catch((e) => {
       this.running = false;
       console.error('[RealtimeVoice] start error:', e);
       throw new Error(e?.message || '启动语音识别失败');
@@ -181,13 +191,13 @@ export class RealtimeVoiceHelper {
   }
 
   /** 停止识别 */
-  stop(): void {
+  stop(graceful = true): void {
     this.running = false;
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
-    this.audioWindow?.webContents.executeJavaScript('stopListening()', true).catch(() => {});
+    this.audioWindow?.webContents.executeJavaScript(`stopListening(${graceful ? 'true' : 'false'})`, true).catch(() => {});
     this.onTextCallback = null;
     this.onErrorCallback = null;
   }
@@ -228,6 +238,8 @@ const VOICE_HTML = `<!DOCTYPE html>
 let ws = null;
 let audioContext = null;
 let mediaStream = null;
+let captureStreams = [];
+let sourceNodes = [];
 let sourceNode = null;
 let processorNode = null;
 let pendingResults = [];
@@ -235,6 +247,9 @@ let isListening = false;
 let seqNum = 1;
 let audioSendQueue = Promise.resolve();
 let needsWavHeader = true;
+let keepSession = false;
+let reconnectTimer = null;
+let reconnectDelay = 500;
 
 // ===== 二进制协议构造 =====
 function makeHeader(msgType, flags, serialization, compression) {
@@ -437,31 +452,106 @@ async function parseResponse(data) {
   return null;
 }
 
+// The ASR service may close a streaming socket after a finalized utterance or
+// after a transient network hiccup. Keep the existing capture graph alive and
+// replace only the socket so the next interview question is not lost and the
+// user is not asked for microphone/screen permission again.
+function scheduleSocketReconnect() {
+  if (!keepSession || reconnectTimer || !audioContext || !processorNode) return;
+  const delay = reconnectDelay;
+  reconnectDelay = Math.min(reconnectDelay * 2, 5000);
+  reconnectTimer = setTimeout(async () => {
+    reconnectTimer = null;
+    if (!keepSession || !audioContext || !processorNode) return;
+    const asrWsUrl = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.wsUrl) || 'wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async';
+    const asrModel = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.model) || 'bigmodel';
+    const reconnectWs = new WebSocket(asrWsUrl);
+    reconnectWs.binaryType = 'arraybuffer';
+    ws = reconnectWs;
+    seqNum = 1;
+    needsWavHeader = true;
+    audioSendQueue = Promise.resolve();
+
+    reconnectWs.onopen = async () => {
+      if (ws !== reconnectWs || !keepSession) return;
+      try {
+        await sendFullClientRequest({
+          user: { uid: 'interview_helper' },
+          audio: { format: 'wav', codec: 'raw', rate: 16000, bits: 16, channel: 1 },
+          request: { model_name: asrModel || 'bigmodel', enable_itn: true, enable_punc: true, enable_ddc: true, show_utterances: true, enable_nonstream: false },
+        });
+        reconnectDelay = 500;
+        isListening = true;
+      } catch (error) {
+        console.error('[ASR] Reconnect full request error:', error);
+        try { reconnectWs.close(); } catch {}
+      }
+    };
+    reconnectWs.onmessage = async (e) => {
+      if (ws !== reconnectWs) return;
+      const result = await parseResponse(e.data);
+      if (!result) return;
+      if (result.type === 'error') {
+        pendingResults.push({ text: '', isFinal: false, error: result.error });
+      } else if (result.type === 'response' && result.text) {
+        pendingResults.push({ text: result.text, isFinal: result.isFinal });
+      }
+    };
+    reconnectWs.onerror = () => {
+      if (ws === reconnectWs) pendingResults.push({ text: '', isFinal: false, error: '语音识别服务连接失败，正在重连…' });
+    };
+    reconnectWs.onclose = () => {
+      if (ws !== reconnectWs) return;
+      isListening = false;
+      if (keepSession) scheduleSocketReconnect();
+    };
+  }, delay);
+}
+
 // ===== 麦克风采集 + WebSocket ASR =====
-async function startListening() {
+async function startListening(audioMode = 'demo') {
   if (isListening) return;
+  keepSession = true;
+  reconnectDelay = 500;
   pendingResults = [];
   seqNum = 1;
   audioSendQueue = Promise.resolve();
   needsWavHeader = true;
 
   try {
-    // 1. 采集麦克风
-    mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: {
-        channelCount: 1,
-        echoCancellation: true,
-        noiseSuppression: true,
-        autoGainControl: true,
-      }
-    });
+    // Formal mode captures only meeting/speaker audio. Demo mode mixes microphone and speaker audio.
+    captureStreams = [];
+    const systemStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+    if (systemStream.getAudioTracks().length === 0) {
+      throw new Error('未获取到电脑声音，请确认系统允许共享音频');
+    }
+    captureStreams.push(systemStream);
+    if (audioMode === 'demo') {
+      const microphoneStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+      });
+      captureStreams.push(microphoneStream);
+    }
 
     // 2. 创建 AudioContext (浏览器实际采样率可能是48k，我们做重采样)
     audioContext = new AudioContext();
     const actualSampleRate = audioContext.sampleRate;
     console.log('[ASR] AudioContext sample rate:', actualSampleRate);
 
-    sourceNode = audioContext.createMediaStreamSource(mediaStream);
+    if (captureStreams.length === 1) {
+      mediaStream = captureStreams[0];
+      sourceNode = audioContext.createMediaStreamSource(mediaStream);
+      sourceNodes = [sourceNode];
+    } else {
+      const mixedDestination = audioContext.createMediaStreamDestination();
+      sourceNodes = captureStreams.map(stream => {
+        const node = audioContext.createMediaStreamSource(stream);
+        node.connect(mixedDestination);
+        return node;
+      });
+      mediaStream = mixedDestination.stream;
+      sourceNode = audioContext.createMediaStreamSource(mediaStream);
+    }
     // 4096 samples buffer
     processorNode = audioContext.createScriptProcessor(4096, 1, 1);
 
@@ -469,9 +559,11 @@ async function startListening() {
     const asrWsUrl = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.wsUrl) || 'wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async';
     const asrModel = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.model) || 'bigmodel';
     ws = new WebSocket(asrWsUrl);
-    ws.binaryType = 'arraybuffer';
+    const initialWs = ws;
+    initialWs.binaryType = 'arraybuffer';
 
-    ws.onopen = async () => {
+    initialWs.onopen = async () => {
+      if (ws !== initialWs || !keepSession) return;
       console.log('[ASR] WebSocket connected to:', asrWsUrl);
       try {
         await sendFullClientRequest({
@@ -496,7 +588,7 @@ async function startListening() {
       } catch (error) {
         console.error('[ASR] Full request error:', error);
         pendingResults.push({ text: '', isFinal: false, error: '语音识别初始化请求发送失败' });
-        try { ws.close(); } catch {}
+        try { initialWs.close(); } catch {}
         return;
       }
 
@@ -535,7 +627,8 @@ async function startListening() {
       processorNode.connect(audioContext.destination);
     };
 
-    ws.onmessage = async (e) => {
+    initialWs.onmessage = async (e) => {
+      if (ws !== initialWs) return;
       const result = await parseResponse(e.data);
       if (!result) return;
       if (result.type === 'error') {
@@ -549,16 +642,16 @@ async function startListening() {
       }
     };
 
-    ws.onerror = (e) => {
+    initialWs.onerror = (e) => {
+      if (ws !== initialWs) return;
       console.error('[ASR] WebSocket error:', e);
       pendingResults.push({ text: '', isFinal: false, error: '语音识别服务连接失败，请检查网络' });
     };
 
-    ws.onclose = (e) => {
+    initialWs.onclose = (e) => {
+      if (ws !== initialWs) return;
       console.log('[ASR] WebSocket closed:', e.code, e.reason);
-      if (isListening && e.code !== 1000) {
-        pendingResults.push({ text: '', isFinal: false, error: '实时语音服务连接已关闭：' + (e.reason || ('错误码 ' + e.code)) });
-      }
+      if (keepSession) scheduleSocketReconnect();
       isListening = false;
     };
 
@@ -568,11 +661,16 @@ async function startListening() {
   }
 }
 
-async function stopListening() {
+async function stopListening(graceful = true) {
+  keepSession = false;
+  if (reconnectTimer) {
+    clearTimeout(reconnectTimer);
+    reconnectTimer = null;
+  }
   isListening = false;
 
   // 发送最后一包（负包，标记结束）
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (graceful && ws && ws.readyState === WebSocket.OPEN) {
     try {
       await enqueueAudioData(new ArrayBuffer(0), true);
       console.log('[ASR] Sent last audio packet');
@@ -590,19 +688,24 @@ async function stopListening() {
     try { sourceNode.disconnect(); } catch {}
     sourceNode = null;
   }
+  sourceNodes.forEach(node => { try { node.disconnect(); } catch {} });
+  sourceNodes = [];
   if (mediaStream) {
     mediaStream.getTracks().forEach(t => t.stop());
     mediaStream = null;
   }
+  captureStreams.forEach(stream => stream.getTracks().forEach(track => track.stop()));
+  captureStreams = [];
   if (audioContext) {
     try { audioContext.close(); } catch {}
     audioContext = null;
   }
 
-  // 延迟关闭 WebSocket，等待最后的响应
+  // 延迟关闭旧 WebSocket，等待最后的响应；重启采集时不能误关新连接。
+  const closingWs = ws;
   setTimeout(() => {
-    if (ws) {
-      try { ws.close(); } catch {}
+    if (ws === closingWs && closingWs) {
+      try { closingWs.close(); } catch {}
       ws = null;
     }
   }, 1500);

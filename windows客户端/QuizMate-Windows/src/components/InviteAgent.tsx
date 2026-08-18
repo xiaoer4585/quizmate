@@ -149,7 +149,7 @@ export default function InviteAgent() {
       ctx.fillText('扫码注册，填写邀请码即得积分', 375, 1130);
       ctx.fillStyle = '#bfdbfe';
       ctx.font = '18px sans-serif';
-      ctx.fillText('www.quizmate.vip', 375, 1170);
+      ctx.fillText('quizmate.cn', 375, 1170);
 
       const dataUrl = canvas.toDataURL('image/png');
       setPosterUrl(dataUrl);

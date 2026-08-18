@@ -3,7 +3,7 @@
 // 答案结合用户输入的岗位、公司信息以及上传的简历
 import { BrowserWindow } from 'electron';
 import Store from 'electron-store';
-import { ConfigHelper } from '../ConfigHelper';
+import { ConfigHelper, type SavedInterviewContext } from '../ConfigHelper';
 import { AuthManager } from '../AuthManager';
 import { OverlayManager } from '../OverlayManager';
 import { TtsHelper } from './TtsHelper';
@@ -13,7 +13,9 @@ import { postAction, ApiError } from '../apiClient';
 import {
   ASR_FINAL_COMMIT_MS,
   ASR_SILENCE_COMMIT_MS,
+  composeTranscript,
   isLikelyInterviewQuestion,
+  mergeFinalTranscript,
   mergeIncrementalTranscript,
   normalizeTranscript,
 } from '../../shared/interviewTranscript';
@@ -24,10 +26,12 @@ export interface InterviewContext {
   position?: string;
   company?: string;
   jobDescription?: string;
+  jobDescriptionHtml?: string;
   resumeText?: string;
   resumeId?: string;
   language?: string;
   answerStyle?: 'concise' | 'detailed';
+  audioMode?: 'demo' | 'formal';
 }
 
 export interface InterviewResume {
@@ -35,6 +39,7 @@ export interface InterviewResume {
   name: string;
   text: string;
   uploadedAt: string;
+  accountScope?: string;
 }
 
 export type InterviewTaskStatus = 'pending' | 'streaming' | 'done' | 'error';
@@ -58,15 +63,17 @@ interface InterviewStoreSchema {
 export class InterviewHelper {
   private listening = false;
   private context: InterviewContext = { language: 'zh', answerStyle: 'concise' };
-  private lastQuestion = '';
-  private lastQuestionAt = 0;
   private lastAnswer = '';
-  private abortController: AbortController | null = null;
+  private answerRequests = new Map<string, AbortController>();
+  private answerQueue: Promise<void> = Promise.resolve();
+  private answerGeneration = 0;
   private pendingTranscript = '';
-  private questionCaptureActive = false;
+  private finalizedTranscript = '';
+  private interimTranscript = '';
   private conversationContext = '';
   private transcriptCommitTimer: NodeJS.Timeout | null = null;
   private store: Store<InterviewStoreSchema>;
+  private contextAccountScope = '';
 
   constructor(
     private configHelper: ConfigHelper,
@@ -80,6 +87,8 @@ export class InterviewHelper {
       name: 'interview-data',
       defaults: { resumes: [], tasks: [] },
     });
+    this.contextAccountScope = this.configHelper.getInterviewAccountScope();
+    this.context = { ...this.context, ...this.configHelper.getInterviewContext() };
   }
 
   isListening() {
@@ -88,13 +97,15 @@ export class InterviewHelper {
 
   // ===== 简历管理 =====
   listResumes(): InterviewResume[] {
-    return this.store.get('resumes');
+    const scope = this.configHelper.getInterviewAccountScope();
+    return this.store.get('resumes').filter((resume) => resume.accountScope === scope);
   }
 
   addResume(id: string, name: string, text: string): InterviewResume {
-    const resumes = this.listResumes();
-    const existing = resumes.find((r) => r.id === id);
-    const resume: InterviewResume = { id, name, text, uploadedAt: new Date().toISOString() };
+    const scope = this.configHelper.getInterviewAccountScope();
+    const resumes = this.store.get('resumes');
+    const existing = resumes.find((r) => r.id === id && r.accountScope === scope);
+    const resume: InterviewResume = { id, name, text, uploadedAt: new Date().toISOString(), accountScope: this.configHelper.getInterviewAccountScope() };
     if (existing) {
       Object.assign(existing, resume);
     } else {
@@ -105,12 +116,14 @@ export class InterviewHelper {
   }
 
   deleteResume(id: string) {
-    this.store.set('resumes', this.listResumes().filter((r) => r.id !== id));
+    const scope = this.configHelper.getInterviewAccountScope();
+    this.store.set('resumes', this.store.get('resumes').filter((r) => !(r.id === id && r.accountScope === scope)));
     if (this.store.get('activeResumeId') === id) {
       this.store.delete('activeResumeId');
       this.context.resumeText = undefined;
       this.context.resumeId = undefined;
     }
+    this.persistContext();
   }
 
   setActiveResume(id: string | null) {
@@ -118,6 +131,7 @@ export class InterviewHelper {
       this.store.delete('activeResumeId');
       this.context.resumeText = undefined;
       this.context.resumeId = undefined;
+      this.persistContext();
       return;
     }
     const resume = this.listResumes().find((r) => r.id === id);
@@ -125,6 +139,7 @@ export class InterviewHelper {
     this.store.set('activeResumeId', id);
     this.context.resumeText = resume.text;
     this.context.resumeId = id;
+    this.persistContext();
   }
 
   getActiveResume(): InterviewResume | undefined {
@@ -172,7 +187,9 @@ export class InterviewHelper {
   // ===== 监听控制 =====
   async start(context?: InterviewContext) {
     if (this.listening) return;
-    if (context) this.context = { ...this.context, ...context };
+    this.ensureContextAccountScope();
+    if (context) this.setContext(context);
+    else this.context = { ...this.context, ...this.configHelper.getInterviewContext() };
     // 自动加载激活简历
     if (!this.context.resumeText) {
       const active = this.getActiveResume();
@@ -193,13 +210,13 @@ export class InterviewHelper {
     this.listening = true;
     this.clearPendingTranscript();
     this.conversationContext = '';
-    this.questionCaptureActive = false;
     // 启动火山引擎大模型流式语音识别。
     if (this.realtimeVoice) {
       try {
         await this.realtimeVoice.start(
           (text, isFinal) => this.handleRealtimeTranscript(text, isFinal),
-          (error) => this.broadcast('interview:transcript', { error })
+          (error) => this.broadcast('interview:transcript', { error }),
+          { audioMode: this.context.audioMode || 'demo' }
         );
       } catch (e) {
         this.listening = false;
@@ -220,16 +237,34 @@ export class InterviewHelper {
   }
 
   stop() {
-    const pendingTranscript = this.takePendingTranscript();
+    this.stopInternal(true);
+  }
+
+  private stopInternal(flushPending: boolean) {
+    const pendingTranscript = flushPending ? this.takePendingTranscript() : '';
+    if (!flushPending) this.clearPendingTranscript();
     this.listening = false;
-    this.abortController?.abort();
-    this.abortController = null;
+    if (flushPending) {
+      this.answerGeneration += 1;
+      for (const controller of this.answerRequests.values()) controller.abort('listening-stopped');
+      this.answerRequests.clear();
+    }
     this.tts.stop();
     this.byteDanceTts?.stop();
-    this.realtimeVoice?.stop();
-    this.questionCaptureActive = false;
+    // Mode switches restart the capture pipeline immediately. Do not send an
+    // end-of-stream packet in that path, otherwise it can race with the new
+    // WebSocket and terminate the fresh session.
+    this.realtimeVoice?.stop(flushPending);
     this.broadcast('interview:transcript', { status: 'stopped' });
     if (pendingTranscript) void this.onTranscript(pendingTranscript);
+  }
+
+  async restart(context?: InterviewContext) {
+    const wasListening = this.listening;
+    if (wasListening) this.stopInternal(false);
+    if (context) this.setContext(context);
+    if (wasListening) await this.start();
+    else await this.start(context);
   }
 
   toggle() {
@@ -239,23 +274,6 @@ export class InterviewHelper {
 
   toggleListening() {
     this.toggle();
-  }
-
-  isQuestionCaptureActive() { return this.questionCaptureActive; }
-
-  startQuestionCapture() {
-    if (!this.listening) void this.start();
-    this.takePendingTranscript();
-    this.questionCaptureActive = true;
-    this.broadcast('interview:transcript', { status: 'question-started' });
-  }
-
-  endQuestionCapture() {
-    if (!this.questionCaptureActive) return;
-    this.questionCaptureActive = false;
-    const question = this.takePendingTranscript();
-    this.broadcast('interview:transcript', { status: 'question-stopped' });
-    if (question) void this.onQuestion(question);
   }
 
   getRealtimeVoiceConfig() {
@@ -275,19 +293,52 @@ export class InterviewHelper {
   }
 
   setContext(context: InterviewContext) {
+    this.ensureContextAccountScope();
     this.context = { ...this.context, ...context };
+    this.persistContext();
+  }
+
+  getContext(): SavedInterviewContext {
+    const { position, company, jobDescription, jobDescriptionHtml, answerStyle, audioMode, resumeId } = this.context;
+    return { position, company, jobDescription, jobDescriptionHtml, answerStyle, audioMode, resumeId };
+  }
+
+  saveContext(context: InterviewContext): SavedInterviewContext {
+    this.setContext(context);
+    return this.getContext();
+  }
+
+  private persistContext() {
+    this.configHelper.setInterviewContext(this.getContext());
+  }
+
+  private ensureContextAccountScope() {
+    const scope = this.configHelper.getInterviewAccountScope();
+    if (scope === this.contextAccountScope) return;
+    this.contextAccountScope = scope;
+    this.context = {
+      language: 'zh',
+      answerStyle: 'concise',
+      audioMode: 'demo',
+      ...this.configHelper.getInterviewContext(),
+    };
   }
 
   private handleRealtimeTranscript(text: string, isFinal: boolean) {
-    const merged = mergeIncrementalTranscript(this.pendingTranscript, text);
-    const changed = merged !== this.pendingTranscript;
-    if (!merged) return;
+    const normalized = normalizeTranscript(text);
+    if (!normalized) return;
 
-    if (changed) {
-      this.pendingTranscript = merged;
-      this.broadcast('interview:transcript', { text: merged, isFinal: false });
-    } else if (!isFinal) {
-      return;
+    if (isFinal) {
+      this.finalizedTranscript = mergeFinalTranscript(this.finalizedTranscript, normalized);
+      this.interimTranscript = '';
+    } else {
+      this.interimTranscript = mergeIncrementalTranscript(this.interimTranscript, normalized);
+    }
+
+    const combined = composeTranscript(this.finalizedTranscript, this.interimTranscript);
+    if (combined && combined !== this.pendingTranscript) {
+      this.pendingTranscript = combined;
+      this.broadcast('interview:transcript', { text: combined, isFinal: false });
     }
 
     this.scheduleTranscriptCommit(isFinal ? ASR_FINAL_COMMIT_MS : ASR_SILENCE_COMMIT_MS);
@@ -305,8 +356,7 @@ export class InterviewHelper {
     const transcript = this.takePendingTranscript();
     if (!transcript) return;
     this.broadcast('interview:transcript', { text: transcript, isFinal: true, committed: true });
-    if (this.questionCaptureActive) await this.onQuestion(transcript);
-    else this.appendConversationContext(transcript);
+    await this.onTranscript(transcript);
   }
 
   private takePendingTranscript(): string {
@@ -316,6 +366,8 @@ export class InterviewHelper {
     }
     const transcript = this.pendingTranscript;
     this.pendingTranscript = '';
+    this.finalizedTranscript = '';
+    this.interimTranscript = '';
     return transcript;
   }
 
@@ -327,11 +379,9 @@ export class InterviewHelper {
   async onTranscript(text: string) {
     const raw = normalizeTranscript(text);
     if (!raw) return;
-    const now = Date.now();
-    if (raw === this.lastQuestion && now - this.lastQuestionAt < 8000) return;
 
     // 非问题自动过滤：不在悬浮框左侧显示
-    if (!isLikelyInterviewQuestion(raw)) {
+    if (!isLikelyInterviewQuestion(raw, this.context.audioMode || 'demo')) {
       console.log('[Interview] Filtered non-question:', raw);
       const skipped = this.addTask(raw);
       this.updateTask(skipped.id, { status: 'skipped' });
@@ -339,11 +389,13 @@ export class InterviewHelper {
       return;
     }
 
-    this.lastQuestion = raw;
-    this.lastQuestionAt = now;
+    this.appendConversationContext(raw);
     this.broadcast('interview:transcript', { text: raw });
     const task = this.addTask(raw);
-    await this.generateAnswer(raw, task.id);
+    // Keep the ASR loop responsive while serializing model calls. This avoids
+    // racing the same fast model/account settlement when two questions arrive
+    // close together, while each question still gets its own task and answer.
+    await this.enqueueAnswer(raw, task.id);
   }
 
   private appendConversationContext(text: string) {
@@ -351,17 +403,21 @@ export class InterviewHelper {
     this.broadcast('interview:transcript', { text, contextOnly: true });
   }
 
-  private async onQuestion(text: string) {
-    const raw = normalizeTranscript(text);
-    if (!raw) return;
-    this.appendConversationContext(raw);
-    const now = Date.now();
-    if (raw === this.lastQuestion && now - this.lastQuestionAt < 8000) return;
-    this.lastQuestion = raw;
-    this.lastQuestionAt = now;
-    this.broadcast('interview:transcript', { text: raw, question: true });
-    const task = this.addTask(raw);
-    await this.generateAnswer(raw, task.id);
+  private enqueueAnswer(question: string, taskId: string): Promise<void> {
+    const generation = this.answerGeneration;
+    const runIfCurrent = () => {
+      if (generation !== this.answerGeneration) {
+        this.updateTask(taskId, { status: 'error', error: '听写已停止，未提交该问题' });
+        return Promise.resolve();
+      }
+      return this.generateAnswer(question, taskId);
+    };
+    const run = this.answerQueue.then(
+      runIfCurrent,
+      runIfCurrent,
+    );
+    this.answerQueue = run.catch(() => {});
+    return run;
   }
 
   /** 调后端 AI 生成答案（结合简历+岗位+公司） */
@@ -375,8 +431,8 @@ export class InterviewHelper {
       taskId = task.id;
     }
 
-    this.abortController?.abort();
-    this.abortController = new AbortController();
+    const requestController = new AbortController();
+    this.answerRequests.set(taskId, requestController);
 
     this.updateTask(taskId, { status: 'streaming' });
 
@@ -397,7 +453,7 @@ export class InterviewHelper {
           },
           deviceId: this.authManager.getDeviceId(),
         },
-        { timeoutMs: cfg.httpTimeoutMs, signal: this.abortController.signal, token }
+        { timeoutMs: cfg.httpTimeoutMs, signal: requestController.signal, token }
       );
       const answer = data.answer || '暂无答案';
       this.lastAnswer = answer;
@@ -408,6 +464,8 @@ export class InterviewHelper {
       const msg = e instanceof ApiError ? e.message : '答案生成失败';
       this.updateTask(taskId, { status: 'error', error: msg });
       this.broadcast('interview:answer', { question, error: msg, taskId });
+    } finally {
+      this.answerRequests.delete(taskId);
     }
   }
 

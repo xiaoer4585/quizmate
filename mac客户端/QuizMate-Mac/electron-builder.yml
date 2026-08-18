@@ -28,4 +28,4 @@ dmg:
   artifactName: QuizMate-Mac-${arch}-${version}.dmg
 publish:
   provider: generic
-  url: https://update.quizmate.vip/mac/
+  url: https://quizmate.cn/mac/

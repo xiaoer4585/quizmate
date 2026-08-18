@@ -1,6 +1,6 @@
 // Global shortcuts helper - 完全沿用原考试插件的快捷键方案
 import { globalShortcut } from 'electron'
-import { defaultShortcutBindings, ShortcutAction, isConfigurable } from '../shared/shortcuts'
+import { defaultShortcutBindings, ShortcutAction, isConfigurable, interviewShortcutActions } from '../shared/shortcuts'
 import { ConfigHelper } from './ConfigHelper'
 
 type ActionHandler = (action: ShortcutAction) => void
@@ -11,8 +11,8 @@ const voiceModeActions: Set<string> = new Set<string>([
   'replay',
   'quit',
   'reset',
-  'interview_start',
-  'interview_stop',
+  'interview_prev_question',
+  'interview_next_question',
 ])
 
 export class ShortcutsHelper {
@@ -23,6 +23,7 @@ export class ShortcutsHelper {
   private handler: ActionHandler | null = null
   private testMode: boolean = false
   private testCallback: ((accelerator: string) => void) | null = null
+  private activeMode: 'overlay' | 'voice' | 'interview' = 'overlay'
 
   constructor(configHelper: ConfigHelper) {
     this.configHelper = configHelper
@@ -45,6 +46,18 @@ export class ShortcutsHelper {
       this.bindings.search = defaultShortcutBindings.search
       migrated.search = defaultShortcutBindings.search
       changed = true
+    }
+    const legacyInterviewDefaults: Record<string, string> = {
+      interview_start: 'Alt+Q',
+      interview_prev_question: 'Alt+Up',
+      interview_next_question: 'Alt+Down',
+    }
+    for (const [action, next] of Object.entries(legacyInterviewDefaults)) {
+      if (stored[action] && stored[action] !== next && ['ctrl+shift+i', 'ctrl+shift+j', 'ctrl+alt+up', 'ctrl+alt+down'].includes(stored[action].toLowerCase())) {
+        this.bindings[action] = next
+        migrated[action] = next
+        changed = true
+      }
     }
     if (changed) this.configHelper.setShortcutBindings?.(migrated)
   }
@@ -99,6 +112,7 @@ export class ShortcutsHelper {
   }
 
   public registerGlobalShortcuts(): void {
+    this.activeMode = 'overlay'
     this.unregisterAll()
     this.pausedAccelerators.clear()
     for (const [action, accelerator] of Object.entries(this.bindings)) {
@@ -124,12 +138,14 @@ export class ShortcutsHelper {
     }
   }
 
-  public registerGlobalShortcutsForMode(mode: 'overlay' | 'voice'): void {
+  public registerGlobalShortcutsForMode(mode: 'overlay' | 'voice' | 'interview'): void {
+    this.activeMode = mode
     this.unregisterAll()
     this.pausedAccelerators.clear()
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!accelerator) continue
       if (mode === 'voice' && !voiceModeActions.has(action)) continue
+      if (mode === 'interview' && !interviewShortcutActions.includes(action as ShortcutAction) && !['quit', 'reset', 'toggle_visibility', 'replay'].includes(action)) continue
       try {
         const ret = globalShortcut.register(accelerator, () => {
           if (this.testMode && this.testCallback) {
@@ -151,11 +167,16 @@ export class ShortcutsHelper {
     }
   }
 
-  public getActionsForMode(mode: 'overlay' | 'voice'): ShortcutAction[] {
+  public refreshCurrentRegistration(): void {
+    this.registerGlobalShortcutsForMode(this.activeMode)
+  }
+
+  public getActionsForMode(mode: 'overlay' | 'voice' | 'interview'): ShortcutAction[] {
     const all = Object.keys(this.bindings) as ShortcutAction[]
     if (mode === 'overlay') {
       return all.filter(action => !!this.bindings[action])
     }
+    if (mode === 'interview') return all.filter(action => !!this.bindings[action] && (interviewShortcutActions.includes(action) || ['quit', 'reset', 'toggle_visibility', 'replay'].includes(action)))
     return all.filter(action => !!this.bindings[action] && voiceModeActions.has(action))
   }
 

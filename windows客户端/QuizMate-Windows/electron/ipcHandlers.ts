@@ -10,7 +10,7 @@ import { ShortcutsHelper } from './ShortcutsHelper';
 import { TtsHelper } from './helpers/TtsHelper';
 import { InterviewHelper } from './helpers/InterviewHelper';
 import { UpdateChecker } from './UpdateChecker';
-import { createPayOrder, genOrderNo } from './PaymentService';
+import { createCreditOrder, queryCreditOrder } from './PaymentService';
 import type { ProcessingMode } from '../shared/shortcuts';
 import { v4 as uuid } from 'uuid';
 
@@ -61,7 +61,8 @@ export function registerIpcHandlers(
 ) {
   // ===== 认证 =====
   ipcMain.handle('auth:login', (_e, email: string, password: string) => ctx.authManager!.login(email, password));
-  ipcMain.handle('auth:register', (_e, email: string, password: string, inviteCode?: string) => ctx.authManager!.register(email, password, inviteCode));
+  ipcMain.handle('auth:sendRegisterCode', (_e, email: string) => ctx.authManager!.sendRegisterCode(email));
+  ipcMain.handle('auth:register', (_e, email: string, code: string, password: string, inviteCode?: string) => ctx.authManager!.register(email, code, password, inviteCode));
   ipcMain.handle('auth:logout', () => ctx.authManager!.logout());
   ipcMain.handle('auth:getProfile', () => ctx.authManager!.getProfile());
   ipcMain.handle('auth:isAuthenticated', () => ctx.authManager!.isAuthenticated());
@@ -73,6 +74,8 @@ export function registerIpcHandlers(
     ctx.configHelper.updateClientSettings(patch);
     return ctx.configHelper.getClientSettings();
   });
+  ipcMain.handle('guide:getState', () => ctx.configHelper.getOnboardingGuideState());
+  ipcMain.handle('guide:setCompleted', (_e, completed?: boolean) => ctx.configHelper.setOnboardingGuideCompleted(completed !== false));
 
   // ===== 笔试助手 =====
   ipcMain.handle('exam:captureAndAnalyze', async () => {
@@ -92,16 +95,24 @@ export function registerIpcHandlers(
   ipcMain.handle('shortcuts:getBindings', () => controls.shortcutsHelper.getBindings());
   ipcMain.handle('shortcuts:setBinding', (_e, action: string, accelerator: string) => {
     const updated = controls.shortcutsHelper.setBinding(action as any, accelerator);
-    if (updated) controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode());
+    if (updated) {
+      controls.shortcutsHelper.refreshCurrentRegistration();
+      const bindings = controls.shortcutsHelper.getBindings();
+      BrowserWindow.getAllWindows().forEach((win) => win.webContents.send('shortcuts:updated', bindings));
+    }
     return updated;
   });
   ipcMain.handle('shortcuts:resetBinding', (_e, action: string) => {
     controls.shortcutsHelper.resetBinding(action as any);
-    controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode());
+    controls.shortcutsHelper.refreshCurrentRegistration();
+    const bindings = controls.shortcutsHelper.getBindings();
+    BrowserWindow.getAllWindows().forEach((win) => win.webContents.send('shortcuts:updated', bindings));
   });
   ipcMain.handle('shortcuts:resetAll', () => {
     controls.shortcutsHelper.resetAll();
-    controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode());
+    controls.shortcutsHelper.refreshCurrentRegistration();
+    const bindings = controls.shortcutsHelper.getBindings();
+    BrowserWindow.getAllWindows().forEach((win) => win.webContents.send('shortcuts:updated', bindings));
   });
   ipcMain.handle('shortcuts:checkConflict', (_e, accelerator: string, excludeAction?: string) =>
     controls.shortcutsHelper.checkConflict(accelerator, excludeAction as any));
@@ -142,13 +153,28 @@ export function registerIpcHandlers(
 
   // ===== 面试助手 =====
   ipcMain.handle('interview:start', (_e, context?) => ctx.interview!.start(context));
+  ipcMain.handle('interview:restart', (_e, context?) => ctx.interview!.restart(context));
   ipcMain.handle('interview:stop', () => ctx.interview!.stop());
   ipcMain.handle('interview:toggle', () => ctx.interview!.toggleListening?.());
+  ipcMain.handle('interview:activateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode('interview'); return true; });
+  ipcMain.handle('interview:deactivateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode()); return true; });
   ipcMain.handle('interview:setContext', (_e, context) => ctx.interview!.setContext(context));
+  ipcMain.handle('interview:getContext', () => ctx.interview!.getContext());
+  ipcMain.handle('interview:saveContext', (_e, context) => ctx.interview!.saveContext(context));
   ipcMain.handle('interview:transcript', (_e, text: string) => ctx.interview!.onTranscript(text));
   ipcMain.handle('interview:generateAnswer', (_e, question: string) => ctx.interview!.generateAnswer(question));
   // 简历管理
   ipcMain.handle('interview:listResumes', () => ctx.interview!.listResumes());
+  ipcMain.handle('interview:saveResume', (_e, payload: { id?: string; name?: string; text?: string }) => {
+    const text = String(payload?.text ?? '').trim();
+    if (!text) throw new Error('请先粘贴简历内容');
+    if (text.length > 30_000) throw new Error('简历内容不能超过 30000 字');
+    const id = String(payload?.id || uuid());
+    const name = String(payload?.name || '我的简历').trim().slice(0, 100) || '我的简历';
+    const resume = ctx.interview!.addResume(id, name, text);
+    ctx.interview!.setActiveResume(id);
+    return resume;
+  });
   ipcMain.handle('interview:pickResumeFile', async () => {
     const result = await dialog.showOpenDialog({
       title: '选择面试简历',
@@ -200,21 +226,18 @@ export function registerIpcHandlers(
   });
   ipcMain.handle('system:openRecharge', () => controls.openEmbeddedWindow('recharge'));
 
-  // ===== 支付下单（niman.cn 统一下单接口） =====
-  ipcMain.handle('payment:createOrder', async (_e, opts: { type: 'alipay' | 'wxpay'; name: string; money: string }) => {
+  // 支付订单必须由账户后端创建，确保订单、回调和积分结算使用同一数据源。
+  ipcMain.handle('payment:createOrder', async (_e, opts: { method: 'alipay' | 'wechat'; packageId: string }) => {
     const cfg = ctx.configHelper.getAppConfig();
-    const baseUrl = cfg.webBaseUrl || 'https://www.quizmate.vip';
-    const outTradeNo = genOrderNo();
-    const result = await createPayOrder({
-      type: opts.type,
-      outTradeNo,
-      name: opts.name,
-      money: opts.money,
-      notifyUrl: `${baseUrl}/api/payment/notify`,
-      returnUrl: `${baseUrl}/recharge.html?from=client&order=${outTradeNo}`,
-      clientip: '127.0.0.1',
-    });
-    return { ...result, outTradeNo };
+    const token = ctx.configHelper.getAuthToken();
+    if (!token) throw new Error('请先登录积分账户。');
+    return createCreditOrder(cfg.apiBaseUrl, token, opts.packageId, opts.method);
+  });
+  ipcMain.handle('payment:queryOrder', async (_e, outTradeNo: string) => {
+    const cfg = ctx.configHelper.getAppConfig();
+    const token = ctx.configHelper.getAuthToken();
+    if (!token) throw new Error('请先登录积分账户。');
+    return queryCreditOrder(cfg.apiBaseUrl, token, outTradeNo);
   });
   ipcMain.handle('system:openWeb', () => shell.openExternal(ctx.configHelper.getAppConfig().webBaseUrl));
   ipcMain.handle('system:openAdmin', () => shell.openExternal(ctx.configHelper.getAppConfig().adminWebUrl || 'https://www.quizmate.vip/admin-web/index.html'));

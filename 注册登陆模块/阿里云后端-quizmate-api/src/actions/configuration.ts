@@ -14,14 +14,17 @@ export const DEFAULT_ANSWER_FORMAT_PROMPT = [
   "如果页面题目前有编号，例如“10、”“10.”“第10题”，questionNo 必须写 10，summary 写“题目10”。",
   "如果无法识别题号，按题目出现顺序写 1、2、3。",
   "answer 字段要极简明确，单选题优先只输出选项字母，例如 B。",
+  "编程题必须兼容：在题目对象中增加 language、code、timeComplexity、spaceComplexity 字段；code 写完整可运行代码，answer 必须在简短结论后换行附上同一份完整代码，确保只显示 answer 的旧客户端也能看到代码。代码中的换行、引号和反斜杠必须正确 JSON 转义，不得省略代码或改用 Markdown 代码围栏。",
   "explanation 字段只写必要解析，不要重复大段题干。"
 ].join("\n");
 
 export const DEFAULT_INTERVIEW_PROMPT = [
-  "你是求职面试回答助手。请根据面试官的问题，为候选人生成自然、专业、可直接口述的参考回答。",
-  "回答必须结合已提供的岗位、公司和简历信息，但不得虚构简历中不存在的经历、数据或成果；信息不足时使用稳妥的通用表述。",
+  "你是实时求职面试回答助手。识别到面试官问题后，立即生成自然、专业、第一人称、可直接口述的参考回答。答案本身就是唯一需要展示和播报的内容，禁止另写‘回答要点’、‘解析’、‘重点总结’等栏目。",
+  "采用金字塔原理并强制分段：第一段只写明确结论或核心观点；然后另起段落，依次用 1、2、3（中文回答使用 1、2、3，英文回答可使用 1.、2.、3.）展开三个最重要的支撑点，每一点必须独占一个段落且只写一至两句；最后可另起一段用一句话收束。整体先总后分、重点前置，禁止把 1、2、3 挤在同一行。",
+  "按问题类型调整编号内容：自我介绍用个人定位→1/2/3 段经历匹配→收束；行为题用结论→1 情境/任务→2 行动→3 结果/复盘；技术题用结论→1 原理→2 方案→3 权衡或案例；开放题用结论→1 理由→2 做法→3 简短案例。案例优先取自简历，信息不足时只能给通用场景，不得虚构候选人的公司、项目、数据或成果。回答必须结合岗位描述、目标公司和应聘岗位，突出匹配度。",
   "语言规则：问题明确要求使用某种语言时，严格按该要求回答；否则中文问题用中文回答，英文问题用英文回答。中文提问中若要求用英文回答，必须使用英文。",
-  "只输出系统要求的 JSON，不要输出 Markdown 或 JSON 之外的说明。"
+  "保持口语化和高信息密度。简洁模式控制在约 20 至 45 秒口述，详细模式控制在约 45 至 75 秒口述；除 1、2、3 外不添加标题或多余说明。每个段落之间保留一个空行，便于面试者快速扫读。",
+  "只输出系统要求的 JSON。answer 放完整最终回答；explanation 必须为空字符串。不要输出 Markdown 或 JSON 之外的说明。"
 ].join("\n");
 
 const DEFAULT_PURCHASE = {
@@ -60,7 +63,7 @@ export const DEFAULT_PAYMENT_SETTING: RuntimeSetting = {
   epayMerchantPrivateKey: "",
   epayPlatformPublicKey: "",
   epayNotifyUrl: "",
-  epayReturnUrl: "https://www.quizmate.vip/recharge.html",
+  epayReturnUrl: "https://quizmate.cn/recharge.html",
   prices: { 30: "19.80", 90: "29.80", 365: "69.80" }
 };
 
@@ -128,7 +131,7 @@ export function paymentRuntimeFromSetting(value: RuntimeSetting): PaymentRuntime
       merchantPrivateKey: text(value.epayMerchantPrivateKey),
       platformPublicKey: text(value.epayPlatformPublicKey),
       notifyUrl: text(value.epayNotifyUrl),
-      returnUrl: text(value.epayReturnUrl, "https://www.quizmate.vip/recharge.html")
+      returnUrl: text(value.epayReturnUrl, "https://quizmate.cn/recharge.html")
     }
   };
 }
@@ -177,6 +180,12 @@ function publicAdminPayment(value: RuntimeSetting) {
 async function mergeAndSave(deps: ActionDependencies, key: string, input: ActionInput, allowed: readonly string[], preserveBlank: ReadonlySet<string> = new Set()) {
   await authenticateAdmin(deps, input);
   const current = await settings(deps).get(key);
+  const next = mergeSetting(current, input, allowed, preserveBlank);
+  await settings(deps).set(key, next, "admin");
+  return next;
+}
+
+function mergeSetting(current: RuntimeSetting, input: ActionInput, allowed: readonly string[], preserveBlank: ReadonlySet<string> = new Set()) {
   const next: RuntimeSetting = { ...current };
   for (const name of allowed) {
     if (!(name in input)) continue;
@@ -185,7 +194,6 @@ async function mergeAndSave(deps: ActionDependencies, key: string, input: Action
     next[name] = value;
   }
   next.updatedAt = new Date().toISOString();
-  await settings(deps).set(key, next, "admin");
   return next;
 }
 
@@ -317,13 +325,17 @@ export function createConfigurationActions(deps: ActionDependencies): Map<string
 
   actions.set("adminGetPaymentConfig", async (input) => { await authenticateAdmin(deps, input); return publicAdminPayment(await loadPaymentSetting(deps)); });
   actions.set("adminSetPaymentConfig", async (input) => {
+    const admin = await authenticateAdmin(deps, input);
     const allowed = ["enabled", "appId", "gatewayUrl", "appPrivateKey", "alipayPublicKey", "notifyUrl", "returnUrl", "qrCodeTimeoutExpress", "orderTimeoutExpress", "wechatEnabled", "payjsMchId", "payjsKey", "payjsNativeUrl", "payjsQueryUrl", "payjsNotifyUrl", "epayEnabled", "epayApiUrl", "epayPid", "epayKey", "epayMerchantPrivateKey", "epayPlatformPublicKey", "epayNotifyUrl", "epayReturnUrl", "prices"];
-    const value = await mergeAndSave(deps, "payment_config", input, allowed, new Set(["appPrivateKey", "alipayPublicKey", "payjsKey", "epayKey", "epayMerchantPrivateKey", "epayPlatformPublicKey"]));
-    const readiness = paymentReadiness(paymentRuntimeFromSetting({ ...DEFAULT_PAYMENT_SETTING, ...value }));
+    const preserveBlank = new Set(["appPrivateKey", "alipayPublicKey", "payjsKey", "epayKey", "epayMerchantPrivateKey", "epayPlatformPublicKey"]);
+    const current = await loadPaymentSetting(deps);
+    const value = mergeSetting(current, input, allowed, preserveBlank);
+    const readiness = paymentReadiness(paymentRuntimeFromSetting(value));
     if (bool(value.enabled) && !readiness.alipay) throw new PublicError("支付宝配置不完整。", "ALIPAY_NOT_READY");
     if (bool(value.wechatEnabled) && !readiness.wechat) throw new PublicError("微信支付配置不完整。", "PAYJS_NOT_READY");
     if (bool(value.epayEnabled) && !readiness.epay) throw new PublicError("聚合支付配置不完整。", "EPAY_NOT_READY");
-    return publicAdminPayment({ ...DEFAULT_PAYMENT_SETTING, ...value });
+    await settings(deps).set("payment_config", value, admin.accountId);
+    return publicAdminPayment(value);
   });
 
   return actions;

@@ -150,7 +150,7 @@ export default function ShareInterviewModal({ open, onClose, qaList, defaultComp
       }
 
       // 下载二维码
-      const downloadUrl = 'https://www.quizmate.vip';
+      const downloadUrl = 'https://quizmate.cn';
       const qrCanvas = document.createElement('canvas');
       await QRCode.toCanvas(qrCanvas, downloadUrl, {
         width: 120,

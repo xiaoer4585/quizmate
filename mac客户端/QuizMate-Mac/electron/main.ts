@@ -157,7 +157,7 @@ function getRendererUrl(hash?: string) {
 function openEmbeddedWindow(kind: 'recharge' | 'register') {
   if (kind === 'recharge') {
     const cfg = configHelper.getAppConfig();
-    const url = cfg.rechargeUrl || 'https://www.quizmate.vip/recharge.html';
+    const url = cfg.rechargeUrl || 'https://quizmate.cn/recharge.html';
     const rechargeOrigin = new URL(url).origin;
     const rechargeWin = new BrowserWindow({
       width: 1000,
@@ -597,10 +597,14 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) {
         createInterviewOverlayWindow();
       }
-      await interviewHelper?.start();
+      if (interviewHelper?.isListening()) interviewHelper.stop();
+      else await interviewHelper?.start();
       break;
-    case 'interview_stop':
-      interviewHelper?.stop();
+    case 'interview_prev_question':
+      state.interviewOverlayWindow?.webContents.send('interview:navigate', { direction: 'prev' });
+      break;
+    case 'interview_next_question':
+      state.interviewOverlayWindow?.webContents.send('interview:navigate', { direction: 'next' });
       break;
     case 'move_up':    interviewActive ? moveInterviewOverlay(0, -state.step) : moveOverlay(0, -state.step); break;
     case 'move_down':  interviewActive ? moveInterviewOverlay(0, state.step)  : moveOverlay(0, state.step); break;

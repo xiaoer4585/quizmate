@@ -1,5 +1,5 @@
 export const ASR_SILENCE_COMMIT_MS = 1200
-export const ASR_FINAL_COMMIT_MS = 120
+export const ASR_FINAL_COMMIT_MS = 900
 
 export function normalizeTranscript(text: string): string {
   return text
@@ -24,31 +24,63 @@ export function mergeIncrementalTranscript(current: string, incoming: string): s
   return next
 }
 
-export function isLikelyInterviewQuestion(text: string): boolean {
+export function mergeFinalTranscript(current: string, incoming: string): string {
+  const base = normalizeTranscript(current)
+  const next = normalizeTranscript(incoming)
+  if (!next) return base
+  if (!base) return next
+  if (next === base || base.endsWith(` ${next}`)) return base
+  if (next.startsWith(base)) return next
+  if (base.startsWith(next)) return base
+
+  const compact = (value: string) => value.replace(/[。！？.!?\s]/g, '')
+  if (compact(base) === compact(next)) return next.length >= base.length ? next : base
+
+  const joiner = /[\u4e00-\u9fff]$/.test(base) && /^[\u4e00-\u9fff]/.test(next) ? '' : ' '
+  return normalizeTranscript(`${base}${joiner}${next}`)
+}
+
+export function composeTranscript(finalized: string, interim: string): string {
+  const base = normalizeTranscript(finalized)
+  const preview = normalizeTranscript(interim)
+  if (!preview) return base
+  if (!base) return preview
+  if (preview.startsWith(base)) return preview
+  if (base.startsWith(preview)) return base
+  return mergeFinalTranscript(base, preview)
+}
+
+export function isLikelyInterviewQuestion(text: string, audioMode: 'demo' | 'formal' = 'demo'): boolean {
   const value = normalizeTranscript(text)
   if (value.length < 2) return false
 
   const fillers = [
-    /^(好的|好|嗯|啊|哦|呃|那个|这个|就是|然后|对|是的|不是|可以|行|OK|ok|嗯嗯|哈哈|呵呵|哎呀|哇)[。！？!?.…]*$/,
-    /^(谢谢|感谢|辛苦了|麻烦了|不好意思|抱歉|没关系|不客气)[。！？!?.…]*$/,
+    /^(好的|好|嗯|啊|哦|呃|那个|这个|就是|然后|对|是的|不是|可以|行|ok|嗯嗯|哈哈|呵呵|哎呀|哇)[。！？?!,.，\s…]*$/i,
+    /^(谢谢|感谢|辛苦了|麻烦了|不好意思|抱歉|没关系|不客气|thank you|thanks)[。！？?!,.，\s…]*$/i,
     /^(请坐|请进|你好|您好|哈喽|hello|hi)[。！？!?.…]*$/i,
   ]
   if (fillers.some((pattern) => pattern.test(value))) return false
 
-  const explicitQuestion = /[?？]|请问|怎么|如何|为什么|什么|哪些|哪个|哪种|是否|能否|可不可以|可以吗|有.*吗|是什么|区别|优缺点|觉得|看法|理解|原因|规划|期望|优势|缺点|挑战|困难|收获|职责|经验|项目|场景|原理|流程|步骤|方案/
-  if (explicitQuestion.test(value)) return true
+  // Interviewers may introduce a request in first person; do not mistake it for the candidate's answer.
+  const interviewerRequest = /^(?:(?:我|我们|我这边|我们这边).{0,12}(?:想问|想了解|想请你|希望你|请你)|i\s+(?:want|would like)\s+to\s+(?:ask|know|understand)|we\s+(?:want|would like)\s+to\s+(?:ask|know|understand))/i
+  if (interviewerRequest.test(value)) return true
 
-  const interviewPrompt = /^(请|麻烦|能否|可以|介绍|讲|说|聊|谈|分享|举例|列举|描述|解释|分析|对比|总结|实现|编写|设计|假设|如果|遇到)/
+  const candidateAnswer = /^(我|我的|本人|我们|我曾经|我负责|在我看来|我认为|首先|其次|然后|最后|当时|具体来说|例如|比如|i\b|i'm\b|i've\b|my\b|we\b|in my experience\b|i think\b|i believe\b|first(?:ly)?\b|second(?:ly)?\b|for example\b|for instance\b)/i.test(value)
+    || (/^(?:这个|该)(?:项目|经历|问题|场景)/.test(value) && /(?:是|中|里|上)/.test(value))
+  if (candidateAnswer) return false
+
+  const directQuestion = /[?？]|请问|怎么|如何|为什么|什么|哪些|哪个|哪种|是否|能否|可不可以|可以吗|有没有|有.*吗|是什么|区别(?:是|在)?哪|你(?:会|能|有|对|觉得|认为|怎么看)|\b(?:how|what|why|when|where|which|who)\b|\b(?:can|could|would|will|do|did|have|has|are|were)\s+you\b|\btell\s+me\b|\bwalk\s+me\s+through\b|\bgive\s+me\s+an?\s+example\b/i
+  if (directQuestion.test(value)) return true
+
+  const interviewPrompt = /^(请|麻烦|能否|可以|介绍|讲|说|聊|谈|分享|举例|列举|描述|解释|分析|对比|总结|实现|编写|设计|假设|如果|遇到|谈谈|讲讲|说说|tell\b|describe\b|explain\b|discuss\b|share\b|compare\b|design\b|implement\b|write\b)/i
   if (interviewPrompt.test(value)) return true
 
   const commonShortQuestion = /^(自我介绍|职业规划|离职原因|期望薪资|薪资期望|项目经历|实习经历|失败经历|最大的优点|最大的缺点|为什么选你|为什么离职)[。！？!?.…]*$/
   if (commonShortQuestion.test(value)) return true
 
-  // Candidate answers should be marked as skipped instead of consuming an AI request.
-  const candidateAnswer = /^(我|我的|本人|我们|我曾经|我负责|在我看来|我认为|i\b|i'm\b|my\b|we\b|in my experience\b)/i.test(value)
-    || /[。.!！]$/.test(value) && value.length >= 18
-  if (candidateAnswer) return false
+  const interviewTopic = /(?:看法|理解|原因|规划|期望|优势|缺点|挑战|困难|收获|职责|经验|项目|场景|原理|流程|步骤|方案)$/
+  if (interviewTopic.test(value.replace(/[，。！？、,.!?；;：:\s]/g, ''))) return true
 
-  // Interviewers often phrase questions as statements without a question mark.
-  return value.replace(/[，。！？、,.!?；;：:\s]/g, '').length >= 8
+  // Formal mode only receives speaker audio, so substantive interviewer utterances can be handled more permissively.
+  return audioMode === 'formal' && value.replace(/[，。！？、,.!?；;：:\s]/g, '').length >= 8
 }

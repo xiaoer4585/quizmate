@@ -4,6 +4,7 @@ copyright: Copyright (C) 2026 QuizMate
 directories:
   output: release
   buildResources: resources
+afterPack: scripts/verify-packaged-app.cjs
 files:
   - out/**/*
   - resources/**/*

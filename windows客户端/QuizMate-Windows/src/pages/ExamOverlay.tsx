@@ -77,6 +77,10 @@ export default function OverlayPage() {
   useEffect(() => {
     const unsubs: Array<(() => void) | undefined> = []
 
+    unsubs.push(api?.on('shortcuts:updated', (bindings: Record<string, string>) => {
+      setShortcutBindings(bindings)
+    }))
+
     unsubs.push(api?.on('screenshot-added', (data: any) => {
       setScreenshots((prev) => {
         const newShot: Screenshot = { path: data.path, base64: data.base64, isExtra: data.isExtra }
@@ -226,7 +230,7 @@ export default function OverlayPage() {
     return () => {
       unsubs.forEach((u) => u && u())
     }
-  }, [api, partialContent])
+  }, [api, partialContent, result, view, rawContent])
 
   const handleCopyContent = useCallback(async () => {
     let text = ''
@@ -296,7 +300,7 @@ export default function OverlayPage() {
           </div>
           <div className="min-w-0">
             <div className="text-xs font-semibold leading-none">笔试助手</div>
-            <div className="text-[9px] mt-1 opacity-55">截图识题模式</div>
+            <div className="text-[9px] mt-1 text-cyan-300/80">先全屏截图，再搜题</div>
           </div>
           <div className="flex-1" />
           <div className={`flex items-center gap-1.5 text-[10px] font-medium ${status === 'error' ? 'text-red-400' : status === 'completed' ? 'text-emerald-400' : status === 'processing' ? 'text-cyan-400' : 'opacity-60'}`}>

@@ -1,9 +1,10 @@
 // 面试悬浮窗 - 完全鼠标穿透（与笔试悬浮窗一致）
 // 左侧：问题列表 | 右侧：AI 回答（结合简历）
 // 快捷键: Ctrl+B 显隐 / Ctrl+方向键 移动 / Ctrl+Shift+方向键 缩放
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { AlertCircle, CheckCircle2, Clock3, Mic, Sparkles } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
+import { defaultShortcutBindings } from '../../shared/shortcuts';
 
 function InterviewOverlayStyles() {
   return (
@@ -41,10 +42,14 @@ export default function Overlay() {
   const [tasks, setTasks] = useState<InterviewTask[]>([]);
   const [statusMessage, setStatusMessage] = useState<OverlayPayload | null>(null);
   const [listening, setListening] = useState(false);
-  const [questionCapture, setQuestionCapture] = useState(false);
+  const [audioMode, setAudioMode] = useState<'demo' | 'formal'>('demo');
   const [selectedIndex, setSelectedIndex] = useState(0);
+  const tasksRef = useRef<InterviewTask[]>([]);
+  const selectedIndexRef = useRef(0);
+  const userNavigatedRef = useRef(false);
   const [interimText, setInterimText] = useState('');
   const [backgroundOpacity, setBackgroundOpacity] = useState(0.85);
+  const [shortcutBindings, setShortcutBindings] = useState<Record<string, string>>(defaultShortcutBindings);
 
   useEffect(() => {
     const loadInitial = async () => {
@@ -56,7 +61,9 @@ export default function Overlay() {
         const existingTasks = await api.interview.getTasks();
         if (Array.isArray(existingTasks) && existingTasks.length > 0) {
           setTasks(existingTasks);
+          tasksRef.current = existingTasks;
         }
+        setShortcutBindings(await electronAPI.config.getShortcutBindings());
       } catch (e) {
         console.error('Failed to load initial data:', e);
       }
@@ -68,8 +75,20 @@ export default function Overlay() {
     const unsubs: Array<(() => void) | undefined> = [];
 
     unsubs.push(electronAPI?.on('overlay:renderTasks', (data: any) => {
-      setTasks(Array.isArray(data) ? data : []);
-      setSelectedIndex(0);
+      const nextTasks = Array.isArray(data) ? data : [];
+      const currentId = tasksRef.current[selectedIndexRef.current]?.id;
+      let nextIndex = 0;
+      if (userNavigatedRef.current && currentId) {
+        const preserved = nextTasks.findIndex((task: InterviewTask) => task.id === currentId);
+        if (preserved >= 0) nextIndex = preserved;
+      } else if (nextTasks[0]?.status === 'skipped') {
+        const latestValid = nextTasks.findIndex((task: InterviewTask) => task.status !== 'skipped');
+        nextIndex = latestValid >= 0 ? latestValid : 0;
+      }
+      tasksRef.current = nextTasks;
+      selectedIndexRef.current = nextIndex;
+      setTasks(nextTasks);
+      setSelectedIndex(nextIndex);
       setStatusMessage(null);
     }));
 
@@ -79,14 +98,19 @@ export default function Overlay() {
 
     unsubs.push(electronAPI?.on('overlay:clear', () => {
       setTasks([]);
+      tasksRef.current = [];
+      selectedIndexRef.current = 0;
+      userNavigatedRef.current = false;
+      setSelectedIndex(0);
       setStatusMessage(null);
     }));
 
     unsubs.push(electronAPI?.on('interview:transcript', (data: any) => {
-      if (data?.status === 'started') setListening(true);
+      if (data?.status === 'started') {
+        setListening(true);
+        setAudioMode(data.context?.audioMode === 'formal' ? 'formal' : 'demo');
+      }
       if (data?.status === 'stopped') { setListening(false); setInterimText(''); }
-      if (data?.status === 'question-started') setQuestionCapture(true);
-      if (data?.status === 'question-stopped') { setQuestionCapture(false); setInterimText(''); }
       if (data?.committed) setInterimText('');
       else if (data?.text) setInterimText(data.text);
     }));
@@ -94,12 +118,19 @@ export default function Overlay() {
     unsubs.push(electronAPI?.on('interview:navigate', (data: any) => {
       setSelectedIndex((current) => {
         const max = Math.max(0, tasks.length - 1);
-        return data?.direction === 'prev' ? Math.max(0, current - 1) : Math.min(max, current + 1);
+        const next = data?.direction === 'prev' ? Math.max(0, current - 1) : Math.min(max, current + 1);
+        selectedIndexRef.current = next;
+        userNavigatedRef.current = next !== 0;
+        return next;
       });
     }));
 
     unsubs.push(electronAPI?.on('background-opacity-changed', (opacity: number) => {
       setBackgroundOpacity(opacity);
+    }));
+
+    unsubs.push(electronAPI?.on('shortcuts:updated', (bindings: Record<string, string>) => {
+      setShortcutBindings(bindings);
     }));
 
     return () => {
@@ -141,7 +172,7 @@ export default function Overlay() {
           </div>
           <div className="min-w-0">
             <div className="text-xs font-semibold leading-none">面试助手</div>
-            <div className="text-[9px] mt-1" style={{ color: subTextColor }}>{listening ? (questionCapture ? '正在识别问题' : '正在听写') : '已停止听写'}</div>
+            <div className="text-[9px] mt-1" style={{ color: subTextColor }}>{listening ? '正在听写，自动识别问题' : '已停止听写'}</div>
           </div>
           <div className="flex-1" />
           {listening && (
@@ -150,10 +181,13 @@ export default function Overlay() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ background: accentColor }} />
                 <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: accentColor }} />
               </span>
-              {questionCapture ? '正在识别问题' : '正在听写'}
+              自动识别问题
             </span>
           )}
           <div className="flex items-center gap-1.5 text-[9px]" style={{ color: subTextColor }}>
+            <span className="px-1.5 py-0.5 rounded" style={{ background: audioMode === 'formal' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.16)', color: audioMode === 'formal' ? '#6ee7b7' : '#fcd34d' }}>
+              {audioMode === 'formal' ? '正式：仅扬声器' : '演示：麦克风+扬声器'}
+            </span>
             <span className="px-1.5 py-0.5 rounded" style={{ background: panelColor }}>问题 {tasks.length}</span>
             <span className="px-1.5 py-0.5 rounded" style={{ background: panelColor }}>完成 {doneCount}</span>
           </div>
@@ -174,13 +208,13 @@ export default function Overlay() {
             {tasks.length === 0 ? (
               <div className="h-full min-h-24 flex items-center justify-center text-center px-3">
                 <div className="text-[10px] leading-relaxed" style={{ color: subTextColor }}>
-                  {statusMessage?.content || (listening ? (questionCapture ? '问题结束后再次按 Alt+E 生成答案' : '等待面试官提问') : '尚未开始听写')}
+                  {statusMessage?.content || (listening ? '等待面试官提问，识别到问题后自动生成答案' : '尚未开始听写')}
                 </div>
               </div>
             ) : (
               <div className="space-y-1.5">
                 {tasks.map((task, idx) => (
-                  <button key={task.id} onClick={() => setSelectedIndex(idx)} className="w-full text-left p-2 rounded-md border" style={{ background: idx === selectedIndex ? 'rgba(244,63,94,0.08)' : panelColor, borderColor: idx === selectedIndex ? 'rgba(244,63,94,0.28)' : borderColor }}>
+                  <button key={task.id} onClick={() => { setSelectedIndex(idx); selectedIndexRef.current = idx; userNavigatedRef.current = idx !== 0; }} className="w-full text-left p-2 rounded-md border" style={{ background: idx === selectedIndex ? 'rgba(244,63,94,0.08)' : panelColor, borderColor: idx === selectedIndex ? 'rgba(244,63,94,0.28)' : borderColor }}>
                     <div className="flex items-start gap-1.5">
                       <span className="text-[9px] font-mono mt-0.5" style={{ color: idx === 0 ? accentColor : subTextColor }}>{String(tasks.length - idx).padStart(2, '0')}</span>
                       <div className="min-w-0 flex-1 text-[10px] font-medium leading-relaxed">{task.question}</div>
@@ -216,18 +250,6 @@ export default function Overlay() {
                 {latestTask.status === 'error' && <div className="text-[10px] text-red-400">{latestTask.error}</div>}
                 {latestTask.status === 'skipped' && <div className="text-[10px]" style={{ color: subTextColor }}>已识别为求职者回答，跳过 AI 生成</div>}
                 {latestTask.answer && <div className="text-[11px] leading-[1.65] whitespace-pre-wrap">{latestTask.answer}</div>}
-                {latestTask.keyPoints && latestTask.keyPoints.length > 0 && (
-                  <div className="pt-2 border-t" style={{ borderColor }}>
-                    <div className="text-[9px] font-semibold mb-1.5" style={{ color: subTextColor }}>回答要点</div>
-                    <div className="space-y-1">
-                      {latestTask.keyPoints.map((point, index) => (
-                        <div key={index} className="flex gap-1.5 text-[10px] leading-relaxed">
-                          <span style={{ color: accentColor }}>•</span><span>{point}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             )}
           </section>

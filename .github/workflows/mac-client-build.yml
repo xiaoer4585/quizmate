@@ -3,6 +3,8 @@ name: Build QuizMate Mac
 on:
   workflow_dispatch:
   push:
+    branches:
+      - feature/mac-client
     tags:
       - mac-build-*
 
@@ -107,7 +109,7 @@ jobs:
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QuizMate-Mac-${{ matrix.label }}-2026.8.12
+          name: QuizMate-Mac-${{ matrix.label }}-2026.8.18
           path: |
             mac客户端/QuizMate-Mac/${{ steps.artifact.outputs.dmg }}
             mac客户端/QuizMate-Mac/architecture.txt

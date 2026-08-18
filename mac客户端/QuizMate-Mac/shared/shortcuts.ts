@@ -6,8 +6,9 @@ export type ShortcutAction =
   | 'toggle_visibility'    // 显示/隐藏悬浮框 (可配置)
   | 'copy_content'         // 复制答案 (可配置)
   | 'replay'               // 重听上次答案 (可配置，语音模式专用)
-  | 'interview_start'      // 开始面试听写
-  | 'interview_stop'       // 停止面试听写
+  | 'interview_start'      // 开始/结束面试听写
+  | 'interview_prev_question'
+  | 'interview_next_question'
   | 'quit'                 // 退出软件
   | 'reset'                // 一键重置
   | 'move_up'              // 向上移动窗口
@@ -48,7 +49,8 @@ export const defaultShortcutBindings: Record<ShortcutAction, string> = {
   copy_content: 'Command+Shift+C',
   replay: 'Command+R',
   interview_start: 'Command+Shift+I',
-  interview_stop: 'Command+Shift+O',
+  interview_prev_question: 'Alt+Up',
+  interview_next_question: 'Alt+Down',
   // 系统固定
   quit: 'Command+Shift+Q',
   reset: 'Command+Shift+T',
@@ -124,8 +126,9 @@ export const shortcutMetadata: ShortcutBinding[] = [
   { action: 'toggle_visibility', accelerator: defaultShortcutBindings.toggle_visibility, label: '显示/隐藏悬浮框', configurable: true, category: 'main' },
   { action: 'copy_content', accelerator: defaultShortcutBindings.copy_content, label: '复制答案', configurable: true, category: 'main' },
   { action: 'replay', accelerator: defaultShortcutBindings.replay, label: '重听答案', configurable: true, category: 'main' },
-  { action: 'interview_start', accelerator: defaultShortcutBindings.interview_start, label: '开始听写', configurable: true, category: 'main' },
-  { action: 'interview_stop', accelerator: defaultShortcutBindings.interview_stop, label: '停止听写', configurable: true, category: 'main' },
+  { action: 'interview_start', accelerator: defaultShortcutBindings.interview_start, label: '开始/结束听写', configurable: true, category: 'main' },
+  { action: 'interview_prev_question', accelerator: defaultShortcutBindings.interview_prev_question, label: '上一个问题', configurable: true, category: 'main' },
+  { action: 'interview_next_question', accelerator: defaultShortcutBindings.interview_next_question, label: '下一个问题', configurable: true, category: 'main' },
   { action: 'move_up', accelerator: defaultShortcutBindings.move_up, label: '向上移动窗口', configurable: false, category: 'system' },
   { action: 'move_down', accelerator: defaultShortcutBindings.move_down, label: '向下移动窗口', configurable: false, category: 'system' },
   { action: 'move_left', accelerator: defaultShortcutBindings.move_left, label: '向左移动窗口', configurable: false, category: 'system' },
@@ -180,7 +183,8 @@ export const examVoiceShortcutActions: ShortcutAction[] = [
 
 export const interviewShortcutActions: ShortcutAction[] = [
   'interview_start',
-  'interview_stop',
+  'interview_prev_question',
+  'interview_next_question',
 ]
 
 export const modeByAction: Partial<Record<ShortcutAction, ProcessingMode>> = {

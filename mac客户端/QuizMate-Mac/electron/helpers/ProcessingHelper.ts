@@ -16,13 +16,13 @@ export interface AnalyzeResult {
   success: boolean
   answer?: string
   explanation?: string
+  code?: string
   creditBalance?: number
   creditCost?: number
   usedKnowledge?: boolean
   knowledgeHits?: Array<{ docId: string; fileName: string }>
   raw?: Record<string, unknown>
   error?: string
-  code?: string
 }
 
 export interface CreditStatus {
@@ -51,15 +51,15 @@ interface ScreenshotUploadTicket {
 }
 
 /** Parse the structured `data` field returned by the analyze action. */
-function parseStructuredAnswer(value: unknown): { answer: string; explanation: string } {
+function parseStructuredAnswer(value: unknown): { answer: string; explanation: string; code: string } {
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    return { answer: '', explanation: '' }
+    return { answer: '', explanation: '', code: '' }
   }
   const record = value as Record<string, unknown>
   const items = Array.isArray(record.items) ? record.items.filter((i) => i && typeof i === 'object') : []
   if (!items.length) {
     const note = typeof record.note === 'string' ? record.note.trim() : ''
-    return { answer: '', explanation: note }
+    return { answer: '', explanation: note, code: '' }
   }
   const answers = items.map((item, index) => {
     const obj = item as Record<string, unknown>
@@ -74,8 +74,22 @@ function parseStructuredAnswer(value: unknown): { answer: string; explanation: s
     if (!text) return ''
     return items.length > 1 ? `${index + 1}. ${text}` : text
   }).filter(Boolean)
+  const codes = items.map((item) => {
+    const code = typeof (item as Record<string, unknown>).code === 'string'
+      ? String((item as Record<string, unknown>).code).trim()
+      : ''
+    const language = typeof (item as Record<string, unknown>).language === 'string'
+      ? String((item as Record<string, unknown>).language).trim()
+      : ''
+    if (!code) return ''
+    return language ? `${language}\n${code}` : code
+  }).filter(Boolean)
   const note = typeof record.note === 'string' ? record.note.trim() : ''
-  return { answer: answers.join('\n'), explanation: [...explanations, note].filter(Boolean).join('\n\n') }
+  return {
+    answer: answers.join('\n'),
+    explanation: [...explanations, note].filter(Boolean).join('\n\n'),
+    code: codes.join('\n\n')
+  }
 }
 
 function firstText(data: Record<string, unknown>, keys: string[]): string {
@@ -254,8 +268,9 @@ export class LightweightProcessingHelper {
       )
       // data 已经是 envelope.data 的内容 (postActionEnvelope 已解包)
       const structured = parseStructuredAnswer(data)
-      const answer = structured.answer || firstText(data, ['answer', 'result', 'content', 'text', 'raw', 'note'])
+      const answer = structured.answer || (structured.code ? '参考代码' : firstText(data, ['answer', 'result', 'content', 'text', 'raw', 'note']))
       const explanation = structured.explanation || firstText(data, ['explanation', 'analysis', 'reasoning', 'detail'])
+      const code = structured.code
       if (!answer && !explanation) {
         this.sendEvent('solution-stream-error', { error: '模型没有返回有效结果。为避免误判，请刷新积分确认；当前请求不会在客户端重复扣分。' })
         return { success: false, error: '模型没有返回有效结果', code: 'EMPTY_RESULT' }
@@ -277,6 +292,7 @@ export class LightweightProcessingHelper {
         success: true,
         answer: answer || '分析完成',
         explanation,
+        code,
         creditBalance: finiteNumber(envelope.creditBalance),
         creditCost: finiteNumber(envelope.creditCost) ?? this.configHelper.getAppConfig().creditCostPerSuccess,
         usedKnowledge: envelope.usedKnowledge === true,
@@ -291,7 +307,7 @@ export class LightweightProcessingHelper {
         this.sendEvent('solution-stream-complete', {
           answer: result.answer,
           explanation: result.explanation || '',
-          code: '',
+          code: result.code || '',
           thoughts: '',
           timeComplexity: '',
           spaceComplexity: '',

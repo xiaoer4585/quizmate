@@ -12,7 +12,8 @@ const api = {
   // 认证
   auth: {
     login: (email: string, password: string) => invoke('auth:login', email, password),
-    register: (email: string, password: string, inviteCode?: string) => invoke('auth:register', email, password, inviteCode),
+    sendRegisterCode: (email: string) => invoke('auth:sendRegisterCode', email),
+    register: (email: string, code: string, password: string, inviteCode?: string) => invoke('auth:register', email, code, password, inviteCode),
     logout: () => invoke('auth:logout'),
     getProfile: () => invoke('auth:getProfile'),
     isAuthenticated: () => invoke('auth:isAuthenticated'),
@@ -25,6 +26,10 @@ const api = {
     updateClientSettings: (patch: Record<string, unknown>) => invoke('config:updateClientSettings', patch),
     pauseGlobalShortcuts: () => invoke('config:pauseGlobalShortcuts'),
     resumeGlobalShortcuts: () => invoke('config:resumeGlobalShortcuts'),
+  },
+  guide: {
+    getState: () => invoke('guide:getState'),
+    setCompleted: (completed = true) => invoke('guide:setCompleted', completed),
   },
   // 笔试助手（完全沿用原考试插件方案）
   exam: {
@@ -62,12 +67,18 @@ const api = {
   // 面试助手
   interview: {
     startListening: (context?: unknown) => invoke('interview:start', context),
+    restartListening: (context?: unknown) => invoke('interview:restart', context),
     stopListening: () => invoke('interview:stop'),
     toggleListening: () => invoke('interview:toggle'),
+    activateShortcuts: () => invoke('interview:activateShortcuts'),
+    deactivateShortcuts: () => invoke('interview:deactivateShortcuts'),
     setContext: (context: unknown) => invoke('interview:setContext', context),
+    getContext: () => invoke('interview:getContext'),
+    saveContext: (context: unknown) => invoke('interview:saveContext', context),
     transcript: (text: string) => invoke('interview:transcript', text),
     // 简历管理
     listResumes: () => invoke('interview:listResumes'),
+    saveResume: (payload: { id?: string; name?: string; text?: string }) => invoke('interview:saveResume', payload),
     pickResumeFile: () => invoke('interview:pickResumeFile'),
     uploadResume: (filePath: string) => invoke('interview:uploadResume', filePath),
     deleteResume: (id: string) => invoke('interview:deleteResume', id),

@@ -60,7 +60,8 @@ export function registerIpcHandlers(
 ) {
   // ===== 认证 =====
   ipcMain.handle('auth:login', (_e, email: string, password: string) => ctx.authManager!.login(email, password));
-  ipcMain.handle('auth:register', (_e, email: string, password: string, inviteCode?: string) => ctx.authManager!.register(email, password, inviteCode));
+  ipcMain.handle('auth:sendRegisterCode', (_e, email: string) => ctx.authManager!.sendRegisterCode(email));
+  ipcMain.handle('auth:register', (_e, email: string, code: string, password: string, inviteCode?: string) => ctx.authManager!.register(email, code, password, inviteCode));
   ipcMain.handle('auth:logout', () => ctx.authManager!.logout());
   ipcMain.handle('auth:getProfile', () => ctx.authManager!.getProfile());
   ipcMain.handle('auth:isAuthenticated', () => ctx.authManager!.isAuthenticated());
@@ -72,6 +73,8 @@ export function registerIpcHandlers(
     ctx.configHelper.updateClientSettings(patch);
     return ctx.configHelper.getClientSettings();
   });
+  ipcMain.handle('guide:getState', () => ctx.configHelper.getOnboardingGuideState());
+  ipcMain.handle('guide:setCompleted', (_e, completed?: boolean) => ctx.configHelper.setOnboardingGuideCompleted(completed !== false));
 
   // ===== 笔试助手 =====
   ipcMain.handle('exam:captureAndAnalyze', async () => {
@@ -91,16 +94,24 @@ export function registerIpcHandlers(
   ipcMain.handle('shortcuts:getBindings', () => controls.shortcutsHelper.getBindings());
   ipcMain.handle('shortcuts:setBinding', (_e, action: string, accelerator: string) => {
     const updated = controls.shortcutsHelper.setBinding(action as any, accelerator);
-    if (updated) controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode());
+    if (updated) {
+      controls.shortcutsHelper.refreshCurrentRegistration();
+      const bindings = controls.shortcutsHelper.getBindings();
+      BrowserWindow.getAllWindows().forEach((win) => win.webContents.send('shortcuts:updated', bindings));
+    }
     return updated;
   });
   ipcMain.handle('shortcuts:resetBinding', (_e, action: string) => {
     controls.shortcutsHelper.resetBinding(action as any);
-    controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode());
+    controls.shortcutsHelper.refreshCurrentRegistration();
+    const bindings = controls.shortcutsHelper.getBindings();
+    BrowserWindow.getAllWindows().forEach((win) => win.webContents.send('shortcuts:updated', bindings));
   });
   ipcMain.handle('shortcuts:resetAll', () => {
     controls.shortcutsHelper.resetAll();
-    controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode());
+    controls.shortcutsHelper.refreshCurrentRegistration();
+    const bindings = controls.shortcutsHelper.getBindings();
+    BrowserWindow.getAllWindows().forEach((win) => win.webContents.send('shortcuts:updated', bindings));
   });
   ipcMain.handle('shortcuts:checkConflict', (_e, accelerator: string, excludeAction?: string) =>
     controls.shortcutsHelper.checkConflict(accelerator, excludeAction as any));
@@ -141,13 +152,28 @@ export function registerIpcHandlers(
 
   // ===== 面试助手 =====
   ipcMain.handle('interview:start', (_e, context?) => ctx.interview!.start(context));
+  ipcMain.handle('interview:restart', (_e, context?) => ctx.interview!.restart(context));
   ipcMain.handle('interview:stop', () => ctx.interview!.stop());
   ipcMain.handle('interview:toggle', () => ctx.interview!.toggleListening?.());
+  ipcMain.handle('interview:activateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode('interview'); return true; });
+  ipcMain.handle('interview:deactivateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode()); return true; });
   ipcMain.handle('interview:setContext', (_e, context) => ctx.interview!.setContext(context));
+  ipcMain.handle('interview:getContext', () => ctx.interview!.getContext());
+  ipcMain.handle('interview:saveContext', (_e, context) => ctx.interview!.saveContext(context));
   ipcMain.handle('interview:transcript', (_e, text: string) => ctx.interview!.onTranscript(text));
   ipcMain.handle('interview:generateAnswer', (_e, question: string) => ctx.interview!.generateAnswer(question));
   // 简历管理
   ipcMain.handle('interview:listResumes', () => ctx.interview!.listResumes());
+  ipcMain.handle('interview:saveResume', (_e, payload: { id?: string; name?: string; text?: string }) => {
+    const text = String(payload?.text ?? '').trim();
+    if (!text) throw new Error('请先粘贴简历内容');
+    if (text.length > 30_000) throw new Error('简历内容不能超过 30000 字');
+    const id = String(payload?.id || uuid());
+    const name = String(payload?.name || '我的简历').trim().slice(0, 100) || '我的简历';
+    const resume = ctx.interview!.addResume(id, name, text);
+    ctx.interview!.setActiveResume(id);
+    return resume;
+  });
   ipcMain.handle('interview:pickResumeFile', async () => {
     const result = await dialog.showOpenDialog({
       title: '选择面试简历',

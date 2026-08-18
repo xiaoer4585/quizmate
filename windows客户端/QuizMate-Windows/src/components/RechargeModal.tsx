@@ -1,5 +1,5 @@
-// 充值弹窗 - 客户端内嵌套餐选择 + 调用 niman.cn 支付接口生成二维码
-import { useState } from 'react';
+// 充值弹窗 - 通过账户后端创建订单并完成积分结算
+import { useEffect, useState } from 'react';
 import { X, Wallet, Zap, Check, ArrowLeft, RotateCw, AlertCircle } from 'lucide-react';
 import { useProfile } from '../lib/ipc';
 
@@ -17,13 +17,13 @@ interface Package {
 
 // 套餐信息与官网 recharge.html 一致
 const PACKAGES: Package[] = [
-  { id: 'starter', name: '笔试体验包', credits: 210, price: 19.90, unitPrice: '0.095', feature: '先体验账户、充值和积分扣费流程', recommended: false },
-  { id: 'basic', name: '笔试实战包', credits: 600, price: 49.90, unitPrice: '0.083', feature: '适合日常练习与短期备考', recommended: true },
-  { id: 'advanced', name: '笔试上岸包', credits: 2500, price: 149, unitPrice: '0.060', feature: '适合密集练习和长期刷题', recommended: false },
-  { id: 'flagship', name: '无忧包', credits: 8000, price: 399.90, unitPrice: '0.050', feature: '大额储备，单次积分成本更低', recommended: false },
+  { id: 'trial', name: '笔试体验包', credits: 210, price: 19.90, unitPrice: '0.095', feature: '先体验账户、充值和积分扣费流程', recommended: false },
+  { id: 'starter', name: '笔试实战包', credits: 600, price: 49.90, unitPrice: '0.083', feature: '适合日常练习与短期备考', recommended: true },
+  { id: 'pro', name: '笔试上岸包', credits: 2500, price: 149, unitPrice: '0.060', feature: '适合密集练习和长期刷题', recommended: false },
+  { id: 'unlimited', name: '无忧包', credits: 8000, price: 399.90, unitPrice: '0.050', feature: '大额储备，单次积分成本更低', recommended: false },
 ];
 
-type PayMethod = 'alipay' | 'wxpay';
+type PayMethod = 'alipay' | 'wechat';
 type Step = 'select' | 'pay' | 'qrcode' | 'error';
 
 interface Props {
@@ -39,13 +39,12 @@ export default function RechargeModal({ open, onClose }: Props) {
   const [refreshing, setRefreshing] = useState(false);
   const [qrUrl, setQrUrl] = useState('');
   const [payUrl, setPayUrl] = useState('');
+  const [outTradeNo, setOutTradeNo] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const acct = profile?.account;
   const credits = profile?.creditBalance ?? acct?.credits ?? 0;
-
-  if (!open) return null;
 
   const resetAndClose = () => {
     setSelected(null);
@@ -54,6 +53,7 @@ export default function RechargeModal({ open, onClose }: Props) {
     setRefreshing(false);
     setQrUrl('');
     setPayUrl('');
+    setOutTradeNo('');
     setError('');
     setLoading(false);
     onClose();
@@ -71,21 +71,15 @@ export default function RechargeModal({ open, onClose }: Props) {
     setError('');
 
     try {
-      const result = await api.payment.createOrder({
-        type: method,
-        name: selected.name,
-        money: selected.price.toFixed(2),
-      });
-
-      if (result.code === 0 && result.pay_info) {
-        // pay_info 可能是二维码链接或跳转URL
-        const info = result.pay_info;
-        // 如果是二维码内容，用 QR 生成服务渲染
-        setQrUrl(`https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(info)}`);
+      const order = await api.payment.createOrder({ method, packageId: selected.id });
+      const info = order.payUrl || order.qrCode;
+      if (order.outTradeNo && info) {
+        setOutTradeNo(order.outTradeNo);
+        setQrUrl(order.qrDataUrl || `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(info)}`);
         setPayUrl(info);
         setStep('qrcode');
       } else {
-        setError(result.msg || '下单失败，请稍后重试');
+        setError('支付平台未返回付款二维码，请稍后重试');
         setStep('error');
       }
     } catch (e: any) {
@@ -96,12 +90,32 @@ export default function RechargeModal({ open, onClose }: Props) {
     }
   };
 
+  useEffect(() => {
+    if (step !== 'qrcode' || !outTradeNo) return;
+    let stopped = false;
+    const timer = window.setInterval(async () => {
+      try {
+        const result = await api.payment.queryOrder(outTradeNo);
+        if (stopped || result?.order?.status !== 'paid') return;
+        window.clearInterval(timer);
+        await refetch();
+        resetAndClose();
+      } catch {
+        // 短暂查单失败时保留二维码，下一个周期继续补偿查询。
+      }
+    }, 3000);
+    return () => { stopped = true; window.clearInterval(timer); };
+  }, [step, outTradeNo, refetch]);
+
+  if (!open) return null;
+
   const handleBack = () => {
     if (step === 'qrcode' || step === 'error') {
       setStep('pay');
       setPayMethod(null);
       setQrUrl('');
       setPayUrl('');
+      setOutTradeNo('');
       setError('');
     } else if (step === 'pay') {
       setStep('select');
@@ -111,10 +125,16 @@ export default function RechargeModal({ open, onClose }: Props) {
   const handlePaid = async () => {
     setRefreshing(true);
     try {
+      if (!outTradeNo) return;
+      const result = await api.payment.queryOrder(outTradeNo);
+      if (result?.order?.status !== 'paid') {
+        setError('暂未查询到付款结果，请稍后再试。');
+        return;
+      }
       await refetch();
+      resetAndClose();
     } finally {
       setRefreshing(false);
-      resetAndClose();
     }
   };
 
@@ -222,7 +242,7 @@ export default function RechargeModal({ open, onClose }: Props) {
                 <span className="text-sm font-medium text-slate-100">支付宝支付</span>
               </button>
               <button
-                onClick={() => handleSelectMethod('wxpay')}
+                onClick={() => handleSelectMethod('wechat')}
                 disabled={loading}
                 className="flex flex-col items-center gap-3 rounded-xl p-6 border border-slate-700 bg-slate-800/50 hover:border-emerald-500 hover:bg-emerald-500/10 transition-all disabled:opacity-50"
               >

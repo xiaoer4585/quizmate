@@ -6,7 +6,7 @@
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
 //   - 托盘忙碌图标 + voice 模式进度通知
 // Windows 客户端只保留笔试助手与面试助手；求职流程由免费浏览器插件提供。
-import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage } from 'electron';
+import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { pathToFileURL } from 'url';
@@ -138,7 +138,7 @@ function openEmbeddedWindow(kind: 'recharge' | 'register') {
   if (kind === 'recharge') {
     // 打开充值页面（官网 recharge.html，注入 token 自动登录）
     const cfg = configHelper.getAppConfig();
-    const url = cfg.rechargeUrl || 'https://www.quizmate.vip/recharge.html';
+    const url = cfg.rechargeUrl || 'https://quizmate.cn/recharge.html';
     const rechargeWin = new BrowserWindow({
       width: 1000,
       height: 700,
@@ -575,10 +575,14 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) {
         createInterviewOverlayWindow();
       }
-      await interviewHelper?.start();
+      if (interviewHelper?.isListening()) interviewHelper.stop();
+      else await interviewHelper?.start();
       break;
-    case 'interview_stop':
-      interviewHelper?.stop();
+    case 'interview_prev_question':
+      state.interviewOverlayWindow?.webContents.send('interview:navigate', { direction: 'prev' });
+      break;
+    case 'interview_next_question':
+      state.interviewOverlayWindow?.webContents.send('interview:navigate', { direction: 'next' });
       break;
     case 'move_up':    interviewActive ? moveInterviewOverlay(0, -state.step) : moveOverlay(0, -state.step); break;
     case 'move_down':  interviewActive ? moveInterviewOverlay(0, state.step)  : moveOverlay(0, state.step); break;
@@ -1177,6 +1181,7 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    Menu.setApplicationMenu(null);
     await initializeApp().catch((e) => {
       console.error('[Main] Init failed:', e);
       createMainWindow();

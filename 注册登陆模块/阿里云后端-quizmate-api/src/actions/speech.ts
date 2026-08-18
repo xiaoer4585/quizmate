@@ -79,26 +79,50 @@ export function buildInterviewPrompt(
     ? "给出结构完整、可直接口述的详细回答"
     : "给出简洁、自然、可直接口述的回答，优先控制在 150 至 300 字";
   const answerLanguage = resolveAnswerLanguage(question, context.language);
+  const selfIntroduction = /(?:介绍|介绍下|介绍一下|自我介绍|about yourself|tell me about yourself|introduce yourself)/i.test(question);
   return [
     configuredPrompt.trim() || DEFAULT_INTERVIEW_PROMPT,
     detail + "。不要虚构简历中不存在的事实；信息不足时给出稳妥的通用表述。",
+    selfIntroduction
+      ? "这是自我介绍问题：必须优先从候选人简历提取真实经历、技能和成果，先概括个人定位，再选择与应聘岗位和岗位描述最匹配的 1 至 2 段经历，明确说明能为目标公司带来的价值；简历没有对应信息时只能使用通用表述并明确不虚构经历。"
+      : "回答必须结合候选人简历、岗位描述、应聘岗位和目标公司；优先使用简历中的真实项目和成果，不能只给脱离上下文的通用答案。",
     `本次回答语言（必须遵守）：${answerLanguage}`,
     context.position ? `应聘岗位：${context.position}` : "",
     context.company ? `目标公司：${context.company}` : "",
     context.jobDescription ? `岗位描述：\n${context.jobDescription}` : "",
     context.resumeText ? `候选人简历：\n${context.resumeText}` : "",
     `面试官问题：${question}`,
+    "硬性排版要求：结论单独一段；1、2、3 各自单独一段，段落之间空一行；禁止把三个编号写在同一行。",
     "仅输出 JSON，格式为：",
-    '{"items":[{"summary":"问题摘要","answer":"可直接口述的回答","explanation":"回答要点，每个要点单独一行"}]}'
+    '{"items":[{"summary":"问题摘要","answer":"结论段\\n\\n1、第一点\\n\\n2、第二点\\n\\n3、第三点\\n\\n简短收束","explanation":""}]}'
   ].filter(Boolean).join("\n\n");
 }
 
-function extractKeyPoints(explanation: string): string[] {
-  return explanation
-    .split(/\r?\n|[；;]/)
-    .map((value) => value.replace(/^[-*•\d.、)）\s]+/, "").trim())
+export function formatInterviewAnswer(value: string): string {
+  const normalized = value
+    .replace(/\r\n?/g, "\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
+  if (!normalized) return "";
+
+  let bulletIndex = 0;
+  const numberedBullets = normalized
+    .split(/\n+/)
+    .map((line) => {
+      const trimmed = line.trim();
+      if (/^[-*•]\s*/.test(trimmed) && bulletIndex < 3) {
+        bulletIndex += 1;
+        return `${bulletIndex}、${trimmed.replace(/^[-*•]\s*/, "")}`;
+      }
+      return trimmed;
+    })
     .filter(Boolean)
-    .slice(0, 6);
+    .join("\n");
+
+  return numberedBullets
+    .replace(/\s+(?=(?:[123][、．.)）])\s*)/g, "\n\n")
+    .replace(/\n\s*\n+/g, "\n\n")
+    .trim();
 }
 
 async function settleInterviewSuccess(
@@ -217,11 +241,10 @@ export function createSpeechActions(deps: ActionDependencies): Map<string, Actio
       mode: "interview"
     });
     const item = result.items[0];
-    const answer = String(item?.answer || item?.explanation || result.note || "").trim();
+    const answer = formatInterviewAnswer(String(item?.answer || item?.explanation || result.note || ""));
     if (!answer) {
       throw new PublicError("AI 未返回有效的面试回答，请重试。", "INVALID_MODEL_RESULT", 502);
     }
-    const keyPoints = extractKeyPoints(String(item?.explanation ?? ""));
     const requestId = `interview_${crypto.randomUUID()}`;
     return settleInterviewSuccess(
       deps,
@@ -229,7 +252,7 @@ export function createSpeechActions(deps: ActionDependencies): Map<string, Actio
       deviceId,
       requestId,
       answer,
-      keyPoints
+      []
     );
   });
 

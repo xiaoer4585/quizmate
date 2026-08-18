@@ -1,6 +1,6 @@
 // 登录/注册页 - 客户端内完成，不跳转官网
-import { useState } from 'react';
-import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus, Loader2, Sparkles, Gift } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Mail, Lock, Eye, EyeOff, LogIn, UserPlus, Loader2, Sparkles, Gift, KeyRound } from 'lucide-react';
 import { api, useConfig } from '../lib/ipc';
 
 export default function Login({ onLogged }: { onLogged: () => void }) {
@@ -9,15 +9,48 @@ export default function Login({ onLogged }: { onLogged: () => void }) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPwd, setConfirmPwd] = useState('');
+  const [verificationCode, setVerificationCode] = useState('');
   const [inviteCode, setInviteCode] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [codeCooldown, setCodeCooldown] = useState(0);
   const [error, setError] = useState('');
   const [info, setInfo] = useState('');
+
+  useEffect(() => {
+    if (codeCooldown <= 0) return;
+    const timer = window.setTimeout(() => setCodeCooldown((value) => Math.max(0, value - 1)), 1000);
+    return () => window.clearTimeout(timer);
+  }, [codeCooldown]);
+
+  const sendRegisterCode = async () => {
+    const normalizedEmail = email.trim();
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(normalizedEmail)) {
+      setError('请输入有效邮箱');
+      return;
+    }
+    setCodeLoading(true); setError(''); setInfo('');
+    try {
+      const res = await api.auth.sendRegisterCode(normalizedEmail);
+      if (!res?.success) {
+        setError(res?.error || '验证码发送失败');
+        return;
+      }
+      setCodeCooldown(Number(res.cooldown || 60));
+      setInfo(res?.reused ? '验证码已发送，请勿重复点击' : '验证码已发送，请查收邮箱');
+    } catch (e: any) {
+      setError(e?.message || '验证码发送失败');
+    } finally {
+      setCodeLoading(false);
+    }
+  };
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!email || !password) { setError('请输入邮箱和密码'); return; }
+    if (mode === 'register' && !/^\d{6}$/.test(verificationCode.trim())) { setError('请输入邮箱收到的 6 位数字验证码'); return; }
+    if (mode === 'register' && password.length < 8) { setError('密码至少需要 8 位'); return; }
     if (mode === 'register' && password !== confirmPwd) { setError('两次输入的密码不一致'); return; }
     setLoading(true); setError(''); setInfo('');
     try {
@@ -26,16 +59,10 @@ export default function Login({ onLogged }: { onLogged: () => void }) {
         if (res?.success) onLogged();
         else setError(res?.error || '登录失败，请检查账号密码');
       } else {
-        const res = await api.auth.register(email.trim(), password, inviteCode.trim() || undefined);
+        const res = await api.auth.register(email.trim(), verificationCode.trim(), password, inviteCode.trim().toUpperCase() || undefined);
         if (res?.success) {
-          setInfo('注册成功！正在自动登录…');
-          // 注册成功后尝试自动登录
-          const loginRes = await api.auth.login(email.trim(), password);
-          if (loginRes?.success) onLogged();
-          else {
-            setMode('login');
-            setInfo('注册成功，请登录');
-          }
+          setInfo('注册成功，正在进入客户端…');
+          onLogged();
         } else {
           setError(res?.error || '注册失败');
         }
@@ -103,6 +130,44 @@ export default function Login({ onLogged }: { onLogged: () => void }) {
                 />
               </div>
             </div>
+            {mode === 'register' && (
+              <>
+                <div>
+                  <label className="label">邮箱验证码</label>
+                  <div className="flex gap-2">
+                    <div className="relative flex-1 min-w-0">
+                      <KeyRound size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+                      <input
+                        inputMode="numeric" maxLength={6} required
+                        className="input pl-9"
+                        placeholder="6 位数字验证码"
+                        value={verificationCode}
+                        onChange={(e) => { setVerificationCode(e.target.value.replace(/\D/g, '').slice(0, 6)); setError(''); }}
+                        disabled={loading}
+                      />
+                    </div>
+                    <button
+                      type="button"
+                      onClick={sendRegisterCode}
+                      disabled={loading || codeLoading || codeCooldown > 0}
+                      className="btn-outline w-28 shrink-0 justify-center"
+                    >
+                      {codeLoading ? <Loader2 size={14} className="animate-spin" /> : codeCooldown > 0 ? `${codeCooldown}s` : '获取验证码'}
+                    </button>
+                  </div>
+                </div>
+                <div>
+                  <label className="label">邀请码（选填）</label>
+                  <input
+                    className="input uppercase"
+                    placeholder="不填则不享受邀请奖励"
+                    value={inviteCode}
+                    onChange={(e) => { setInviteCode(e.target.value.toUpperCase()); setError(''); }}
+                    disabled={loading}
+                  />
+                </div>
+              </>
+            )}
             <div>
               <label className="label">密码</label>
               <div className="relative">
@@ -110,7 +175,7 @@ export default function Login({ onLogged }: { onLogged: () => void }) {
                 <input
                   type={showPwd ? 'text' : 'password'} required
                   className="input pl-9 pr-9"
-                  placeholder={mode === 'register' ? '至少 6 位' : '请输入密码'}
+                  placeholder={mode === 'register' ? '至少 8 位' : '请输入密码'}
                   value={password} onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
                 />
@@ -135,15 +200,6 @@ export default function Login({ onLogged }: { onLogged: () => void }) {
                     />
                   </div>
                 </div>
-                <div>
-                  <label className="label">邀请码（选填）</label>
-                  <input
-                    className="input"
-                    placeholder="填写邀请码可获额外积分"
-                    value={inviteCode} onChange={(e) => setInviteCode(e.target.value)}
-                    disabled={loading}
-                  />
-                </div>
               </>
             )}
 
@@ -156,7 +212,7 @@ export default function Login({ onLogged }: { onLogged: () => void }) {
 
             <button type="submit" disabled={loading} className="btn-primary w-full py-2.5">
               {loading ? <Loader2 size={16} className="animate-spin" /> : mode === 'login' ? <LogIn size={16} /> : <UserPlus size={16} />}
-              {loading ? '处理中…' : mode === 'login' ? '登录' : '注册'}
+              {loading ? '处理中…' : mode === 'login' ? '登录' : '注册并登录'}
             </button>
           </form>
 
@@ -165,7 +221,7 @@ export default function Login({ onLogged }: { onLogged: () => void }) {
               <button className="hover:text-brand" onClick={() => setMode('register')}>
                 没有账号？立即注册
               </button>
-              <button className="hover:text-brand" onClick={() => api.system.openExternal(config?.resetPasswordUrl || 'https://www.quizmate.vip/#credits')}>
+              <button className="hover:text-brand" onClick={() => api.system.openExternal(config?.resetPasswordUrl || 'https://quizmate.cn/#credits')}>
                 忘记密码
               </button>
             </div>

@@ -1,6 +1,6 @@
 import type { PoolClient, QueryResult, QueryResultRow } from "pg";
 import { describe, expect, it, vi } from "vitest";
-import { buildInterviewPrompt, createSpeechActions } from "../src/actions/speech.js";
+import { buildInterviewPrompt, createSpeechActions, formatInterviewAnswer } from "../src/actions/speech.js";
 import type { Database } from "../src/db.js";
 import type { ActionDependencies } from "../src/types.js";
 
@@ -26,6 +26,7 @@ describe("interview speech action", () => {
   const context = {
     position: "Product Manager",
     company: "Example Inc.",
+    jobDescription: "Own product strategy and launch cross-functional initiatives.",
     resumeText: "Led a cross-functional product launch.",
     language: "zh",
     answerStyle: "concise" as const
@@ -42,7 +43,29 @@ describe("interview speech action", () => {
     expect(prompt).toContain("CUSTOM INTERVIEW ROLE");
     expect(prompt).toContain("应聘岗位：Product Manager");
     expect(prompt).toContain("目标公司：Example Inc.");
+    expect(prompt).toContain("岗位描述：\nOwn product strategy and launch cross-functional initiatives.");
     expect(prompt).toContain("候选人简历：\nLed a cross-functional product launch.");
+  });
+
+  it("prioritizes resume evidence for self-introduction", () => {
+    const prompt = buildInterviewPrompt("请介绍下你自己", context);
+    expect(prompt).toContain("这是自我介绍问题");
+    expect(prompt).toContain("优先从候选人简历提取真实经历");
+  });
+
+  it("requires a concise pyramid answer with numbered support and no separate key-point field", () => {
+    const prompt = buildInterviewPrompt("请说说你如何推进跨团队项目", context);
+    expect(prompt).toContain("金字塔原理");
+    expect(prompt).toContain("1、2、3");
+    expect(prompt).toContain('"explanation":""');
+    expect(prompt).not.toContain("回答要点，每个要点单独一行");
+  });
+
+  it("keeps the conclusion and numbered support in readable paragraphs", () => {
+    expect(formatInterviewAnswer("我会先明确目标。 1、统一口径。 2、拆解责任。 3、跟踪复盘。"))
+      .toBe("我会先明确目标。\n\n1、统一口径。\n\n2、拆解责任。\n\n3、跟踪复盘。");
+    expect(formatInterviewAnswer("结论\n- 第一项\n- 第二项\n- 第三项"))
+      .toBe("结论\n\n1、第一项\n\n2、第二项\n\n3、第三项");
   });
 
   it("registers the interview answer action", () => {
@@ -59,7 +82,7 @@ describe("interview speech action", () => {
     })).rejects.toMatchObject({ code: "AUTH_REQUIRED" });
   });
 
-  it("calls the model and charges 30 credits after a successful answer", async () => {
+  it("calls the model and charges 20 credits after a successful answer", async () => {
     const writes: Array<{ sql: string; values?: unknown[] }> = [];
     const db = {
       query: async <T extends QueryResultRow>(sql: string): Promise<QueryResult<T>> => {
@@ -107,15 +130,56 @@ describe("interview speech action", () => {
     expect(runAnalysisModel).toHaveBeenCalledOnce();
     expect(result).toMatchObject({
       answer: "我会围绕岗位匹配度介绍自己的经历。",
-      keyPoints: ["岗位匹配", "关键经历"],
-      creditCost: 30,
-      creditBalance: 70
+      keyPoints: [],
+      creditCost: 20,
+      creditBalance: 80
     });
     expect(writes.some(({ sql, values }) =>
       sql.includes("INSERT INTO credit_ledger")
-      && values?.[1] === -30
+      && values?.[1] === -20
       && String(values?.[3]).startsWith("interview_")
     )).toBe(true);
     expect(writes.some(({ sql }) => sql.includes("INSERT INTO usage_logs"))).toBe(true);
+  });
+
+  it("processes the same question twice as two independent model calls and settlements", async () => {
+    let balance = 100;
+    const ledgerRequestIds: string[] = [];
+    const db = {
+      query: async <T extends QueryResultRow>(sql: string): Promise<QueryResult<T>> => {
+        if (sql.includes("FROM account_sessions")) {
+          return queryResult([{ account_id: "account-repeat", status: "active", credits: balance }] as unknown as T[]);
+        }
+        return queryResult([] as T[]);
+      },
+      connect: async () => ({
+        query: async <T extends QueryResultRow>(sql: string, values?: unknown[]): Promise<QueryResult<T>> => {
+          if (sql.includes("SELECT c.credits")) {
+            return queryResult([{ credits: balance, status: "active" }] as unknown as T[]);
+          }
+          if (sql.includes("UPDATE credit_accounts")) balance = Number(values?.[1]);
+          if (sql.includes("INSERT INTO credit_ledger")) ledgerRequestIds.push(String(values?.[3]));
+          return queryResult([] as T[], 1);
+        },
+        release: vi.fn()
+      } as unknown as PoolClient)
+    } as unknown as Database;
+    const runAnalysisModel = vi.fn(async () => ({
+      items: [{ summary: "重复问题", answer: "结论。 1、第一点。 2、第二点。 3、第三点。", explanation: "" }]
+    }));
+    const handler = createSpeechActions({ ...dependencies, db, runAnalysisModel } as ActionDependencies)
+      .get("generateInterviewAnswer");
+    if (!handler) throw new Error("generateInterviewAnswer missing");
+    const input = { accountToken: "valid-token", question: "请介绍一下自己" };
+    const requestContext = { requestId: "same-question", clientIp: "127.0.0.1", db };
+
+    const first = await handler(input, requestContext);
+    const second = await handler(input, requestContext);
+
+    expect(runAnalysisModel).toHaveBeenCalledTimes(2);
+    expect(first).toMatchObject({ creditCost: 20, creditBalance: 80 });
+    expect(second).toMatchObject({ creditCost: 20, creditBalance: 60 });
+    expect(ledgerRequestIds).toHaveLength(2);
+    expect(new Set(ledgerRequestIds).size).toBe(2);
   });
 });

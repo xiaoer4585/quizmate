@@ -1,7 +1,7 @@
 {
   "name": "quizmate",
   "productName": "QuizMate",
-  "version": "2026.8.13",
+  "version": "2026.8.18",
   "description": "QuizMate Windows 客户端 - 笔试与面试实时辅助",
   "main": "out/main/index.js",
   "author": {
@@ -9,13 +9,14 @@
     "email": "support@quizmate.vip"
   },
   "license": "MIT",
-  "homepage": "https://quizmate.vip",
+  "homepage": "https://quizmate.cn",
   "type": "module",
   "scripts": {
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package:win": "electron-vite build && electron-builder --win --x64",
+    "verify:win-package": "node scripts/verify-packaged-app.cjs release/win-unpacked",
     "package:store": "electron-vite build && electron-builder --win appx --x64",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "tsc --noEmit -p tsconfig.web.json"
@@ -45,6 +46,7 @@
     "uuid": "^11.0.3"
   },
   "devDependencies": {
+    "@electron/asar": "^3.4.1",
     "@types/node": "^20.11.0",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^18.2.48",

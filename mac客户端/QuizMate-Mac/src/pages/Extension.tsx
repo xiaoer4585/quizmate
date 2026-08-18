@@ -1,7 +1,7 @@
 import { BookOpen, CheckCircle2, Chrome, Download, ExternalLink, FileText, Radar } from 'lucide-react';
 import { api } from '../lib/ipc';
 
-const DOWNLOAD_URL = 'https://www.quizmate.vip/downloads/QuizMate-Career-Extension-2.2.0.zip';
+const DOWNLOAD_URL = 'https://quizmate.cn/downloads/QuizMate-Career-Extension-2.2.0.zip';
 
 export default function Extension() {
   return (
@@ -48,10 +48,10 @@ export default function Extension() {
         <button onClick={() => api.system.openExternal(DOWNLOAD_URL)} className="btn-primary text-xs">
           <Download size={14} /> 免费下载插件
         </button>
-        <button onClick={() => api.system.openExternal('https://www.quizmate.vip/docs.html')} className="btn-outline text-xs">
+        <button onClick={() => api.system.openExternal('https://quizmate.cn/docs.html')} className="btn-outline text-xs">
           <BookOpen size={14} /> 查看安装文档
         </button>
-        <button onClick={() => api.system.openExternal('https://www.quizmate.vip/download.html')} className="btn-outline text-xs">
+        <button onClick={() => api.system.openExternal('https://quizmate.cn/download.html')} className="btn-outline text-xs">
           <ExternalLink size={14} /> 官网下载页
         </button>
       </div>

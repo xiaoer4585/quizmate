@@ -1,5 +1,5 @@
 export const CREDIT_COST_PER_SUCCESS = 10;
-export const CREDIT_COST_PER_INTERVIEW = 30;
+export const CREDIT_COST_PER_INTERVIEW = 20;
 export const REGISTER_BONUS_CREDITS = 50;
 
 // 邀请注册机制常量
