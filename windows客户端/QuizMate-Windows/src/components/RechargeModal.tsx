@@ -1,6 +1,6 @@
 // 充值弹窗 - 通过账户后端创建订单并完成积分结算
 import { useEffect, useState } from 'react';
-import { X, Wallet, Zap, Check, ArrowLeft, RotateCw, AlertCircle, Gift } from 'lucide-react';
+import { X, Wallet, Zap, Check, ArrowLeft, RotateCw, AlertCircle } from 'lucide-react';
 import { useProfile } from '../lib/ipc';
 
 const api = (window as any).api;
@@ -42,11 +42,9 @@ export default function RechargeModal({ open, onClose }: Props) {
   const [outTradeNo, setOutTradeNo] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [oldUserBonus, setOldUserBonus] = useState(0);
 
   const acct = profile?.account;
   const credits = profile?.creditBalance ?? acct?.credits ?? 0;
-  const isOldUser = Number(acct?.totalChargedCredits) > 0;
 
   const resetAndClose = () => {
     setSelected(null);
@@ -58,7 +56,6 @@ export default function RechargeModal({ open, onClose }: Props) {
     setOutTradeNo('');
     setError('');
     setLoading(false);
-    setOldUserBonus(0);
     onClose();
   };
 
@@ -76,7 +73,6 @@ export default function RechargeModal({ open, onClose }: Props) {
     try {
       const order = await api.payment.createOrder({ method, packageId: selected.id });
       const info = order.payUrl || order.qrCode;
-      setOldUserBonus(Number(order.oldUserBonus) || 0);
       if (order.outTradeNo && info) {
         setOutTradeNo(order.outTradeNo);
         setQrUrl(order.qrDataUrl || `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(info)}`);
@@ -167,13 +163,6 @@ export default function RechargeModal({ open, onClose }: Props) {
         {step === 'select' && (
           <>
             <p className="text-xs text-slate-400 mb-4">选择适合你的套餐，积分用于笔试搜题和面试实时辅助</p>
-
-            {isOldUser && (
-              <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center gap-2">
-                <Gift size={16} className="text-amber-400 shrink-0" />
-                <span className="text-sm text-amber-200">老用户专享：本次充值额外赠送 50 积分，与套餐赠送叠加享受</span>
-              </div>
-            )}
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
               {PACKAGES.map((pkg) => {
@@ -276,7 +265,6 @@ export default function RechargeModal({ open, onClose }: Props) {
               <div className="text-sm text-slate-300">
                 <span className="font-semibold text-slate-100">{selected.name}</span>
                 <span className="text-slate-400"> · {selected.credits} 积分</span>
-                {oldUserBonus > 0 && <span className="text-amber-400"> +{oldUserBonus} 老用户赠送</span>}
               </div>
               <span className="text-amber-400 font-semibold">¥{selected.price}</span>
             </div>

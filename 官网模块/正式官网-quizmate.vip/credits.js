@@ -57,7 +57,6 @@ function collectCreditElements() {
   creditEls.payLoading = document.querySelector("[data-pay-loading]");
   creditEls.paySuccess = document.querySelector("[data-pay-success]");
   creditEls.payRefresh = document.querySelector("[data-pay-refresh]");
-  creditEls.oldUserBonus = document.querySelector("[data-old-user-bonus]");
 }
 
 function bindCreditEvents() {
@@ -455,9 +454,8 @@ function onPaymentSuccess(result) {
   saveActiveOrder(null);
   setPayState("success");
   const credited = result.creditedCredits || activeOrder.totalCredits || 0;
-  const successMsg = result.message || `支付成功，已到账 ${formatNumber(credited)} 积分。`;
-  setPaymentInfo(successMsg, "success");
-  setCreditStatus(successMsg, "success");
+  setPaymentInfo(`支付成功，已到账 ${formatNumber(credited)} 积分。`, "success");
+  setCreditStatus(`充值成功，已到账 ${formatNumber(credited)} 积分。`, "success");
   // 1.6 秒后自动关闭弹窗
   window.setTimeout(() => closePayModal(), 1600);
 }
@@ -482,12 +480,7 @@ function renderPayModalOrder(order) {
   if (creditEls.payAmount) creditEls.payAmount.textContent = trimAmount(order.amount);
   if (creditEls.payOrderNo) creditEls.payOrderNo.textContent = order.outTradeNo || "-";
   if (creditEls.payPackage) creditEls.payPackage.textContent = order.packageName || "-";
-  if (creditEls.payCredits) {
-    const bonus = Number(order.oldUserBonus) || 0;
-    creditEls.payCredits.textContent = bonus > 0
-      ? `${formatNumber(Number(order.totalCredits) + bonus)} 积分（含老用户赠送 ${formatNumber(bonus)}）`
-      : `${formatNumber(order.totalCredits)} 积分`;
-  }
+  if (creditEls.payCredits) creditEls.payCredits.textContent = `${formatNumber(order.totalCredits)} 积分`;
   startCountdown(order.expiresAt);
 }
 
@@ -761,10 +754,6 @@ function updateAccountView() {
   document.querySelectorAll("[data-open-referral]").forEach((button) => {
     button.hidden = !loggedIn;
   });
-  // 老用户充值额外赠送横幅：仅累计充值过的用户可见
-  if (creditEls.oldUserBonus) {
-    creditEls.oldUserBonus.hidden = !(loggedIn && Number(account?.totalChargedCredits) > 0);
-  }
 }
 
 async function creditApi(action, payload) {

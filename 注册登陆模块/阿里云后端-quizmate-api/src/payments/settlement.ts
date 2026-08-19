@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { PoolClient } from "pg";
 import type { Database } from "../db.js";
-import { OLD_USER_RECHARGE_BONUS, REFERRAL_COMMISSION_RATE } from "../domain/credits.js";
+import { REFERRAL_COMMISSION_RATE } from "../domain/credits.js";
 import type { PaymentRuntimeConfig } from "./config.js";
 import {
   paymentPayloadDigest,
@@ -236,23 +236,14 @@ export async function settlePaymentCallback(
       return { accepted: false, duplicate: false, settled: false, reason: "unsupported_order" };
     }
 
-    // 老用户充值额外赠送：查询充值前的累计充值积分，判断是否为老用户
-    const prevCharged = await client.query<{ total_charged_credits: string | number }>(
-      "SELECT total_charged_credits FROM credit_accounts WHERE account_id = $1",
-      [order.account_id]
-    );
-    const isOldUser = Number(prevCharged.rows[0]?.total_charged_credits ?? 0) > 0;
-    const bonusCredits = isOldUser ? OLD_USER_RECHARGE_BONUS : 0;
-    const totalToCredit = Number(order.total_credits) + bonusCredits;
-
     const creditResult = await client.query<{ credits: string | number }>(
       `UPDATE credit_accounts
           SET credits = credits + $2,
-              total_charged_credits = total_charged_credits + $3,
+              total_charged_credits = total_charged_credits + $2,
               updated_at = now()
         WHERE account_id = $1
         RETURNING credits`,
-      [order.account_id, totalToCredit, order.total_credits]
+      [order.account_id, order.total_credits]
     );
     const balance = creditResult.rows[0]?.credits;
     if (balance === undefined) throw new Error("credit account missing");
@@ -262,15 +253,6 @@ export async function settlePaymentCallback(
        VALUES ($1, 'recharge', $2, $3, $4, $5, $6, 'payment_callback')`,
       [order.account_id, order.total_credits, balance, provider, outTradeNo, order.package_id]
     );
-
-    // 老用户充值额外赠送积分流水
-    if (bonusCredits > 0) {
-      await client.query(
-        `INSERT INTO credit_ledger(account_id, operation_type, credits, balance_after, source, order_no, package_id, reason)
-         VALUES ($1, 'old_user_bonus', $2, $3, $4, $5, $6, '老用户充值额外赠送')`,
-        [order.account_id, bonusCredits, balance, provider, outTradeNo, order.package_id]
-      );
-    }
     await client.query(
       `UPDATE orders
           SET status = 'paid', provider_trade_no = $2, provider_status = $3,

@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import QRCode from "qrcode";
-import { CREDIT_PACKAGES, OLD_USER_RECHARGE_BONUS } from "../domain/credits.js";
+import { CREDIT_PACKAGES } from "../domain/credits.js";
 import { PublicError } from "../errors.js";
 import { hashToken } from "../security/crypto.js";
 import type { ActionDependencies, ActionHandler, ActionInput } from "../types.js";
@@ -15,7 +15,6 @@ interface AccountRow {
   email: string;
   status: string;
   credits: string | number;
-  total_charged_credits: string | number;
 }
 
 interface CreditOrderRow {
@@ -51,7 +50,7 @@ export async function authenticate(deps: ActionDependencies, input: ActionInput)
   const tokenHash = hashToken(input.accountToken ?? input.token);
   if (!tokenHash) throw new PublicError("请先登录积分账户。", "AUTH_REQUIRED", 401);
   const result = await deps.db.query<AccountRow>(
-    `SELECT a.account_id, a.email, a.status, c.credits, c.total_charged_credits
+    `SELECT a.account_id, a.email, a.status, c.credits
        FROM account_sessions s
        JOIN accounts a USING(account_id)
        JOIN credit_accounts c USING(account_id)
@@ -209,7 +208,7 @@ export function epayTypeToMethod(type: string | null): "alipay" | "wechat" {
   return type === "wxpay" ? "wechat" : "alipay";
 }
 
-function publicOrder(order: CreditOrderRow & { qrCode?: string; payUrl?: string; qrDataUrl?: string; refreshable?: boolean; oldUserBonus?: number }) {
+function publicOrder(order: CreditOrderRow & { qrCode?: string; payUrl?: string; qrDataUrl?: string; refreshable?: boolean }) {
   const method = epayTypeToMethod(order.payment_type);
   // viewStatus 为前端展示态，向后兼容保留原始 status（其他客户端仍用 created/waiting/paid/closed/failed/expired）
   return {
@@ -224,7 +223,6 @@ function publicOrder(order: CreditOrderRow & { qrCode?: string; payUrl?: string;
     baseCredits: Number(order.base_credits),
     bonusCredits: Number(order.bonus_credits),
     totalCredits: Number(order.total_credits),
-    oldUserBonus: order.oldUserBonus ?? 0,
     subject: order.subject,
     qrCode: order.qrCode ?? "",
     payUrl: order.payUrl ?? "",
@@ -373,11 +371,11 @@ export async function reconcileEpayCreditOrder(
 export async function reconcilePendingCreditOrders(deps: ActionDependencies, limit = 50): Promise<{ checked: number; settled: number }> {
   const config = await runtimePaymentConfig(deps);
   if (!paymentReadiness(config).epay) return { checked: 0, settled: 0 };
-  const result = await deps.db.query<CreditOrderRow & { account_id: string; email: string; credits: string | number; account_status: string; total_charged_credits: string | number }>(
+  const result = await deps.db.query<CreditOrderRow & { account_id: string; email: string; credits: string | number; account_status: string }>(
     `SELECT o.out_trade_no, o.status, o.provider, o.payment_type, o.package_id, o.package_name,
             o.amount, o.base_credits, o.bonus_credits, o.total_credits, o.subject,
             o.provider_trade_no, o.provider_status, o.expires_at, o.paid_at, o.created_at,
-            a.account_id, a.email, ca.credits, ca.total_charged_credits, a.status AS account_status
+            a.account_id, a.email, ca.credits, a.status AS account_status
        FROM orders o JOIN accounts a ON a.account_id = o.account_id
        JOIN credit_accounts ca ON ca.account_id = a.account_id
       WHERE o.order_type = 'credits' AND o.provider = 'epay'
@@ -389,7 +387,7 @@ export async function reconcilePendingCreditOrders(deps: ActionDependencies, lim
   let settled = 0;
   for (const row of result.rows) {
     try {
-      await reconcileEpayCreditOrder(deps, config, { account_id: row.account_id, email: row.email, status: row.account_status, credits: row.credits, total_charged_credits: row.total_charged_credits }, row);
+      await reconcileEpayCreditOrder(deps, config, { account_id: row.account_id, email: row.email, status: row.account_status, credits: row.credits }, row);
       const state = await deps.db.query<{ status: string }>("SELECT status FROM orders WHERE out_trade_no = $1", [row.out_trade_no]);
       if (state.rows[0]?.status === "paid") settled += 1;
     } catch (error) {
@@ -539,7 +537,6 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
     if (!ready.epay) throw new PublicError("积分充值暂未开启。", "EPAY_NOT_READY", 503);
     const account = await authenticate(deps, input);
     const pkg = creditPackage(input);
-    const oldUserBonus = Number(account.total_charged_credits) > 0 ? OLD_USER_RECHARGE_BONUS : 0;
     const requestedPayType = epayPaymentType(input.method);
 
     // 幂等：若该账户同一套餐且同一支付方式存在未过期的待支付订单，直接复用，避免重复下单 + 重复请求 epay
@@ -569,7 +566,6 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
           qrCode: String(hasQr.rows[0].qr_code),
           payUrl: String(hasQr.rows[0].qr_code),
           qrDataUrl,
-          oldUserBonus,
           refreshable: orderRefreshable(existingOrder)
         });
       }
@@ -605,7 +601,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
             WHERE out_trade_no = $1`,
           [outTradeNo, qrCode, payUrl, qrDataUrl, String(result.trade_no ?? "")]
         );
-        return publicOrder({ ...existingOrder, status: "waiting", qrCode, payUrl, qrDataUrl, oldUserBonus, refreshable: orderRefreshable(existingOrder) });
+        return publicOrder({ ...existingOrder, status: "waiting", qrCode, payUrl, qrDataUrl, refreshable: orderRefreshable(existingOrder) });
       } catch (error) {
         const errMsg = (error instanceof Error ? error.message : String(error)).slice(0, 500);
         await deps.db.query(
@@ -663,7 +659,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
           WHERE out_trade_no = $1`,
         [outTradeNo, String(result.trade_no ?? "")]
       );
-      return publicOrder({ ...order, status: "waiting", qrCode, payUrl, qrDataUrl, oldUserBonus, refreshable: orderRefreshable({ ...order, status: "waiting" }) });
+      return publicOrder({ ...order, status: "waiting", qrCode, payUrl, qrDataUrl, refreshable: orderRefreshable({ ...order, status: "waiting" }) });
     } catch (error) {
       const errMsg = (error instanceof Error ? error.message : String(error)).slice(0, 500);
       await deps.db.query(
@@ -707,24 +703,13 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
       "SELECT credits FROM credit_accounts WHERE account_id = $1",
       [account.account_id]
     );
-    // 老用户充值额外赠送：已支付订单查 credit_ledger 确认实际赠送积分，未支付则按当前账户状态预估
-    let oldUserBonus = 0;
-    if (order.status === "paid") {
-      const bonusLedger = await deps.db.query<{ credits: string | number }>(
-        "SELECT credits FROM credit_ledger WHERE account_id = $1 AND order_no = $2 AND operation_type = 'old_user_bonus'",
-        [account.account_id, outTradeNo]
-      );
-      oldUserBonus = Number(bonusLedger.rows[0]?.credits ?? 0);
-    } else {
-      oldUserBonus = Number(account.total_charged_credits) > 0 ? OLD_USER_RECHARGE_BONUS : 0;
-    }
-    const creditedCredits = order.status === "paid" ? Number(order.total_credits) + oldUserBonus : 0;
+    const creditedCredits = order.status === "paid" ? Number(order.total_credits) : 0;
     return {
-      order: publicOrder({ ...order, oldUserBonus, refreshable: orderRefreshable(order) }),
+      order: publicOrder({ ...order, refreshable: orderRefreshable(order) }),
       account: { accountId: account.account_id, email: account.email, credits: Number(latest.rows[0]?.credits ?? account.credits) },
       creditedCredits,
       message: order.status === "paid"
-        ? `充值成功，已到账 ${creditedCredits} 积分${oldUserBonus > 0 ? `（含老用户额外赠送 ${oldUserBonus} 积分）` : ""}。`
+        ? `充值成功，已到账 ${creditedCredits} 积分。`
         : order.status === "expired"
           ? "二维码已过期，请刷新二维码或重新购买。"
           : "订单等待支付。如果您已支付完成，时间可能有点延迟，可以退出之后查看积分。"
@@ -736,7 +721,6 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
     const config = await runtimePaymentConfig(deps);
     if (!paymentReadiness(config).epay) throw new PublicError("积分充值暂未开启。", "EPAY_NOT_READY", 503);
     const account = await authenticate(deps, input);
-    const oldUserBonus = Number(account.total_charged_credits) > 0 ? OLD_USER_RECHARGE_BONUS : 0;
     const outTradeNo = String(input.outTradeNo ?? "").trim();
     if (!outTradeNo) throw new PublicError("订单号不能为空。", "ORDER_NO_REQUIRED");
 
@@ -808,7 +792,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
       [outTradeNo, qrCode, payUrl, qrDataUrl, providerTradeNo]
     );
     const refreshed = updated.rows[0] ?? order;
-    return publicOrder({ ...refreshed, status: "waiting", qrCode, payUrl, qrDataUrl, oldUserBonus, refreshable: orderRefreshable({ ...refreshed, status: "waiting" }) });
+    return publicOrder({ ...refreshed, status: "waiting", qrCode, payUrl, qrDataUrl, refreshable: orderRefreshable({ ...refreshed, status: "waiting" }) });
   };
 
   return new Map([

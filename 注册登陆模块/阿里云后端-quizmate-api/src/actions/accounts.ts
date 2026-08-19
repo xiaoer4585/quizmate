@@ -44,7 +44,6 @@ function publicAccount(account: AccountRow) {
     credits: Number(account.credits),
     totalChargedCredits: Number(account.total_charged_credits),
     totalConsumedCredits: Number(account.total_consumed_credits),
-    isOldUser: Number(account.total_charged_credits) > 0,
     registerBonusCredits: Number(account.register_bonus_credits),
     status: account.status,
     role: account.role || "user",
