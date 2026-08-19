@@ -5,6 +5,7 @@ on:
   push:
     branches:
       - feature/mac-client
+      - mac-build-fix
     tags:
       - mac-build-*
 permissions:
