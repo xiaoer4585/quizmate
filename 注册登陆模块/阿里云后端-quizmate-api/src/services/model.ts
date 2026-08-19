@@ -87,6 +87,47 @@ function extractJsonObject(value: string): string {
   return "";
 }
 
+// 弱模型（如 doubao-seed-2.0-mini）常在 JSON 字符串值里输出裸换行/制表符等控制字符，
+// 导致 JSON.parse 报 "Bad control character in string literal"。这里只对字符串字面量
+// 内部的控制字符做转义（字符串外的 \n\r\t 是合法空白，保持原样）。
+function escapeRawControlChars(json: string): string {
+  let result = "";
+  let inString = false;
+  for (let i = 0; i < json.length; i += 1) {
+    const char = json.charAt(i);
+    if (!inString) {
+      if (char === "\"") inString = true;
+      result += char;
+      continue;
+    }
+    if (char === "\\") {
+      // 转义对原样保留（含 \" \\ \n 等）
+      result += char;
+      if (i + 1 < json.length) {
+        i += 1;
+        result += json.charAt(i);
+      }
+      continue;
+    }
+    if (char === "\"") {
+      inString = false;
+      result += char;
+      continue;
+    }
+    if (!char) continue;
+    const code = char.charCodeAt(0);
+    if (code < 0x20) {
+      if (char === "\n") result += "\\n";
+      else if (char === "\r") result += "\\r";
+      else if (char === "\t") result += "\\t";
+      else result += `\\u${code.toString(16).padStart(4, "0")}`;
+      continue;
+    }
+    result += char;
+  }
+  return result;
+}
+
 function fallbackCodeResult(content: string): AnalysisModelResult {
   const code = content.replace(/^```[^\r\n]*\r?\n?/, "").replace(/\r?\n?```$/, "").trim().slice(0, 30_000);
   return { items: [{ summary: "题目1", answer: `参考代码\n${code}`, explanation: "", code }] };
@@ -109,12 +150,21 @@ export function parseModelResult(content: string, options: { allowInterviewText?
   let parsed: unknown;
   try {
     parsed = JSON.parse(json);
-  } catch (e) {
-    console.error("[model] parseModelResult: JSON.parse failed:", (e as Error).message, "json fragment:", json.slice(0, 500));
-    if (/```|\b(function|class|def|public static|const|let|var)\b|#include\b/.test(trimmed)) {
-      return fallbackCodeResult(trimmed);
+  } catch {
+    // 先尝试对字符串值内的裸控制字符做容错转义再重试一次（线上实测高频失败原因）
+    const sanitized = escapeRawControlChars(json);
+    try {
+      parsed = JSON.parse(sanitized);
+    } catch (e) {
+      console.error("[model] parseModelResult: JSON.parse failed:", (e as Error).message, "json fragment:", sanitized.slice(0, 500));
+      if (options.allowInterviewText && trimmed) {
+        return { items: [{ summary: "面试回答", answer: trimmed, explanation: "" }] };
+      }
+      if (/```|\b(function|class|def|public static|const|let|var)\b|#include\b/.test(trimmed)) {
+        return fallbackCodeResult(trimmed);
+      }
+      throw new PublicError("AI 未返回有效答案，请重试。", "INVALID_MODEL_RESULT", 502);
     }
-    throw new PublicError("AI 未返回有效答案，请重试。", "INVALID_MODEL_RESULT", 502);
   }
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     console.error("[model] parseModelResult: parsed is not an object:", typeof parsed);

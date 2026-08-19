@@ -181,7 +181,9 @@
       .download-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
       .download-head h2 { margin-bottom: 0; }
       .download-metrics { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
-      .download-metric { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); display: flex; align-items: center; gap: 12px; }
+      .download-metric { padding: 14px 16px; border: 1px solid var(--line); border-radius: 10px; background: var(--soft); display: flex; align-items: center; gap: 12px; cursor: pointer; }
+      .download-metric.selected { border-color: #3b82f6; box-shadow: 0 0 0 3px rgba(59,130,246,.12); }
+      .download-metric.unselected { opacity: .45; }
       .download-metric .dm-icon { width: 38px; height: 38px; border-radius: 8px; display: grid; place-items: center; flex-shrink: 0; }
       .download-metric .dm-icon svg { width: 20px; height: 20px; }
       .download-metric .dm-icon.android { background: #e6f4ea; color: #067647; }
@@ -277,18 +279,36 @@
       .btn-primary { padding: 6px 14px; font-size: 13px; border: none; border-radius: 6px; cursor: pointer; background: #2563eb; color: #fff; }
       .btn-primary:hover { background: #1d4ed8; }
       .input { padding: 6px 10px; font-size: 13px; border: 1px solid #cbd5e1; border-radius: 6px; }
+      .product-switch { display: grid; gap: 6px; margin: 4px 0 14px; }
+      .sidebar .product-switch { margin: 12px 0 6px; padding-bottom: 12px; border-bottom: 1px solid #e2e8f0; }
+      .product-switch-label { font-size: 11px; font-weight: 700; color: #94a3b8; letter-spacing: 1px; }
+      .product-btn { display: flex; align-items: center; gap: 8px; width: 100%; padding: 8px 12px; font-size: 13px; font-weight: 600; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0; border-radius: 8px; cursor: pointer; transition: background .15s, color .15s, border-color .15s; }
+      .product-btn:hover { background: #e2e8f0; }
+      .product-btn.active { color: #fff; background: #1d4ed8; border-color: #1d4ed8; }
+      .product-btn .product-dot { width: 8px; height: 8px; border-radius: 50%; background: currentColor; opacity: .8; }
+      .login-card .product-switch { grid-template-columns: 1fr 1fr; }
     </style>
   </head>
   <body>
     <div id="loginView" class="login-view">
       <div class="login-card">
         <div class="login-brand">
-          <strong>答题悬浮助手后台</strong>
-          <span>请输入管理员邮箱和密码登录</span>
+          <strong id="loginBrandTitle">答题悬浮助手后台</strong>
+          <span id="loginBrandDesc">请输入管理员邮箱和密码登录</span>
         </div>
-        <div class="field"><label for="loginApiEndpoint">接口地址</label><input id="loginApiEndpoint" /></div>
-        <div class="field"><label for="loginEmail">管理员邮箱</label><input id="loginEmail" type="email" autocomplete="email" /></div>
-        <div class="field"><label for="loginPassword">管理员密码</label><input id="loginPassword" type="password" autocomplete="current-password" /></div>
+        <div class="product-switch" role="group" aria-label="产品切换">
+          <button class="product-btn active" type="button" data-login-product="quizmate"><span class="product-dot"></span>答题悬浮助手</button>
+          <button class="product-btn" type="button" data-login-product="cpan"><span class="product-dot"></span>C盘扩容</button>
+        </div>
+        <div id="quizmateLoginFields">
+          <div class="field"><label for="loginApiEndpoint">接口地址</label><input id="loginApiEndpoint" /></div>
+          <div class="field"><label for="loginEmail">管理员邮箱</label><input id="loginEmail" type="email" autocomplete="email" /></div>
+          <div class="field"><label for="loginPassword">管理员密码</label><input id="loginPassword" type="password" autocomplete="current-password" /></div>
+        </div>
+        <div id="cpanLoginFields" hidden>
+          <div class="field"><label for="cpanApiEndpoint">接口地址</label><input id="cpanApiEndpoint" /></div>
+          <div class="field"><label for="cpanAdminKey">管理员密钥</label><input id="cpanAdminKey" type="password" autocomplete="current-password" placeholder="与原 C盘扩容后台密钥一致" /></div>
+        </div>
         <div class="login-actions">
           <button id="loginSubmitBtn" type="button">登录</button>
         </div>
@@ -299,16 +319,24 @@
     <div id="adminShell" class="admin-shell" hidden>
       <aside class="sidebar">
         <div class="brand">
-          <strong>答题悬浮助手后台</strong>
-          <span>统一运营与积分管理</span>
+          <strong id="sidebarBrandTitle">答题悬浮助手后台</strong>
+          <span id="sidebarBrandSub">统一运营与积分管理</span>
         </div>
-        <nav class="side-tabs" aria-label="后台导航">
+        <div class="product-switch" role="group" aria-label="产品切换">
+          <span class="product-switch-label">产品切换</span>
+          <button class="product-btn active" type="button" data-product="quizmate"><span class="product-dot"></span>答题悬浮助手</button>
+          <button class="product-btn" type="button" data-product="cpan"><span class="product-dot"></span>C盘扩容</button>
+        </div>
+        <nav class="side-tabs" id="quizmateNav" aria-label="后台导航">
           <button class="active" type="button" data-view-tab="dashboard"><i data-lucide="layout-dashboard"></i>概览</button>
           <button type="button" data-view-tab="accounts"><i data-lucide="users"></i>积分用户</button>
           <button type="button" data-view-tab="creditLogs"><i data-lucide="list-tree"></i>积分流水</button>
           <button hidden type="button" data-view-tab="licenses"><i data-lucide="key-round"></i>历史授权</button>
           <button hidden type="button" data-view-tab="devices"><i data-lucide="monitor-smartphone"></i>历史设备</button>
           <button type="button" data-view-tab="orders"><i data-lucide="receipt-text"></i>订单</button>
+          <button type="button" data-view-tab="redemptionCodes"><i data-lucide="ticket-check"></i>兑换码</button>
+          <button type="button" data-view-tab="shop"><i data-lucide="store"></i>店铺管理</button>
+          <button type="button" data-view-tab="paymentConfig"><i data-lucide="credit-card"></i>支付配置</button>
           <button type="button" data-view-tab="domainInquiries"><i data-lucide="globe"></i>域名询价</button>
           <button type="button" data-view-tab="knowledge"><i data-lucide="files"></i>用户知识库</button>
           <button type="button" data-view-tab="aiConfig"><i data-lucide="bot"></i>AI 配置</button>
@@ -317,7 +345,13 @@
           <button type="button" data-view-tab="referral"><i data-lucide="users-round"></i>邀请和代理</button>
           <button type="button" data-view-tab="adminSettings"><i data-lucide="shield-check"></i>管理员设置</button>
           <button type="button" data-view-tab="customerService"><i data-lucide="headset"></i>客服助手配置</button>
-          <a href="https://www.quizmate.vip/" target="_blank" rel="noopener noreferrer" aria-label="访问官网（新窗口打开）"><i data-lucide="external-link"></i>访问官网</a>
+          <a href="https://quizmate.cn/" target="_blank" rel="noopener noreferrer" aria-label="访问官网（新窗口打开）"><i data-lucide="external-link"></i>访问官网</a>
+        </nav>
+        <nav class="side-tabs" id="cpanNav" hidden aria-label="C盘扩容后台导航">
+          <button class="active" type="button" data-view-tab="cpanDashboard"><i data-lucide="layout-dashboard"></i>概览</button>
+          <button type="button" data-view-tab="cpanOrders"><i data-lucide="receipt-text"></i>订单</button>
+          <button type="button" data-view-tab="cpanUsers"><i data-lucide="users"></i>用户</button>
+          <a href="https://www.bulidmate.com/" target="_blank" rel="noopener noreferrer" aria-label="访问C盘扩容官网（新窗口打开）"><i data-lucide="external-link"></i>访问官网</a>
         </nav>
       </aside>
 
@@ -367,7 +401,7 @@
             <div class="download-head">
               <div>
                 <h2>客户端下载量</h2>
-                <p>统计 QuizMate 安卓 / Windows / Mac 客户端与磁盘轻扩 Windows 客户端的下载次数，按上海时区统计。</p>
+                <p>统计 QuizMate 安卓 / Windows / Mac 客户端与磁盘轻扩 Windows 客户端的下载次数，按上海时区统计。点击下方安装包卡片可多选筛选趋势图中显示的安装包。</p>
                 <div class="visit-chart-summary"><span>累计下载 <strong id="downloadGrandTotal">0</strong> 次</span><span id="downloadRange">-</span></div>
               </div>
               <div class="period-tabs" role="group" aria-label="下载量统计粒度">
@@ -384,6 +418,73 @@
             <div><h2>后台说明</h2><p>表格默认每页 20 条，可在每张表底部调整分页；危险操作均需二次确认。</p></div>
             <button type="button" data-refresh="dashboard">刷新概览</button>
           </div>
+        </section>
+
+        <!-- ===================== C盘扩容（cpan）产品视图 ===================== -->
+        <section class="view" data-view="cpanDashboard">
+          <div class="grid-4" id="cpanMetrics"></div>
+          <div class="panel visit-chart-panel">
+            <div class="visit-chart-head">
+              <div>
+                <h2>官网访问趋势</h2>
+                <p>每次官网页面加载计为 1 次访问，按上海时区统计。</p>
+                <div class="visit-chart-summary"><span>当前区间 <strong id="cpanPeriodVisits">0</strong> 次</span><span id="cpanVisitRange">-</span><span>今日 <strong id="cpanTodayVisits">0</strong> 次</span><span>累计 <strong id="cpanTotalVisits">0</strong> 次</span></div>
+              </div>
+              <div class="period-tabs" role="group" aria-label="C盘扩容访问量统计粒度">
+                <button class="active" type="button" data-cpan-visit-period="day" aria-pressed="true">按天</button>
+                <button type="button" data-cpan-visit-period="week" aria-pressed="false">按周</button>
+                <button type="button" data-cpan-visit-period="month" aria-pressed="false">按月</button>
+              </div>
+            </div>
+            <div id="cpanVisitChart" class="visit-chart" aria-live="polite"></div>
+          </div>
+          <div class="panel download-panel">
+            <div class="download-head">
+              <div>
+                <h2>客户端下载量</h2>
+                <p>统计官网下载按钮的点击次数，按上海时区统计。</p>
+                <div class="visit-chart-summary"><span>当前区间 <strong id="cpanPeriodDownloads">0</strong> 次</span><span id="cpanDownloadRange">-</span><span>今日 <strong id="cpanTodayDownloads">0</strong> 次</span><span>累计 <strong id="cpanTotalDownloads">0</strong> 次</span></div>
+              </div>
+              <div class="period-tabs" role="group" aria-label="C盘扩容下载量统计粒度">
+                <button class="active" type="button" data-cpan-download-period="day" aria-pressed="true">按天</button>
+                <button type="button" data-cpan-download-period="week" aria-pressed="false">按周</button>
+                <button type="button" data-cpan-download-period="month" aria-pressed="false">按月</button>
+              </div>
+            </div>
+            <div id="cpanDownloadChart" class="download-chart" aria-live="polite"></div>
+          </div>
+          <div class="panel toolbar">
+            <div><h2>说明</h2><p>C盘扩容（磁盘轻扩 DiskPilot）官网访问与下载数据自埋点上线后开始统计；订单数据来自支付系统。管理员密钥沿用原 C盘扩容后台配置。</p></div>
+            <button type="button" data-refresh="cpanDashboard">刷新概览</button>
+          </div>
+        </section>
+
+        <section class="view" data-view="cpanOrders">
+          <div class="panel toolbar">
+            <div><h2>C盘扩容订单</h2><p>按订单号或账户编码搜索；待支付订单可关闭，已支付订单可标记退款（退款会同步撤销对应 VIP）。</p></div>
+            <button type="button" data-refresh="cpanOrders">刷新订单</button>
+          </div>
+          <div class="panel">
+            <div class="form-grid">
+              <div class="field"><label for="cpanOrderSearch">关键词</label><input id="cpanOrderSearch" placeholder="订单号 / 账户编码，可留空" /></div>
+              <div class="actions" style="align-self:end"><button id="cpanOrderSearchBtn" type="button">查询</button></div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>订单号</th><th>账户</th><th>套餐</th><th>金额</th><th>状态</th><th>创建时间</th><th>付款时间</th><th>操作</th></tr></thead><tbody id="cpanOrdersBody"></tbody></table></div>
+        </section>
+
+        <section class="view" data-view="cpanUsers">
+          <div class="panel toolbar">
+            <div><h2>C盘扩容用户</h2><p>客户端自动生成的账户；可停用/启用账户，或授予/撤销永久 VIP（操作会写入审计日志）。</p></div>
+            <button type="button" data-refresh="cpanUsers">刷新用户</button>
+          </div>
+          <div class="panel">
+            <div class="form-grid">
+              <div class="field"><label for="cpanUserSearch">关键词</label><input id="cpanUserSearch" placeholder="账户编码，可留空" /></div>
+              <div class="actions" style="align-self:end"><button id="cpanUserSearchBtn" type="button">查询</button></div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead><tr><th>账户</th><th>身份</th><th>状态</th><th>注册时间</th><th>最后登录</th><th>操作</th></tr></thead><tbody id="cpanUsersBody"></tbody></table></div>
         </section>
 
         <!-- 访问明细弹窗 -->
@@ -415,7 +516,23 @@
         </section>
 
         <section class="view" data-view="creditLogs">
-          <div class="panel toolbar"><div><h2>积分流水</h2><p>注册赠送、充值到账和模型消耗记录；可单条删除，删除后不会回滚账户余额。</p></div><button type="button" data-refresh="creditLogs">刷新流水</button></div>
+          <div class="panel toolbar"><div><h2>积分流水</h2><p>注册赠送、充值到账和模型消耗记录；可单条删除，删除后不会回滚账户余额。支持按邮箱筛选和设置白名单隐藏自测账号。</p></div><button type="button" data-refresh="creditLogs">刷新流水</button></div>
+          <div class="panel">
+            <div class="form-grid">
+              <div class="field"><label for="creditLogEmail">邮箱筛选</label><input id="creditLogEmail" placeholder="模糊匹配，可留空" /></div>
+              <div class="field"><label>白名单过滤</label>
+                <div class="inline-check"><input id="creditLogHideWhitelist" type="checkbox" checked /><label for="creditLogHideWhitelist">隐藏白名单邮箱的流水</label></div>
+              </div>
+              <div class="actions" style="align-self:end"><button id="searchCreditLogsBtn" type="button">查询</button><button id="clearCreditLogsFilterBtn" class="secondary" type="button">清空条件</button></div>
+            </div>
+            <h3 class="section-heading">流水白名单（白名单内邮箱的流水默认隐藏，用于忽略自测账号）</h3>
+            <div id="creditWhitelistContent" class="whitelist-list"></div>
+            <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+              <input id="creditWhitelistEmailInput" class="input" placeholder="输入邮箱" style="flex:1;min-width:180px" />
+              <input id="creditWhitelistNoteInput" class="input" placeholder="备注（可选）" style="flex:1;min-width:140px" />
+              <button type="button" id="addCreditWhitelistBtn" class="btn-primary">加入白名单</button>
+            </div>
+          </div>
           <div class="table-wrap"><table><thead data-head="creditLogs"></thead><tbody data-body="creditLogs"></tbody></table></div>
           <div class="pagination" data-pagination="creditLogs"></div>
         </section>
@@ -482,15 +599,166 @@
           <div class="pagination" data-pagination="orders"></div>
         </section>
 
+        <section class="view" data-view="redemptionCodes">
+          <div class="panel">
+            <div class="toolbar"><div><h2>批量生成兑换码</h2><p>按套餐批量生成积分兑换码，生成后可一键复制，用于店铺发货。兑换码格式 QM-XXXXXX-XXXXXX，一次性使用。</p></div></div>
+            <div class="form-grid">
+              <div class="field"><label for="redeemPackageId">积分套餐</label>
+                <select id="redeemPackageId">
+                  <option value="trial">笔面试体验包（¥19.90 / 210积分）</option>
+                  <option value="starter" selected>笔面试实战包（¥49.90 / 600积分）</option>
+                  <option value="pro">笔面试上岸包（¥149.00 / 2500积分）</option>
+                  <option value="unlimited">无忧包（¥399.90 / 8000积分）</option>
+                </select>
+              </div>
+              <div class="field"><label for="redeemCount">生成数量（1-500）</label><input id="redeemCount" type="number" min="1" max="500" value="10" /></div>
+              <div class="field"><label for="redeemExpiresDays">有效期（天，0=永久）</label><input id="redeemExpiresDays" type="number" min="0" value="0" /></div>
+              <div class="field"><label for="redeemNote">备注（批次说明）</label><input id="redeemNote" placeholder="例如：淘宝店铺 8 月批次" /></div>
+            </div>
+            <div class="actions" style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button id="generateRedeemBtn" type="button">批量生成</button>
+              <button id="copyRedeemBtn" class="secondary" type="button" hidden>复制全部兑换码</button>
+              <span id="generateRedeemStatus" style="font-size:13px;color:var(--muted)"></span>
+            </div>
+            <div class="field" style="margin-top:14px"><label for="generatedRedeemCodes">生成结果（可直接复制发给买家）</label>
+              <textarea id="generatedRedeemCodes" class="code-output" readonly placeholder="生成的兑换码将显示在这里"></textarea>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="toolbar"><div><h2>兑换码列表</h2><p>支持按状态、批次、兑换码、套餐筛选。来源为 admin 的码由后台生成，shop_order 为店铺订单自动生成。</p></div><button type="button" data-refresh="redemptionCodes">刷新</button></div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field"><label for="redeemFilterStatus">状态</label>
+                <select id="redeemFilterStatus">
+                  <option value="">全部</option>
+                  <option value="unused">未使用</option>
+                  <option value="redeemed">已兑换</option>
+                  <option value="disabled">已禁用</option>
+                </select>
+              </div>
+              <div class="field"><label for="redeemFilterBatch">批次</label><input id="redeemFilterBatch" placeholder="模糊匹配，可留空" /></div>
+              <div class="field"><label for="redeemFilterCode">兑换码</label><input id="redeemFilterCode" placeholder="模糊匹配，可留空" /></div>
+              <div class="field"><label for="redeemFilterPackage">套餐</label>
+                <select id="redeemFilterPackage">
+                  <option value="">全部</option>
+                  <option value="trial">笔面试体验包</option>
+                  <option value="starter">笔面试实战包</option>
+                  <option value="pro">笔面试上岸包</option>
+                  <option value="unlimited">无忧包</option>
+                </select>
+              </div>
+              <div class="actions" style="grid-column:auto;align-self:end"><button id="searchRedeemBtn" type="button">查询</button><button id="clearRedeemFilterBtn" class="secondary" type="button">清空条件</button></div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="redemptionCodes"></thead><tbody data-body="redemptionCodes"></tbody></table></div>
+          <div class="pagination" data-pagination="redemptionCodes"></div>
+        </section>
+
+        <section class="view" data-view="shop">
+          <div class="panel">
+            <div class="toolbar"><div><h2>店铺商品</h2><p>买家在店铺页选购商品并支付后，系统自动生成兑换码。商品关联积分套餐，可自定义名称与售价。</p></div><button type="button" data-refresh="shopProductsAdmin">刷新商品</button></div>
+            <h3 class="section-heading">新增商品</h3>
+            <div class="form-grid">
+              <div class="field"><label for="shopProductName">商品名称</label><input id="shopProductName" placeholder="例如：笔面试实战包充值卡" /></div>
+              <div class="field"><label for="shopProductPackage">关联积分套餐</label>
+                <select id="shopProductPackage">
+                  <option value="trial">笔面试体验包（210积分）</option>
+                  <option value="starter" selected>笔面试实战包（600积分）</option>
+                  <option value="pro">笔面试上岸包（2500积分）</option>
+                  <option value="unlimited">无忧包（8000积分）</option>
+                </select>
+              </div>
+              <div class="field"><label for="shopProductPrice">售价（元）</label><input id="shopProductPrice" type="number" min="0.01" step="0.01" placeholder="49.90" /></div>
+              <div class="field"><label for="shopProductSort">排序（小的靠前）</label><input id="shopProductSort" type="number" min="0" value="0" /></div>
+              <div class="field" style="grid-column:1/-1"><label for="shopProductDesc">商品描述</label><input id="shopProductDesc" placeholder="选填，显示在商品卡片上" /></div>
+            </div>
+            <div class="actions" style="margin-top:14px">
+              <button id="createShopProductBtn" type="button">新增商品</button>
+            </div>
+            <div class="table-wrap" style="margin-top:16px"><table><thead data-head="shopProductsAdmin"></thead><tbody data-body="shopProductsAdmin"></tbody></table></div>
+          </div>
+          <div class="panel">
+            <div class="toolbar"><div><h2>店铺订单</h2><p>店铺页产生的订单，支付成功后自动发放兑换码。买家可在店铺页凭订单号查询兑换码。</p></div><button type="button" data-refresh="shopOrders">刷新订单</button></div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field"><label for="shopOrderFilterStatus">状态</label>
+                <select id="shopOrderFilterStatus">
+                  <option value="">全部</option>
+                  <option value="created">已创建</option>
+                  <option value="waiting">待支付</option>
+                  <option value="paid">已支付</option>
+                  <option value="fulfilled">已发货（兑换码已生成）</option>
+                  <option value="expired">已过期</option>
+                  <option value="failed">失败</option>
+                </select>
+              </div>
+              <div class="field"><label for="shopOrderFilterEmail">买家邮箱</label><input id="shopOrderFilterEmail" placeholder="模糊匹配，可留空" /></div>
+              <div class="field"><label for="shopOrderFilterNo">订单号</label><input id="shopOrderFilterNo" placeholder="模糊匹配，可留空" /></div>
+              <div class="actions" style="grid-column:auto;align-self:end"><button id="searchShopOrdersBtn" type="button">查询</button><button id="clearShopOrdersFilterBtn" class="secondary" type="button">清空条件</button></div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="shopOrders"></thead><tbody data-body="shopOrders"></tbody></table></div>
+          <div class="pagination" data-pagination="shopOrders"></div>
+        </section>
+
+        <section class="view" data-view="paymentConfig">
+          <div class="panel">
+            <div class="toolbar">
+              <div><h2>支付配置</h2><p>官网和客户端统一使用这里的支付通道。密钥输入框留空会保留当前值。</p></div>
+              <button id="reloadPaymentBtn" class="secondary" type="button">读取当前配置</button>
+            </div>
+
+            <h3 class="section-heading">积分充值 · 易支付</h3>
+            <div class="inline-check"><input id="epayEnabled" type="checkbox" /><label for="epayEnabled">启用支付宝与微信积分充值</label></div>
+            <div class="form-grid">
+              <div class="field"><label for="epayApiUrl">接口地址</label><input id="epayApiUrl" type="url" placeholder="https://api.niman.cn/" /></div>
+              <div class="field"><label for="epayPid">商户 ID</label><input id="epayPid" autocomplete="off" /></div>
+              <div class="field"><label for="epayNotifyUrl">异步通知地址</label><input id="epayNotifyUrl" type="url" /></div>
+              <div class="field"><label for="epayReturnUrl">支付完成跳转地址</label><input id="epayReturnUrl" type="url" /></div>
+            </div>
+            <div class="field"><label for="epayMerchantPrivateKey">商户私钥</label><textarea id="epayMerchantPrivateKey" class="code-output" autocomplete="new-password" placeholder="留空保留当前密钥"></textarea><small id="epayMerchantPrivateKeyStatus"></small></div>
+            <div class="field"><label for="epayPlatformPublicKey">平台公钥</label><textarea id="epayPlatformPublicKey" class="code-output" autocomplete="new-password" placeholder="留空保留当前密钥"></textarea><small id="epayPlatformPublicKeyStatus"></small></div>
+            <div class="field"><label for="epayKey">兼容签名密钥</label><input id="epayKey" type="password" autocomplete="new-password" placeholder="留空保留当前密钥" /><small id="epayKeyStatus"></small></div>
+
+            <h3 class="section-heading">支付宝官方</h3>
+            <div class="inline-check"><input id="alipayEnabled" type="checkbox" /><label for="alipayEnabled">启用支付宝官方授权购买</label></div>
+            <div class="form-grid">
+              <div class="field"><label for="alipayAppId">应用 ID</label><input id="alipayAppId" autocomplete="off" /></div>
+              <div class="field"><label for="alipayGatewayUrl">网关地址</label><input id="alipayGatewayUrl" type="url" /></div>
+              <div class="field"><label for="alipayNotifyUrl">异步通知地址</label><input id="alipayNotifyUrl" type="url" /></div>
+            </div>
+            <div class="field"><label for="alipayAppPrivateKey">应用私钥</label><textarea id="alipayAppPrivateKey" class="code-output" autocomplete="new-password" placeholder="留空保留当前密钥"></textarea><small id="alipayAppPrivateKeyStatus"></small></div>
+            <div class="field"><label for="alipayPublicKey">支付宝公钥</label><textarea id="alipayPublicKey" class="code-output" autocomplete="new-password" placeholder="留空保留当前密钥"></textarea><small id="alipayPublicKeyStatus"></small></div>
+
+            <h3 class="section-heading">微信支付 · PayJS</h3>
+            <div class="inline-check"><input id="payjsEnabled" type="checkbox" /><label for="payjsEnabled">启用微信授权购买</label></div>
+            <div class="form-grid">
+              <div class="field"><label for="payjsMchId">商户号</label><input id="payjsMchId" autocomplete="off" /></div>
+              <div class="field"><label for="payjsNativeUrl">下单地址</label><input id="payjsNativeUrl" type="url" /></div>
+              <div class="field"><label for="payjsQueryUrl">查单地址</label><input id="payjsQueryUrl" type="url" /></div>
+              <div class="field"><label for="payjsNotifyUrl">异步通知地址</label><input id="payjsNotifyUrl" type="url" /></div>
+            </div>
+            <div class="field"><label for="payjsKey">通信密钥</label><input id="payjsKey" type="password" autocomplete="new-password" placeholder="留空保留当前密钥" /><small id="payjsKeyStatus"></small></div>
+
+            <h3 class="section-heading">历史授权价格</h3>
+            <div class="form-grid">
+              <div class="field"><label for="paymentPrice30">30 天价格（元）</label><input id="paymentPrice30" type="number" min="0.01" step="0.01" /></div>
+              <div class="field"><label for="paymentPrice90">90 天价格（元）</label><input id="paymentPrice90" type="number" min="0.01" step="0.01" /></div>
+              <div class="field"><label for="paymentPrice365">365 天价格（元）</label><input id="paymentPrice365" type="number" min="0.01" step="0.01" /></div>
+            </div>
+            <div class="actions" style="margin-top:18px"><button id="savePaymentBtn" type="button"><i data-lucide="save"></i>保存支付配置</button></div>
+          </div>
+        </section>
+
         <section class="view" data-view="domainInquiries">
           <div class="panel">
-            <div class="toolbar"><div><h2>域名询价</h2><p>bulidmate.com / bulidbuddy.com 售卖页公开提交的询价信息。提交后会自动发邮件通知 wangpengroy@qq.com。</p></div><button type="button" data-refresh="domainInquiries">刷新</button></div>
+            <div class="toolbar"><div><h2>域名询价</h2><p>域名售卖页公开提交的询价信息。提交后会自动发邮件通知 wangpengroy@qq.com。</p></div><button type="button" data-refresh="domainInquiries">刷新</button></div>
             <div class="form-grid" style="margin-top:14px">
               <div class="field"><label for="domainInquiryDomain">域名</label>
                 <select id="domainInquiryDomain">
                   <option value="">全部</option>
                   <option value="bulidmate.com">bulidmate.com</option>
                   <option value="bulidbuddy.com">bulidbuddy.com</option>
+                  <option value="warnmate.com">warnmate.com</option>
+                  <option value="inputmate.com">inputmate.com</option>
                 </select>
               </div>
               <div class="actions" style="align-self:end"><button id="searchDomainInquiriesBtn" type="button">查询</button><button id="clearDomainInquiriesFilterBtn" class="secondary" type="button">清空条件</button></div>
@@ -565,6 +833,11 @@
               <div class="field wide"><label for="asrApiKey">专属 API Key（<span id="asrKeyStatus">未读取</span>）</label><input id="asrApiKey" type="password" autocomplete="off" placeholder="不修改可留空" /></div>
             </div>
             <div class="actions" style="margin-top:12px"><button id="saveAsrConfigBtn" type="button">保存实时语音模型</button></div>
+
+            <h3 class="section-heading">面试助手提示词</h3>
+            <p style="margin:0 0 12px;color:#64748b;font-size:13px">用于 Windows 和 Mac 客户端的面试回答。系统会在此提示词后自动补充本次语言要求、岗位、公司、简历和面试问题。</p>
+            <div class="field"><label for="interviewPrompt">面试回答角色与规则</label><textarea id="interviewPrompt" style="min-height:220px"></textarea></div>
+            <div class="actions" style="margin-top:12px"><button id="saveInterviewPromptBtn" type="button">保存面试助手提示词</button></div>
 
             <h3 class="section-heading">回答格式提示词</h3>
             <div class="inline-check"><input id="answerFormatEnabled" type="checkbox" /><label for="answerFormatEnabled">启用回答格式提示词</label></div>
@@ -757,6 +1030,14 @@
 
     <script>
       const API_DEFAULT = "https://api.quizmate.vip/study-auth-api";
+      const CPAN_API_DEFAULT = "https://api.quizmate.vip/cpan-api";
+      const PRODUCTS = {
+        quizmate: { label: "答题悬浮助手", defaultView: "dashboard" },
+        cpan: { label: "C盘扩容", defaultView: "cpanDashboard" }
+      };
+      const LEGACY_API_ENDPOINTS = new Set([
+        "https://cuolemo-d4g2lqdczd74e3ae5.service.tcloudbase.com/study-auth-api"
+      ]);
       const CUSTOMER_SERVICE_URL = "https://kefu.quizmate.vip/";
       const tableActions = {
         accounts: "adminListCreditAccounts",
@@ -764,6 +1045,8 @@
         licenses: "adminListLicenses",
         devices: "adminListDevices",
         orders: "adminListOrders",
+        redemptionCodes: "adminListRedemptionCodes",
+        shopOrders: "adminListShopOrders",
         domainInquiries: "adminListDomainInquiries",
         knowledge: "adminListKnowledge",
         referrals: "adminListReferrals",
@@ -773,9 +1056,15 @@
       };
       const state = {
         activeView: "dashboard",
+        product: localStorage.getItem("study_admin_product") === "cpan" ? "cpan" : "quizmate",
+        cpanKey: sessionStorage.getItem("diskAdminKey") || "",
+        cpanVisitPeriod: "day",
+        cpanDownloadPeriod: "day",
         visitPeriod: "day",
         chartSource: "visit",
         downloadPeriod: "day",
+        downloadSelected: new Set(),
+        downloadData: null,
         accountToken: localStorage.getItem("study_admin_token") || "",
         accountEmail: localStorage.getItem("study_admin_email") || "",
         tables: Object.fromEntries(Object.keys(tableActions).map((key) => [key, { page: 1, pageSize: 20, total: 0, totalPages: 1, items: [] }])),
@@ -798,10 +1087,19 @@
         voiceModelBaseUrl: $("#voiceModelBaseUrl"), voiceModelApiPath: $("#voiceModelApiPath"), voiceModelName: $("#voiceModelName"), voiceModelApiKey: $("#voiceModelApiKey"),
         voiceModelTemperature: $("#voiceModelTemperature"), voiceModelSystemPrompt: $("#voiceModelSystemPrompt"), voiceModelKeyStatus: $("#voiceModelKeyStatus"), voiceModelApiFormat: $("#voiceModelApiFormat"),
         asrEnabled: $("#asrEnabled"), asrWsUrl: $("#asrWsUrl"), asrResourceId: $("#asrResourceId"), asrModelName: $("#asrModelName"), asrApiKey: $("#asrApiKey"), asrKeyStatus: $("#asrKeyStatus"),
+        interviewPrompt: $("#interviewPrompt"),
         answerFormatEnabled: $("#answerFormatEnabled"), answerFormatPrompt: $("#answerFormatPrompt"), androidFallbackMode: $("#androidFallbackMode"),
         knowledgeLicenseCode: $("#knowledgeLicenseCode"), knowledgeDeviceId: $("#knowledgeDeviceId"), knowledgeFileName: $("#knowledgeFileName"),
         orderStatus: $("#orderStatus"), orderType: $("#orderType"), orderProvider: $("#orderProvider"),
         orderEmail: $("#orderEmail"), orderNo: $("#orderNo"), orderStartDate: $("#orderStartDate"), orderEndDate: $("#orderEndDate"),
+        creditLogEmail: $("#creditLogEmail"), creditLogHideWhitelist: $("#creditLogHideWhitelist"),
+        epayEnabled: $("#epayEnabled"), epayApiUrl: $("#epayApiUrl"), epayPid: $("#epayPid"), epayKey: $("#epayKey"),
+        epayNotifyUrl: $("#epayNotifyUrl"), epayReturnUrl: $("#epayReturnUrl"), epayMerchantPrivateKey: $("#epayMerchantPrivateKey"), epayPlatformPublicKey: $("#epayPlatformPublicKey"),
+        epayKeyStatus: $("#epayKeyStatus"), epayMerchantPrivateKeyStatus: $("#epayMerchantPrivateKeyStatus"), epayPlatformPublicKeyStatus: $("#epayPlatformPublicKeyStatus"),
+        alipayEnabled: $("#alipayEnabled"), alipayAppId: $("#alipayAppId"), alipayGatewayUrl: $("#alipayGatewayUrl"), alipayNotifyUrl: $("#alipayNotifyUrl"),
+        alipayAppPrivateKey: $("#alipayAppPrivateKey"), alipayPublicKey: $("#alipayPublicKey"), alipayAppPrivateKeyStatus: $("#alipayAppPrivateKeyStatus"), alipayPublicKeyStatus: $("#alipayPublicKeyStatus"),
+        payjsEnabled: $("#payjsEnabled"), payjsMchId: $("#payjsMchId"), payjsKey: $("#payjsKey"), payjsNativeUrl: $("#payjsNativeUrl"), payjsQueryUrl: $("#payjsQueryUrl"), payjsNotifyUrl: $("#payjsNotifyUrl"), payjsKeyStatus: $("#payjsKeyStatus"),
+        paymentPrice30: $("#paymentPrice30"), paymentPrice90: $("#paymentPrice90"), paymentPrice365: $("#paymentPrice365"),
         purchaseTitle: $("#purchaseTitle"), purchaseDescription: $("#purchaseDescription"), purchaseImageUrl: $("#purchaseImageUrl"),
         purchaseUrl: $("#purchaseUrl"), purchaseButtonText: $("#purchaseButtonText"), contactInfo: $("#contactInfo"),
         tutorialTitle: $("#tutorialTitle"), tutorialVideoUrl: $("#tutorialVideoUrl"),
@@ -812,7 +1110,18 @@
         currentAdminEmail: $("#currentAdminEmail"),
         resetAdminEmail: $("#resetAdminEmail"), resetAdminPassword: $("#resetAdminPassword"),
         resetAdminPasswordConfirm: $("#resetAdminPasswordConfirm"), resetAdminCredentialsBtn: $("#resetAdminCredentialsBtn"),
-        resetAdminStatus: $("#resetAdminStatus")
+        resetAdminStatus: $("#resetAdminStatus"),
+        loginBrandTitle: $("#loginBrandTitle"), loginBrandDesc: $("#loginBrandDesc"),
+        sidebarBrandTitle: $("#sidebarBrandTitle"), sidebarBrandSub: $("#sidebarBrandSub"),
+        quizmateLoginFields: $("#quizmateLoginFields"), cpanLoginFields: $("#cpanLoginFields"),
+        quizmateNav: $("#quizmateNav"), cpanNav: $("#cpanNav"),
+        cpanApiEndpoint: $("#cpanApiEndpoint"), cpanAdminKey: $("#cpanAdminKey"),
+        cpanMetrics: $("#cpanMetrics"), cpanVisitChart: $("#cpanVisitChart"), cpanDownloadChart: $("#cpanDownloadChart"),
+        cpanPeriodVisits: $("#cpanPeriodVisits"), cpanVisitRange: $("#cpanVisitRange"),
+        cpanTodayVisits: $("#cpanTodayVisits"), cpanTotalVisits: $("#cpanTotalVisits"),
+        cpanPeriodDownloads: $("#cpanPeriodDownloads"), cpanDownloadRange: $("#cpanDownloadRange"),
+        cpanTodayDownloads: $("#cpanTodayDownloads"), cpanTotalDownloads: $("#cpanTotalDownloads"),
+        cpanOrdersBody: $("#cpanOrdersBody"), cpanUsersBody: $("#cpanUsersBody")
       };
 
       const columns = {
@@ -821,6 +1130,9 @@
         licenses: [["code", "序列号"], ["days", "天数"], ["status", "状态"], ["source", "来源"], ["deviceId", "绑定设备"], ["activatedAt", "激活时间"], ["expiresAt", "到期时间"], ["createdAt", "创建时间"], ["__actions", "操作"]],
         devices: [["licenseCode", "序列号"], ["deviceId", "设备 ID"], ["lastSeenAt", "最后在线"], ["createdAt", "首次绑定"], ["updatedAt", "更新时间"]],
         orders: [["outTradeNo", "订单号"], ["orderType", "订单类型"], ["status", "状态"], ["provider", "通道"], ["amount", "金额"], ["email", "邮箱"], ["packageId", "套餐"], ["totalCredits", "充值积分"], ["creditBalanceAfter", "到账后余额"], ["paidAt", "付款时间"], ["createdAt", "创建时间"], ["error", "错误"], ["__actions", "操作"]],
+        redemptionCodes: [["code", "兑换码"], ["packageName", "套餐"], ["totalCredits", "积分"], ["status", "状态"], ["source", "来源"], ["batchId", "批次"], ["shopOrderNo", "店铺订单"], ["redeemedEmail", "兑换邮箱"], ["note", "备注"], ["createdAt", "创建时间"], ["redeemedAt", "兑换时间"], ["expiresAt", "过期时间"], ["__actions", "操作"]],
+        shopOrders: [["orderNo", "订单号"], ["productName", "商品"], ["price", "金额"], ["buyerEmail", "买家邮箱"], ["buyerName", "买家昵称"], ["status", "状态"], ["paymentMethod", "支付方式"], ["redemptionCode", "兑换码"], ["paidAt", "付款时间"], ["createdAt", "创建时间"]],
+        shopProductsAdmin: [["name", "商品名称"], ["packageId", "套餐"], ["price", "售价"], ["status", "状态"], ["sortOrder", "排序"], ["description", "描述"], ["__actions", "操作"]],
         domainInquiries: [["domain", "域名"], ["name", "姓名"], ["phone", "联系电话"], ["email", "联系邮箱"], ["offer", "预计出价"], ["message", "留言"], ["clientIp", "来源 IP"], ["createdAt", "提交时间"]],
         knowledge: [["fileName", "文件名"], ["size", "大小"], ["textLength", "文本长度"], ["chunkCount", "分块数"], ["textPreview", "内容预览"], ["createdAt", "上传时间"], ["__actions", "操作"]],
         referrals: [["email", "被邀请人邮箱"], ["status", "状态"], ["registeredAt", "注册时间"], ["usedAt", "使用时间"], ["totalCharged", "充值总额"], ["totalCommission", "提成总额"]],
@@ -829,35 +1141,107 @@
         riskFlags: [["email", "邮箱"], ["type", "类型"], ["detail", "详情"], ["createdAt", "标记时间"]]
       };
 
+      const storedApiEndpoint = localStorage.getItem("study_api_endpoint") || "";
+      if (LEGACY_API_ENDPOINTS.has(storedApiEndpoint.replace(/\/+$/, ""))) {
+        localStorage.setItem("study_api_endpoint", API_DEFAULT);
+      }
       els.apiEndpoint.value = localStorage.getItem("study_api_endpoint") || API_DEFAULT;
       els.loginApiEndpoint.value = els.apiEndpoint.value;
+      els.cpanApiEndpoint.value = localStorage.getItem("cpan_api_endpoint") || CPAN_API_DEFAULT;
       els.loginEmail.value = state.accountEmail;
 
+      function cpanLoggedIn() { return state.product === "cpan" && !!state.cpanKey; }
+
       function updateLoginUI() {
-        const loggedIn = !!state.accountToken;
+        const loggedIn = state.product === "cpan" ? cpanLoggedIn() : !!state.accountToken;
         if (loggedIn) {
           els.loginView.hidden = true;
           els.adminShell.hidden = false;
-          els.currentAdminEmail.value = state.accountEmail;
-          setStatus(`已登录：${state.accountEmail}`, "success");
+          els.currentAdminEmail.value = state.product === "cpan" ? "C盘扩容 · 管理员密钥" : state.accountEmail;
+          setStatus(state.product === "cpan" ? "已验证 C盘扩容 管理员密钥。" : `已登录：${state.accountEmail}`, "success");
         } else {
           els.loginView.hidden = false;
           els.adminShell.hidden = true;
           els.loginPassword.value = "";
-          setLoginStatus("请输入管理员邮箱和密码登录。");
+          setLoginStatus(state.product === "cpan" ? "请输入 C盘扩容 管理员密钥登录。" : "请输入管理员邮箱和密码登录。");
         }
       }
 
       function setLoginStatus(text, type = "") { els.loginStatus.textContent = text; els.loginStatus.className = `login-status ${type}`.trim(); }
 
-      els.loginSubmitBtn.addEventListener("click", () => runLogin(loginAdmin));
+      // ===================== 产品切换 =====================
+      function switchProduct(product, { silent = false } = {}) {
+        if (!PRODUCTS[product]) product = "quizmate";
+        state.product = product;
+        localStorage.setItem("study_admin_product", product);
+        document.querySelectorAll("[data-product]").forEach((button) => button.classList.toggle("active", button.dataset.product === product));
+        document.querySelectorAll("[data-login-product]").forEach((button) => button.classList.toggle("active", button.dataset.loginProduct === product));
+        const isCpan = product === "cpan";
+        els.quizmateNav.hidden = isCpan;
+        els.cpanNav.hidden = !isCpan;
+        els.quizmateLoginFields.hidden = isCpan;
+        els.cpanLoginFields.hidden = !isCpan;
+        els.loginBrandTitle.textContent = isCpan ? "C盘扩容后台" : "答题悬浮助手后台";
+        els.loginBrandDesc.textContent = isCpan ? "请输入管理员密钥登录（与原 C盘扩容后台一致）" : "请输入管理员邮箱和密码登录";
+        els.sidebarBrandTitle.textContent = isCpan ? "C盘扩容后台" : "答题悬浮助手后台";
+        els.sidebarBrandSub.textContent = isCpan ? "磁盘轻扩 DiskPilot 运营管理" : "统一运营与积分管理";
+        document.querySelectorAll(".view").forEach((section) => section.classList.remove("active"));
+        document.querySelectorAll("[data-view-tab]").forEach((button) => button.classList.remove("active"));
+        const defaultView = PRODUCTS[product].defaultView;
+        const target = document.querySelector(`[data-view="${defaultView}"]`);
+        if (target) target.classList.add("active");
+        const targetTab = document.querySelector(`[data-view-tab="${defaultView}"]`);
+        if (targetTab) targetTab.classList.add("active");
+        state.activeView = defaultView;
+        updateLoginUI();
+        const loggedIn = isCpan ? cpanLoggedIn() : !!state.accountToken;
+        if (loggedIn && !silent) run(() => loadView(defaultView));
+        window.lucide?.createIcons();
+      }
+
+      document.querySelectorAll("[data-product]").forEach((button) => button.addEventListener("click", () => switchProduct(button.dataset.product)));
+      document.querySelectorAll("[data-login-product]").forEach((button) => button.addEventListener("click", () => switchProduct(button.dataset.loginProduct)));
+
+      async function cpanApi(action, payload = {}) {
+        const endpoint = els.cpanApiEndpoint.value.trim() || CPAN_API_DEFAULT;
+        localStorage.setItem("cpan_api_endpoint", endpoint);
+        const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, adminKey: state.cpanKey, ...payload }) });
+        let data;
+        try { data = await response.json(); } catch { throw new Error(`接口返回异常（HTTP ${response.status}）`); }
+        if (!response.ok || data.success === false) throw new Error(data.error || "请求失败");
+        return data.data || {};
+      }
+
+      async function cpanLogin() {
+        const key = els.cpanAdminKey.value.trim();
+        if (!key) throw new Error("请输入管理员密钥。");
+        setLoginStatus("正在验证密钥...");
+        state.cpanKey = key;
+        const summary = await cpanApi("adminSummary");
+        if (typeof summary.users !== "number") throw new Error("密钥验证失败");
+        sessionStorage.setItem("diskAdminKey", key);
+        localStorage.setItem("study_admin_product", "cpan");
+        updateLoginUI();
+        setStatus("C盘扩容 管理员密钥验证成功！", "success");
+        await loadView("cpanDashboard");
+      }
+
+      async function cpanLogout() {
+        state.cpanKey = "";
+        sessionStorage.removeItem("diskAdminKey");
+        updateLoginUI();
+      }
+
+      els.loginSubmitBtn.addEventListener("click", () => runLogin(state.product === "cpan" ? cpanLogin : loginAdmin));
       els.loginPassword.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); runLogin(loginAdmin); } });
-      $("#logoutBtn").addEventListener("click", () => run(logoutAdmin));
+      els.cpanAdminKey.addEventListener("keydown", (event) => { if (event.key === "Enter") { event.preventDefault(); runLogin(cpanLogin); } });
+      $("#logoutBtn").addEventListener("click", () => run(state.product === "cpan" ? cpanLogout : logoutAdmin));
       $("#createLicenseBtn").addEventListener("click", () => run(createLicenses));
       $("#saveModelBtn").addEventListener("click", () => run(saveModel));
       $("#saveImageModelBtn").addEventListener("click", () => run(saveImageModel));
       $("#saveVoiceModelBtn").addEventListener("click", () => run(saveVoiceModel));
       $("#saveAsrConfigBtn").addEventListener("click", () => run(saveAsrConfig));
+      $("#saveInterviewPromptBtn").addEventListener("click", () => run(saveInterviewPrompt));
       $("#reloadAiBtn").addEventListener("click", () => run(loadAiConfig));
       $("#saveAnswerFormatBtn").addEventListener("click", () => run(saveAnswerFormat));
       $("#reloadCuotiBtn").addEventListener("click", () => run(loadCuotiConfig));
@@ -865,7 +1249,109 @@
       $("#reloadOperationsBtn").addEventListener("click", () => run(loadOperationsConfig));
       $("#savePurchaseBtn").addEventListener("click", () => run(savePurchaseConfig));
       $("#saveTutorialBtn").addEventListener("click", () => run(saveTutorialConfig));
+      $("#reloadPaymentBtn").addEventListener("click", () => run(loadPaymentConfig));
+      $("#savePaymentBtn").addEventListener("click", () => run(savePaymentConfig));
       els.resetAdminCredentialsBtn.addEventListener("click", () => run(resetAdminCredentials));
+
+      // ===================== C盘扩容：概览/订单/用户 =====================
+      function cpanFmt(value) { if (!value) return "--"; const d = new Date(value); if (isNaN(d.getTime())) return escapeHtml(String(value)); return d.toLocaleString("zh-CN", { hour12: false }); }
+      function cpanBadge(text, type = "") { return `<span class="badge ${type}">${escapeHtml(text)}</span>`; }
+
+      async function loadCpanDashboard() {
+        const data = await cpanApi("adminSummary");
+        const metrics = [["今日访问", formatNumber(data.todayVisits ?? 0)], ["今日下载", formatNumber(data.todayDownloads ?? 0)], ["累计访问", formatNumber(data.totalVisits ?? 0)], ["累计下载", formatNumber(data.totalDownloads ?? 0)], ["账户数", formatNumber(data.users ?? 0)], ["VIP 用户", formatNumber(data.activeMembers ?? 0)], ["付费订单", formatNumber(data.paidOrders ?? 0)], ["收入(元)", `¥${formatNumber(data.revenue ?? 0)}`]];
+        els.cpanMetrics.innerHTML = metrics.map(([label, value]) => `<div class="metric"><span>${label}</span><strong>${value}</strong></div>`).join("");
+        await Promise.all([loadCpanVisitTrend(), loadCpanDownloadTrend()]);
+        setStatus("C盘扩容概览已刷新。", "success");
+      }
+
+      async function loadCpanVisitTrend() {
+        const data = await cpanApi("adminVisitTrend", { period: state.cpanVisitPeriod });
+        document.querySelectorAll("[data-cpan-visit-period]").forEach((button) => button.classList.toggle("active", button.dataset.cpanVisitPeriod === data.period));
+        els.cpanPeriodVisits.textContent = formatNumber(data.periodTotal ?? 0);
+        els.cpanVisitRange.textContent = `${data.rangeStart || "-"} 至 ${data.rangeEnd || "-"}`;
+        els.cpanTodayVisits.textContent = formatNumber(data.todayVisits ?? 0);
+        els.cpanTotalVisits.textContent = formatNumber(data.totalVisits ?? 0);
+        renderCpanTrend(els.cpanVisitChart, data.points || [], "#2563eb", "访问");
+      }
+
+      async function loadCpanDownloadTrend() {
+        const data = await cpanApi("adminDownloadTrend", { period: state.cpanDownloadPeriod });
+        document.querySelectorAll("[data-cpan-download-period]").forEach((button) => button.classList.toggle("active", button.dataset.cpanDownloadPeriod === data.period));
+        els.cpanPeriodDownloads.textContent = formatNumber(data.periodTotal ?? 0);
+        els.cpanDownloadRange.textContent = `${data.rangeStart || "-"} 至 ${data.rangeEnd || "-"}`;
+        els.cpanTodayDownloads.textContent = formatNumber(data.todayDownloads ?? 0);
+        els.cpanTotalDownloads.textContent = formatNumber(data.totalDownloads ?? 0);
+        renderCpanTrend(els.cpanDownloadChart, data.points || [], "#c2410c", "下载");
+      }
+
+      function renderCpanTrend(container, points, color, label) {
+        if (!points.length) { container.innerHTML = `<div class="visit-chart-empty">暂无数据</div>`; return; }
+        const width = 960, height = 300, margin = { top: 20, right: 24, bottom: 46, left: 58 };
+        const plotWidth = width - margin.left - margin.right, plotHeight = height - margin.top - margin.bottom;
+        const len = points.length;
+        const maximum = Math.max(1, ...points.map((p) => Number(p.count || 0)));
+        const xAt = (i) => margin.left + (len === 1 ? plotWidth / 2 : i * plotWidth / (len - 1));
+        const yAt = (count) => margin.top + plotHeight - Number(count || 0) / maximum * plotHeight;
+        const line = points.map((p, i) => `${i ? "L" : "M"} ${xAt(i).toFixed(1)} ${yAt(p.count).toFixed(1)}`).join(" ");
+        const labelStep = len > 16 ? 5 : 1;
+        const grid = Array.from({ length: 5 }, (_, index) => {
+          const ratio = index / 4, y = margin.top + ratio * plotHeight, value = Math.round(maximum * (1 - ratio));
+          return `<line class="grid-line" x1="${margin.left}" y1="${y}" x2="${width - margin.right}" y2="${y}"></line><text class="axis-label" x="${margin.left - 10}" y="${y + 4}" text-anchor="end">${formatNumber(value)}</text>`;
+        }).join("");
+        const labels = points.map((p, i) => (i % labelStep === 0 || i === len - 1) ? `<text class="axis-label" x="${xAt(i)}" y="${height - 14}" text-anchor="middle">${escapeHtml(p.label)}</text>` : "").join("");
+        const circles = points.map((p, i) => `<circle class="trend-point" cx="${xAt(i)}" cy="${yAt(p.count)}" r="3" fill="#fff" stroke="${color}" stroke-width="2"><title>${escapeHtml(label)} ${escapeHtml(p.label)}：${formatNumber(p.count)} 次</title></circle>`).join("");
+        const values = points.map((p, i) => { const c = Number(p.count || 0); return c ? `<text x="${xAt(i)}" y="${yAt(c) - 9}" text-anchor="middle" style="font-size:10px;font-weight:600;fill:${color}">${formatNumber(c)}</text>` : ""; }).join("");
+        container.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="${label}趋势图，区间共 ${formatNumber(points.reduce((s, p) => s + Number(p.count || 0), 0))} 次">${grid}<path fill="none" stroke="${color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="${line}"></path>${circles}${values}${labels}</svg>`;
+      }
+
+      document.querySelectorAll("[data-cpan-visit-period]").forEach((button) => button.addEventListener("click", () => { state.cpanVisitPeriod = button.dataset.cpanVisitPeriod; run(loadCpanVisitTrend); }));
+      document.querySelectorAll("[data-cpan-download-period]").forEach((button) => button.addEventListener("click", () => { state.cpanDownloadPeriod = button.dataset.cpanDownloadPeriod; run(loadCpanDownloadTrend); }));
+
+      async function loadCpanOrders() {
+        const data = await cpanApi("adminListOrders", { keyword: els.cpanOrderSearch?.value.trim() || "" });
+        const types = { paid: ["已支付", "green"], pending: ["待支付", "orange"], refunded: ["已退款", "red"], cancelled: ["已关闭", ""] };
+        els.cpanOrdersBody.innerHTML = data.items && data.items.length ? data.items.map((x) => {
+          const [label, type] = types[x.status] || [x.status, ""];
+          const discounted = Number(x.discountAmount || 0) > 0;
+          const amountCell = `<strong>¥${escapeHtml(x.amount || "")}</strong>${discounted ? `<small style="display:block;font-size:11px;color:#64748b">原价 ¥${escapeHtml(x.originalAmount || "")} · 优惠 ¥${escapeHtml(x.discountAmount || "")}</small>` : ""}`;
+          const actions = `<div class="actions">${x.status === "pending" ? `<button class="btn-sm" data-cpan-order="${escapeHtml(x.id)}" data-status="cancelled">关闭</button>` : ""}${x.status === "paid" ? `<button class="btn-sm btn-warning" data-cpan-order="${escapeHtml(x.id)}" data-status="refunded">退款</button>` : ""}</div>`;
+          return `<tr><td><strong>${escapeHtml(x.orderNo || "")}</strong></td><td>${escapeHtml(x.accountCode || x.email || "")}</td><td>${escapeHtml(x.planLabel || x.plan || "")}</td><td>${amountCell}</td><td>${cpanBadge(label, type)}</td><td>${cpanFmt(x.createdAt)}</td><td>${cpanFmt(x.paidAt)}</td><td>${actions}</td></tr>`;
+        }).join("") : `<tr><td class="empty" colspan="8">暂无订单数据</td></tr>`;
+        els.cpanOrdersBody.querySelectorAll("[data-cpan-order]").forEach((btn) => btn.addEventListener("click", () => run(() => cpanUpdateOrder(btn.dataset.cpanOrder, btn.dataset.status))));
+        setStatus("C盘扩容订单已刷新。", "success");
+      }
+
+      async function cpanUpdateOrder(orderId, status) {
+        const note = window.prompt("请输入处理备注（可留空）") || "";
+        if (!window.confirm(`确认将订单标记为“${status === "refunded" ? "已退款" : "已关闭"}”？`)) return;
+        await cpanApi("adminUpdateOrder", { orderId, status, note });
+        setStatus("订单已更新。", "success");
+        await Promise.all([loadCpanOrders(), loadCpanDashboard()]);
+      }
+
+      async function loadCpanUsers() {
+        const data = await cpanApi("adminListUsers", { keyword: els.cpanUserSearch?.value.trim() || "" });
+        els.cpanUsersBody.innerHTML = data.items && data.items.length ? data.items.map((x) => {
+          const vip = x.lifetimeActive ? (x.vipType === "lifetime" ? "永久 VIP" : "一年 VIP") : "普通用户";
+          const vipType = x.lifetimeActive ? "green" : "";
+          const status = x.status === "active" ? cpanBadge("正常", "green") : cpanBadge("已停用", "red");
+          const actions = `<div class="actions"><button data-cpan-user="${escapeHtml(x.id)}" data-op="toggleStatus">${x.status === "active" ? "停用" : "启用"}</button>${x.lifetimeActive ? `<button class="danger" data-cpan-user="${escapeHtml(x.id)}" data-op="revokeLifetime">撤销 VIP</button>` : `<button data-cpan-user="${escapeHtml(x.id)}" data-op="grantLifetime">授予永久 VIP</button>`}</div>`;
+          return `<tr><td><strong>${escapeHtml(x.accountCode || "")}</strong><small style="display:block;color:#94a3b8">${escapeHtml(x.id || "")}</small></td><td>${cpanBadge(vip, vipType)}</td><td>${status}</td><td>${cpanFmt(x.createdAt)}</td><td>${cpanFmt(x.lastLoginAt)}</td><td>${actions}</td></tr>`;
+        }).join("") : `<tr><td class="empty" colspan="6">暂无账户数据</td></tr>`;
+        els.cpanUsersBody.querySelectorAll("[data-cpan-user]").forEach((btn) => btn.addEventListener("click", () => run(() => cpanUpdateUser(btn.dataset.cpanUser, btn.dataset.op))));
+        setStatus("C盘扩容用户已刷新。", "success");
+      }
+
+      async function cpanUpdateUser(userId, operation) {
+        if (!window.confirm("确认执行此维护操作？操作会写入审计日志。")) return;
+        await cpanApi("adminUpdateUser", { userId, operation });
+        setStatus("用户信息已更新。", "success");
+        await Promise.all([loadCpanUsers(), loadCpanDashboard()]);
+      }
+
+      $("#cpanOrderSearchBtn")?.addEventListener("click", () => run(loadCpanOrders));
+      $("#cpanUserSearchBtn")?.addEventListener("click", () => run(loadCpanUsers));
       $("#searchKnowledgeBtn").addEventListener("click", () => { state.tables.knowledge.page = 1; run(() => loadTable("knowledge")); });
       $("#clearKnowledgeFilterBtn").addEventListener("click", () => { els.knowledgeLicenseCode.value = ""; els.knowledgeDeviceId.value = ""; els.knowledgeFileName.value = ""; state.tables.knowledge.page = 1; run(() => loadTable("knowledge")); });
       $("#searchOrdersBtn").addEventListener("click", () => { state.tables.orders.page = 1; run(() => loadTable("orders")); });
@@ -874,6 +1360,37 @@
         els.orderEmail.value = ""; els.orderNo.value = ""; els.orderStartDate.value = ""; els.orderEndDate.value = "";
         state.tables.orders.page = 1; run(() => loadTable("orders"));
       });
+      // 兑换码：批量生成 + 复制 + 筛选
+      $("#generateRedeemBtn").addEventListener("click", () => run(generateRedeemCodes));
+      $("#copyRedeemBtn").addEventListener("click", () => run(copyRedeemCodes));
+      $("#searchRedeemBtn").addEventListener("click", () => { state.tables.redemptionCodes.page = 1; run(() => loadTable("redemptionCodes")); });
+      $("#clearRedeemFilterBtn").addEventListener("click", () => {
+        $("#redeemFilterStatus").value = ""; $("#redeemFilterBatch").value = "";
+        $("#redeemFilterCode").value = ""; $("#redeemFilterPackage").value = "";
+        state.tables.redemptionCodes.page = 1; run(() => loadTable("redemptionCodes"));
+      });
+      // 店铺：商品创建 + 订单筛选
+      $("#createShopProductBtn").addEventListener("click", () => run(createShopProduct));
+      $("#searchShopOrdersBtn").addEventListener("click", () => { state.tables.shopOrders.page = 1; run(() => loadTable("shopOrders")); });
+      $("#clearShopOrdersFilterBtn").addEventListener("click", () => {
+        $("#shopOrderFilterStatus").value = ""; $("#shopOrderFilterEmail").value = ""; $("#shopOrderFilterNo").value = "";
+        state.tables.shopOrders.page = 1; run(() => loadTable("shopOrders"));
+      });
+      // 积分流水：筛选 + 白名单管理
+      els.creditLogHideWhitelist.checked = localStorage.getItem("study_admin_credit_hide_whitelist") !== "0";
+      els.creditLogHideWhitelist.addEventListener("change", () => {
+        localStorage.setItem("study_admin_credit_hide_whitelist", els.creditLogHideWhitelist.checked ? "1" : "0");
+        state.tables.creditLogs.page = 1;
+        run(() => loadTable("creditLogs"));
+      });
+      $("#searchCreditLogsBtn").addEventListener("click", () => { state.tables.creditLogs.page = 1; run(() => loadTable("creditLogs")); });
+      $("#clearCreditLogsFilterBtn").addEventListener("click", () => {
+        els.creditLogEmail.value = "";
+        els.creditLogHideWhitelist.checked = true;
+        localStorage.setItem("study_admin_credit_hide_whitelist", "1");
+        state.tables.creditLogs.page = 1; run(() => loadTable("creditLogs"));
+      });
+      $("#addCreditWhitelistBtn")?.addEventListener("click", () => run(addCreditWhitelistFromInput));
       $("#searchDomainInquiriesBtn").addEventListener("click", () => { state.tables.domainInquiries.page = 1; run(() => loadTable("domainInquiries")); });
       $("#clearDomainInquiriesFilterBtn").addEventListener("click", () => {
         $("#domainInquiryDomain").value = "";
@@ -931,6 +1448,11 @@
         });
         run(loadDownloadStats);
       }));
+      // 下载量看板：点击安装包卡片多选筛选趋势图（支持多选）
+      els.downloadMetrics.addEventListener("click", (event) => {
+        const card = event.target.closest("[data-download-product]");
+        if (card) toggleDownloadProduct(card.dataset.downloadProduct);
+      });
       document.addEventListener("click", handleActionClick);
       // 官网访问量点击打开明细弹窗
       els.metrics.addEventListener("click", (e) => {
@@ -947,8 +1469,11 @@
       document.addEventListener("change", handlePageSizeChange);
 
       updateLoginUI();
-      if (state.accountToken) {
-        switchView("dashboard");
+      if (state.accountToken || (state.product === "cpan" && state.cpanKey)) {
+        switchProduct(state.product, { silent: true });
+        run(() => loadView(state.activeView));
+      } else {
+        switchProduct(state.product, { silent: true });
       }
       window.lucide?.createIcons();
 
@@ -961,10 +1486,18 @@
 
       async function loadView(view) {
         if (view === "dashboard") return loadDashboard();
+        if (view === "creditLogs") return Promise.all([loadTable("creditLogs"), loadCreditWhitelist()]);
+        if (view === "cpanDashboard") return loadCpanDashboard();
+        if (view === "cpanOrders") return loadCpanOrders();
+        if (view === "cpanUsers") return loadCpanUsers();
+        if (view === "redemptionCodes") return Promise.all([loadTable("redemptionCodes")]);
+        if (view === "shop") return Promise.all([loadShopProductsAdmin(), loadTable("shopOrders")]);
+        if (view === "shopProductsAdmin") return loadShopProductsAdmin();
         if (tableActions[view]) return loadTable(view);
         if (view === "aiConfig") return loadAiConfig();
         if (view === "cuotiConfig") return loadCuotiConfig();
         if (view === "operations") return loadOperationsConfig();
+        if (view === "paymentConfig") return loadPaymentConfig();
         if (view === "referral") return loadReferralView();
         if (view === "adminSettings") { els.resetAdminEmail.value = state.accountEmail; els.resetAdminStatus.textContent = ""; }
       }
@@ -1030,6 +1563,45 @@
         setStatus(`已移除 ${ip} 的白名单`, "success");
       }
 
+      // ===================== 积分流水白名单 =====================
+      async function loadCreditWhitelist() {
+        const data = await api("adminGetCreditWhitelist", {});
+        const container = document.getElementById("creditWhitelistContent");
+        if (!data.items || data.items.length === 0) {
+          container.innerHTML = `<div style="font-size:13px;color:#64748b;padding:4px 0">暂无白名单邮箱</div>`;
+          return;
+        }
+        container.innerHTML = data.items.map((item) => `<div style="display:flex;align-items:center;gap:8px;padding:4px 0;font-size:13px"><span style="font-weight:600">${escapeHtml(item.email)}</span>${item.note ? `<span style="color:#64748b">(${escapeHtml(item.note)})</span>` : ""}<button type="button" class="btn-sm btn-warning" data-remove-credit-wl="${escapeHtml(item.email)}">移除</button></div>`).join("");
+        container.querySelectorAll("[data-remove-credit-wl]").forEach((btn) => btn.addEventListener("click", () => run(() => removeCreditWhitelist(btn.dataset.removeCreditWl))));
+      }
+
+      async function addCreditWhitelistFromInput() {
+        const email = document.getElementById("creditWhitelistEmailInput").value.trim();
+        const note = document.getElementById("creditWhitelistNoteInput").value.trim();
+        if (!email) { setStatus("请输入邮箱地址", "error"); return; }
+        await api("adminAddCreditWhitelist", { email, note });
+        document.getElementById("creditWhitelistEmailInput").value = "";
+        document.getElementById("creditWhitelistNoteInput").value = "";
+        await loadCreditWhitelist();
+        if (els.creditLogHideWhitelist.checked) { state.tables.creditLogs.page = 1; await loadTable("creditLogs"); }
+        setStatus(`已将 ${email} 加入流水白名单`, "success");
+      }
+
+      async function addCreditWhitelistEmail(email) {
+        if (!email) { setStatus("缺少邮箱。", "error"); return; }
+        await api("adminAddCreditWhitelist", { email, note: "从流水标注" });
+        await loadCreditWhitelist();
+        if (els.creditLogHideWhitelist.checked) { state.tables.creditLogs.page = 1; await loadTable("creditLogs"); }
+        setStatus(`已将 ${email} 加入流水白名单`, "success");
+      }
+
+      async function removeCreditWhitelist(email) {
+        await api("adminRemoveCreditWhitelist", { email });
+        await loadCreditWhitelist();
+        if (state.activeView === "creditLogs") { state.tables.creditLogs.page = 1; await loadTable("creditLogs"); }
+        setStatus(`已移除 ${email} 的流水白名单`, "success");
+      }
+
       // 下载量看板：各产品累计下载量 + 按天/周/月趋势
       async function loadDownloadStats() {
         const data = await api("adminDownloadStats", { period: state.downloadPeriod });
@@ -1043,8 +1615,24 @@
         { key: "quizmate-mac", label: "QuizMate Mac", icon: "apple", cls: "mac", color: "#6d28d9" },
         { key: "diskpilot-windows", label: "磁盘轻扩 Windows", icon: "hard-drive", cls: "diskpilot", color: "#c2410c" }
       ];
+      const DOWNLOAD_PRODUCT_KEYS = DOWNLOAD_PRODUCTS.map((item) => item.key);
+      (function restoreDownloadSelection() {
+        let stored = [];
+        try { stored = JSON.parse(localStorage.getItem("study_admin_download_products") || "[]"); } catch { stored = []; }
+        const valid = Array.isArray(stored) ? stored.filter((key) => DOWNLOAD_PRODUCT_KEYS.includes(key)) : [];
+        state.downloadSelected = new Set(valid.length ? valid : DOWNLOAD_PRODUCT_KEYS);
+      })();
+
+      function toggleDownloadProduct(key) {
+        if (!DOWNLOAD_PRODUCT_KEYS.includes(key)) return;
+        if (state.downloadSelected.has(key)) state.downloadSelected.delete(key);
+        else state.downloadSelected.add(key);
+        localStorage.setItem("study_admin_download_products", JSON.stringify([...state.downloadSelected]));
+        if (state.downloadData) renderDownloadStats(state.downloadData);
+      }
 
       function renderDownloadStats(data) {
+        state.downloadData = data;
         document.querySelectorAll("[data-download-period]").forEach((button) => {
           const active = button.dataset.downloadPeriod === data.period;
           button.classList.toggle("active", active);
@@ -1055,11 +1643,12 @@
         els.downloadMetrics.innerHTML = DOWNLOAD_PRODUCTS.map((item) => {
           const total = data.totals[item.key] ?? 0;
           const periodCount = data.series[item.key]?.periodCount ?? 0;
-          return `<div class="download-metric"><div class="dm-icon ${item.cls}"><i data-lucide="${item.icon}"></i></div><div class="dm-body"><span class="dm-label">${item.label}</span><strong class="dm-value">${formatNumber(total)}</strong><span class="dm-sub">当前区间 ${formatNumber(periodCount)} 次</span></div></div>`;
+          const selected = state.downloadSelected.has(item.key);
+          return `<div class="download-metric${selected ? " selected" : " unselected"}" data-download-product="${item.key}" role="button" tabindex="0" aria-pressed="${selected}" title="点击切换是否在趋势图中显示"><div class="dm-icon ${item.cls}"><i data-lucide="${item.icon}"></i></div><div class="dm-body"><span class="dm-label">${item.label}</span><strong class="dm-value">${formatNumber(total)}</strong><span class="dm-sub">当前区间 ${formatNumber(periodCount)} 次${selected ? "" : "（已隐藏）"}</span></div></div>`;
         }).join("");
         window.lucide?.createIcons();
-        // 图例
-        els.downloadLegend.innerHTML = DOWNLOAD_PRODUCTS.map((item) => {
+        // 图例：仅显示选中的安装包
+        els.downloadLegend.innerHTML = DOWNLOAD_PRODUCTS.filter((item) => state.downloadSelected.has(item.key)).map((item) => {
           const total = data.totals[item.key] ?? 0;
           return `<span class="legend-item"><i class="legend-dot" style="background:${item.color}"></i>${item.label} <strong>${formatNumber(total)}</strong></span>`;
         }).join("");
@@ -1067,7 +1656,11 @@
       }
 
       function renderDownloadChart(data) {
-        const series = DOWNLOAD_PRODUCTS.map((item) => ({ ...item, points: data.series[item.key]?.points ?? [] }));
+        const series = DOWNLOAD_PRODUCTS.filter((item) => state.downloadSelected.has(item.key)).map((item) => ({ ...item, points: data.series[item.key]?.points ?? [] }));
+        if (!series.length) {
+          els.downloadChart.innerHTML = `<div class="visit-chart-empty">请至少选择一个安装包</div>`;
+          return;
+        }
         const hasData = series.some((item) => item.points.length);
         if (!hasData) {
           els.downloadChart.innerHTML = `<div class="visit-chart-empty">暂无下载量数据</div>`;
@@ -1098,7 +1691,13 @@
           if (!item.points.length) return "";
           const line = lineOf(item.points);
           const circles = item.points.map((point, index) => `<circle class="trend-point" cx="${xAt(index)}" cy="${yAt(point.count)}" r="3" fill="#fff" stroke="${item.color}" stroke-width="2"><title>${escapeHtml(item.label)} ${escapeHtml(point.label)}：${formatNumber(point.count)} 次</title></circle>`).join("");
-          return `<path fill="none" stroke="${item.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="${line}"></path>${circles}`;
+          // 数据点上方显示下载数字
+          const valueLabels = item.points.map((point, index) => {
+            const count = Number(point.count || 0);
+            if (!count) return "";
+            return `<text x="${xAt(index)}" y="${yAt(count) - 9}" text-anchor="middle" style="font-size:10px;font-weight:600;fill:${item.color}">${formatNumber(count)}</text>`;
+          }).join("");
+          return `<path fill="none" stroke="${item.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" d="${line}"></path>${circles}${valueLabels}`;
         }).join("");
         const periodLabel = { day: "日", week: "周", month: "月" }[data.period] || "日";
         els.downloadChart.innerHTML = `<svg viewBox="0 0 ${width} ${height}" role="img" aria-label="客户端下载量按${periodLabel}趋势图，累计 ${formatNumber(data.grandTotal)} 次">${grid}${paths}${labels}</svg>`;
@@ -1228,13 +1827,138 @@
           endDate: els.orderEndDate.value
         };
       }
+
+      // ===================== 兑换码 & 店铺 =====================
+
+      function redemptionCodeFilters() {
+        return {
+          status: $("#redeemFilterStatus")?.value.trim() || "",
+          batchId: $("#redeemFilterBatch")?.value.trim() || "",
+          code: $("#redeemFilterCode")?.value.trim() || "",
+          packageId: $("#redeemFilterPackage")?.value.trim() || ""
+        };
+      }
+
+      function shopOrderFilters() {
+        return {
+          status: $("#shopOrderFilterStatus")?.value.trim() || "",
+          buyerEmail: $("#shopOrderFilterEmail")?.value.trim() || "",
+          orderNo: $("#shopOrderFilterNo")?.value.trim() || ""
+        };
+      }
+
+      async function generateRedeemCodes() {
+        const packageId = $("#redeemPackageId").value.trim();
+        const count = Math.max(1, Math.min(500, Math.floor(Number($("#redeemCount").value || 1))));
+        const expiresInDays = Math.max(0, Math.floor(Number($("#redeemExpiresDays").value || 0)));
+        const note = $("#redeemNote").value.trim();
+        const statusEl = $("#generateRedeemStatus");
+        const btn = $("#generateRedeemBtn");
+        btn.disabled = true;
+        statusEl.textContent = "正在生成...";
+        try {
+          const data = await api("adminGenerateRedemptionCodes", { packageId, count, expiresInDays, note });
+          const codes = data.codes || [];
+          $("#generatedRedeemCodes").value = codes.join("\n");
+          $("#copyRedeemBtn").hidden = false;
+          statusEl.textContent = `已生成 ${codes.length} 个兑换码（批次 ${data.batchId}，${data.packageName}，每码 ${data.totalCredits} 积分）。`;
+          state.tables.redemptionCodes.page = 1;
+          await loadTable("redemptionCodes");
+        } catch (error) {
+          statusEl.textContent = error.message || String(error);
+          throw error;
+        } finally {
+          btn.disabled = false;
+        }
+      }
+
+      async function copyRedeemCodes() {
+        const text = $("#generatedRedeemCodes").value.trim();
+        if (!text) return;
+        try {
+          await navigator.clipboard.writeText(text);
+          setStatus("兑换码已复制到剪贴板。", "success");
+        } catch {
+          $("#generatedRedeemCodes").select();
+          document.execCommand("copy");
+          setStatus("兑换码已复制到剪贴板。", "success");
+        }
+      }
+
+      async function copySingleCode(code) {
+        try {
+          await navigator.clipboard.writeText(code);
+          setStatus(`已复制 ${code}`, "success");
+        } catch {
+          window.prompt("请手动复制兑换码：", code);
+        }
+      }
+
+      async function disableRedeemCode(codeId, code) {
+        const reason = window.prompt(`禁用兑换码 ${code} 的原因（可留空）：`, "");
+        if (reason === null) return;
+        await api("adminDisableRedemptionCode", { codeId, reason: reason.trim() });
+        setStatus(`兑换码 ${code} 已禁用。`, "success");
+        await loadTable("redemptionCodes");
+      }
+
+      async function loadShopProductsAdmin() {
+        const data = await api("adminListShopProducts", {});
+        const items = data.items || [];
+        renderTable("shopProductsAdmin", items);
+        setStatus(`已读取 ${items.length} 个店铺商品。`, "success");
+      }
+
+      async function createShopProduct() {
+        const name = $("#shopProductName").value.trim();
+        const packageId = $("#shopProductPackage").value.trim();
+        const price = $("#shopProductPrice").value.trim();
+        const description = $("#shopProductDesc").value.trim();
+        const sortOrder = Math.max(0, Math.floor(Number($("#shopProductSort").value || 0)));
+        if (!name) throw new Error("请输入商品名称。");
+        if (!price || Number(price) <= 0) throw new Error("请输入大于 0 的售价。");
+        await api("adminCreateShopProduct", { name, packageId, price, description, sortOrder });
+        $("#shopProductName").value = "";
+        $("#shopProductPrice").value = "";
+        $("#shopProductDesc").value = "";
+        setStatus("商品已创建。", "success");
+        await loadShopProductsAdmin();
+      }
+
+      async function toggleShopProduct(productId, currentStatus) {
+        const next = currentStatus === "active" ? "inactive" : "active";
+        await api("adminUpdateShopProduct", { productId, status: next });
+        setStatus(`商品已${next === "active" ? "上架" : "下架"}。`, "success");
+        await loadShopProductsAdmin();
+      }
+
+      async function editShopProductPrice(productId, currentPrice) {
+        const input = window.prompt("请输入新售价（元）：", String(currentPrice || ""));
+        if (input === null) return;
+        const price = Number(input.trim());
+        if (!Number.isFinite(price) || price <= 0) throw new Error("价格必须大于 0。");
+        await api("adminUpdateShopProduct", { productId, price: price.toFixed(2) });
+        setStatus("商品价格已更新。", "success");
+        await loadShopProductsAdmin();
+      }
+
+      async function deleteShopProduct(productId) {
+        if (!window.confirm("确认删除该商品？进行中的订单不受影响。")) return;
+        await api("adminDeleteShopProduct", { productId });
+        setStatus("商品已删除。", "success");
+        await loadShopProductsAdmin();
+      }
       function domainInquiryFilters() {
         return { domain: $("#domainInquiryDomain").value.trim() };
       }
 
+      function creditLogFilters() {
+        return { email: els.creditLogEmail.value.trim(), excludeWhitelist: els.creditLogHideWhitelist.checked };
+      }
+
       async function loadTable(type) {
         const table = state.tables[type];
-        const extra = type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : {};
+        const extra = type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "creditLogs" ? creditLogFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : type === "redemptionCodes" ? redemptionCodeFilters() : type === "shopOrders" ? shopOrderFilters() : {};
         const payload = { page: table.page, pageSize: table.pageSize, ...extra };
         const data = await api(tableActions[type], payload);
         table.items = data.items || [];
@@ -1351,8 +2075,8 @@
       }
 
       async function loadAiConfig() {
-        const [model, imageModel, answerFormat, fallback, voiceModel, asr] = await Promise.all([
-          api("adminGetModelConfig", {}), api("adminGetImageModelConfig", {}), api("adminGetAnswerFormatConfig", {}), api("adminGetAndroidAnswerFallbackConfig", {}), api("adminGetVoiceModelConfig", {}), api("adminGetAsrConfig", {})
+        const [model, imageModel, answerFormat, fallback, voiceModel, asr, interviewPrompt] = await Promise.all([
+          api("adminGetModelConfig", {}), api("adminGetImageModelConfig", {}), api("adminGetAnswerFormatConfig", {}), api("adminGetAndroidAnswerFallbackConfig", {}), api("adminGetVoiceModelConfig", {}), api("adminGetAsrConfig", {}), api("adminGetInterviewPromptConfig", {})
         ]);
         els.modelBaseUrl.value = model.baseUrl || "";
         els.modelApiPath.value = model.apiPath || "";
@@ -1384,6 +2108,7 @@
         els.asrModelName.value = asr.model || "bigmodel";
         els.asrApiKey.value = "";
         els.asrKeyStatus.textContent = asr.hasApiKey ? `已配置 ${asr.apiKeyMasked || ""}` : "未配置";
+        els.interviewPrompt.value = interviewPrompt.prompt || "";
         els.answerFormatEnabled.checked = answerFormat.enabled !== false;
         els.answerFormatPrompt.value = answerFormat.prompt || "";
         els.androidFallbackMode.value = fallback.mode || "show_answer";
@@ -1436,6 +2161,12 @@
         setStatus("实时语音模型配置已保存。", "success");
       }
 
+      async function saveInterviewPrompt() {
+        const data = await api("adminSetInterviewPromptConfig", { prompt: els.interviewPrompt.value.trim() });
+        els.interviewPrompt.value = data.prompt || "";
+        setStatus("面试助手提示词已保存。", "success");
+      }
+
       async function saveAnswerFormat() {
         await Promise.all([
           api("adminSetAnswerFormatConfig", { enabled: els.answerFormatEnabled.checked, prompt: els.answerFormatPrompt.value.trim() }),
@@ -1478,6 +2209,81 @@
         setStatus("运营配置已读取。", "success");
       }
 
+      function paymentSecretStatus(hasSecret, masked) {
+        return hasSecret ? `已配置 ${masked || "****"}` : "未配置";
+      }
+
+      async function loadPaymentConfig() {
+        const data = await api("adminGetPaymentConfig", {});
+        els.epayEnabled.checked = data.epayEnabled === true;
+        els.epayApiUrl.value = data.epayApiUrl || "https://api.niman.cn/";
+        els.epayPid.value = data.epayPid || "";
+        els.epayNotifyUrl.value = data.epayNotifyUrl || "";
+        els.epayReturnUrl.value = data.epayReturnUrl || "https://quizmate.cn/recharge.html";
+        els.epayKey.value = "";
+        els.epayMerchantPrivateKey.value = "";
+        els.epayPlatformPublicKey.value = "";
+        els.epayKeyStatus.textContent = paymentSecretStatus(data.hasEpayKey, data.epayKeyMasked);
+        els.epayMerchantPrivateKeyStatus.textContent = paymentSecretStatus(data.hasEpayMerchantPrivateKey, data.epayMerchantPrivateKeyMasked);
+        els.epayPlatformPublicKeyStatus.textContent = paymentSecretStatus(data.hasEpayPlatformPublicKey, data.epayPlatformPublicKeyMasked);
+
+        els.alipayEnabled.checked = data.enabled === true;
+        els.alipayAppId.value = data.appId || "";
+        els.alipayGatewayUrl.value = data.gatewayUrl || "https://openapi.alipay.com/gateway.do";
+        els.alipayNotifyUrl.value = data.notifyUrl || "";
+        els.alipayAppPrivateKey.value = "";
+        els.alipayPublicKey.value = "";
+        els.alipayAppPrivateKeyStatus.textContent = paymentSecretStatus(data.hasAppPrivateKey, data.appPrivateKeyMasked);
+        els.alipayPublicKeyStatus.textContent = paymentSecretStatus(data.hasAlipayPublicKey, data.alipayPublicKeyMasked);
+
+        els.payjsEnabled.checked = data.wechatEnabled === true;
+        els.payjsMchId.value = data.payjsMchId || "";
+        els.payjsNativeUrl.value = data.payjsNativeUrl || "https://payjs.cn/api/native";
+        els.payjsQueryUrl.value = data.payjsQueryUrl || "https://payjs.cn/api/check";
+        els.payjsNotifyUrl.value = data.payjsNotifyUrl || "";
+        els.payjsKey.value = "";
+        els.payjsKeyStatus.textContent = paymentSecretStatus(data.hasPayjsKey, data.payjsKeyMasked);
+
+        els.paymentPrice30.value = data.prices?.[30] || data.prices?.["30"] || "19.80";
+        els.paymentPrice90.value = data.prices?.[90] || data.prices?.["90"] || "29.80";
+        els.paymentPrice365.value = data.prices?.[365] || data.prices?.["365"] || "69.80";
+        setStatus("支付配置已读取。", "success");
+      }
+
+      async function savePaymentConfig() {
+        const enabledNames = [
+          els.epayEnabled.checked ? "易支付" : "",
+          els.alipayEnabled.checked ? "支付宝官方" : "",
+          els.payjsEnabled.checked ? "微信支付" : ""
+        ].filter(Boolean).join("、") || "无";
+        if (!window.confirm(`确认保存支付配置？保存后，新订单和支付回调将立即使用新配置。\n当前启用：${enabledNames}`)) return;
+        const data = await api("adminSetPaymentConfig", {
+          epayEnabled: els.epayEnabled.checked,
+          epayApiUrl: els.epayApiUrl.value.trim(),
+          epayPid: els.epayPid.value.trim(),
+          epayKey: els.epayKey.value.trim(),
+          epayMerchantPrivateKey: els.epayMerchantPrivateKey.value.trim(),
+          epayPlatformPublicKey: els.epayPlatformPublicKey.value.trim(),
+          epayNotifyUrl: els.epayNotifyUrl.value.trim(),
+          epayReturnUrl: els.epayReturnUrl.value.trim(),
+          enabled: els.alipayEnabled.checked,
+          appId: els.alipayAppId.value.trim(),
+          gatewayUrl: els.alipayGatewayUrl.value.trim(),
+          appPrivateKey: els.alipayAppPrivateKey.value.trim(),
+          alipayPublicKey: els.alipayPublicKey.value.trim(),
+          notifyUrl: els.alipayNotifyUrl.value.trim(),
+          wechatEnabled: els.payjsEnabled.checked,
+          payjsMchId: els.payjsMchId.value.trim(),
+          payjsKey: els.payjsKey.value.trim(),
+          payjsNativeUrl: els.payjsNativeUrl.value.trim(),
+          payjsQueryUrl: els.payjsQueryUrl.value.trim(),
+          payjsNotifyUrl: els.payjsNotifyUrl.value.trim(),
+          prices: { 30: els.paymentPrice30.value, 90: els.paymentPrice90.value, 365: els.paymentPrice365.value }
+        });
+        await loadPaymentConfig();
+        setStatus(`支付配置已保存：${data.updatedAt ? formatDate(data.updatedAt) : "立即生效"}。`, "success");
+      }
+
       async function savePurchaseConfig() {
         await api("adminSetPurchaseConfig", { title: els.purchaseTitle.value.trim(), description: els.purchaseDescription.value.trim(), imageUrl: els.purchaseImageUrl.value.trim(), purchaseUrl: els.purchaseUrl.value.trim(), buttonText: els.purchaseButtonText.value.trim(), contactInfo: els.contactInfo.value.trim() });
         setStatus("购买与客服入口配置已保存。", "success");
@@ -1511,10 +2317,29 @@
           return `<div class="row-actions"><button class="small secondary" type="button" data-action="adjust-credits" data-account-id="${escapeHtml(item.accountId || "")}" data-email="${escapeHtml(item.email || "")}" data-credits="${escapeHtml(String(item.credits ?? 0))}">调整积分</button></div>`;
         }
         if (type === "creditLogs") {
-          return `<div class="row-actions"><button class="small danger" type="button" data-action="delete-credit-log" data-log-id="${escapeHtml(item.logId || "")}">删除</button></div>`;
+          return `<div class="row-actions"><button class="small secondary" type="button" data-action="add-credit-whitelist" data-email="${escapeHtml(item.email || "")}">加入白名单</button><button class="small danger" type="button" data-action="delete-credit-log" data-log-id="${escapeHtml(item.logId || "")}">删除</button></div>`;
         }
         if (type === "orders") {
           return `<div class="row-actions"><button class="small danger" type="button" data-action="delete-order" data-out-trade-no="${escapeHtml(item.outTradeNo || "")}">删除</button></div>`;
+        }
+        if (type === "redemptionCodes") {
+          const codeId = escapeHtml(String(item.codeId || ""));
+          const code = escapeHtml(item.code || "");
+          const actions = [`<button class="small secondary" type="button" data-action="copy-redeem-code" data-code="${code}">复制</button>`];
+          if (item.status === "unused") {
+            actions.push(`<button class="small danger" type="button" data-action="disable-redeem-code" data-code-id="${codeId}" data-code="${code}">禁用</button>`);
+          }
+          return `<div class="row-actions">${actions.join("")}</div>`;
+        }
+        if (type === "shopProductsAdmin") {
+          const productId = escapeHtml(String(item.productId || ""));
+          const status = item.status || "";
+          const actions = [
+            `<button class="small secondary" type="button" data-action="edit-shop-product-price" data-product-id="${productId}" data-price="${escapeHtml(String(item.price || ""))}">改价</button>`,
+            `<button class="small secondary" type="button" data-action="toggle-shop-product" data-product-id="${productId}" data-status="${escapeHtml(status)}">${status === "active" ? "下架" : "上架"}</button>`,
+            `<button class="small danger" type="button" data-action="delete-shop-product" data-product-id="${productId}">删除</button>`
+          ];
+          return `<div class="row-actions">${actions.join("")}</div>`;
         }
         if (type === "licenses") {
           const code = escapeHtml(item.code || "");
@@ -1554,7 +2379,13 @@
         if (action === "bind-license") return run(() => bindLicense(button.dataset.code));
         if (action === "unbind-license") return run(() => unbindLicense(button.dataset.code));
         if (action === "delete-credit-log") return run(() => deleteCreditLog(button.dataset.logId));
+        if (action === "add-credit-whitelist") return run(() => addCreditWhitelistEmail(button.dataset.email));
         if (action === "delete-order") return run(() => deleteOrder(button.dataset.outTradeNo));
+        if (action === "copy-redeem-code") return run(() => copySingleCode(button.dataset.code));
+        if (action === "disable-redeem-code") return run(() => disableRedeemCode(button.dataset.codeId, button.dataset.code));
+        if (action === "edit-shop-product-price") return run(() => editShopProductPrice(button.dataset.productId, button.dataset.price));
+        if (action === "toggle-shop-product") return run(() => toggleShopProduct(button.dataset.productId, button.dataset.status));
+        if (action === "delete-shop-product") return run(() => deleteShopProduct(button.dataset.productId));
         if (action === "delete-knowledge") return run(() => deleteUserKnowledge(button.dataset.docId, button.dataset.fileName));
         if (action === "approve-withdrawal") return run(() => approveWithdrawal(button.dataset.withdrawalId));
         if (action === "mark-withdrawal-paid") return run(() => markWithdrawalPaid(button.dataset.withdrawalId));

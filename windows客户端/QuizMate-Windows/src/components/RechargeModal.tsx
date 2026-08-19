@@ -17,9 +17,9 @@ interface Package {
 
 // 套餐信息与官网 recharge.html 一致
 const PACKAGES: Package[] = [
-  { id: 'trial', name: '笔试体验包', credits: 210, price: 19.90, unitPrice: '0.095', feature: '先体验账户、充值和积分扣费流程', recommended: false },
-  { id: 'starter', name: '笔试实战包', credits: 600, price: 49.90, unitPrice: '0.083', feature: '适合日常练习与短期备考', recommended: true },
-  { id: 'pro', name: '笔试上岸包', credits: 2500, price: 149, unitPrice: '0.060', feature: '适合密集练习和长期刷题', recommended: false },
+  { id: 'trial', name: '笔面试体验包', credits: 210, price: 19.90, unitPrice: '0.095', feature: '先体验账户、充值和积分扣费流程', recommended: false },
+  { id: 'starter', name: '笔面试实战包', credits: 600, price: 49.90, unitPrice: '0.083', feature: '适合日常练习与短期备考', recommended: true },
+  { id: 'pro', name: '笔面试上岸包', credits: 2500, price: 149, unitPrice: '0.060', feature: '适合密集练习和长期刷题', recommended: false },
   { id: 'unlimited', name: '无忧包', credits: 8000, price: 399.90, unitPrice: '0.050', feature: '大额储备，单次积分成本更低', recommended: false },
 ];
 
