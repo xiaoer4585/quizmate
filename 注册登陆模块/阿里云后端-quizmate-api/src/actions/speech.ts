@@ -70,14 +70,17 @@ function resolveAnswerLanguage(question: string, contextLanguage: string): "中�
   return contextLanguage.toLowerCase().startsWith("en") ? "English" : "中文";
 }
 
+// 面试参考回答两层结构的分隔符（【答题思路】与【详细回答】之间单独一行）
+export const INTERVIEW_SECTION_DIVIDER = "----------";
+
 export function buildInterviewPrompt(
   question: string,
   context: InterviewContext,
   configuredPrompt = DEFAULT_INTERVIEW_PROMPT
 ): string {
   const detail = context.answerStyle === "detailed"
-    ? "给出结构完整、可直接口述的详细回答"
-    : "给出简洁、自然、可直接口述的回答，优先控制在 150 至 300 字";
+    ? "【详细回答】给出结构完整、可直接口述的详细回答"
+    : "【详细回答】给出简洁、自然、可直接口述的回答，优先控制在 150 至 300 字";
   const answerLanguage = resolveAnswerLanguage(question, context.language);
   const selfIntroduction = /(?:介绍|介绍下|介绍一下|自我介绍|about yourself|tell me about yourself|introduce yourself)/i.test(question);
   return [
@@ -92,9 +95,9 @@ export function buildInterviewPrompt(
     context.jobDescription ? `岗位描述：\n${context.jobDescription}` : "",
     context.resumeText ? `候选人简历：\n${context.resumeText}` : "",
     `面试官问题：${question}`,
-    "硬性排版要求：结论单独一段；1、2、3 各自单独一段，段落之间空一行；禁止把三个编号写在同一行。",
+    "硬性排版要求：参考回答固定分两层，两层中间单独一行输出分隔符“" + INTERVIEW_SECTION_DIVIDER + "”；【答题思路】分 3 至 5 步、每步独占一行；【详细回答】结论单独一段，1、2、3 各自单独一段，段落之间空一行；禁止把三个编号写在同一行。",
     "仅输出 JSON，格式为：",
-    '{"items":[{"summary":"问题摘要","answer":"结论段\\n\\n1、第一点\\n\\n2、第二点\\n\\n3、第三点\\n\\n简短收束","explanation":""}]}'
+    '{"items":[{"summary":"问题摘要","answer":"【答题思路】\\n第一步…\\n第二步…\\n\\n' + INTERVIEW_SECTION_DIVIDER + '\\n\\n【详细回答】\\n结论段\\n\\n1、第一点\\n\\n2、第二点\\n\\n3、第三点\\n\\n简短收束","explanation":""}]}'
   ].filter(Boolean).join("\n\n");
 }
 
@@ -110,6 +113,8 @@ export function formatInterviewAnswer(value: string): string {
     .split(/\n+/)
     .map((line) => {
       const trimmed = line.trim();
+      // 模型输出的分隔线（长度不一的横线）统一规范为标准分隔符
+      if (/^[-\u2010-\u2015_=]{3,}$/.test(trimmed)) return INTERVIEW_SECTION_DIVIDER;
       if (/^[-*•]\s*/.test(trimmed) && bulletIndex < 3) {
         bulletIndex += 1;
         return `${bulletIndex}、${trimmed.replace(/^[-*•]\s*/, "")}`;
@@ -121,6 +126,9 @@ export function formatInterviewAnswer(value: string): string {
 
   return numberedBullets
     .replace(/\s+(?=(?:[123][、．.)）])\s*)/g, "\n\n")
+    // 两层标题后空一行、分隔符前后各空一行，保证上下两段清晰可分
+    .replace(/(【答题思路】|【详细回答】)[ \t]*\n/g, "$1\n\n")
+    .replace(/\n*[ \t]*----------[ \t]*\n*/g, `\n\n${INTERVIEW_SECTION_DIVIDER}\n\n`)
     .replace(/\n\s*\n+/g, "\n\n")
     .trim();
 }

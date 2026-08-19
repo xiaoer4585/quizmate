@@ -125,9 +125,12 @@ describe("model result parser", () => {
 
     expect(calledUrl).toBe("https://fast.example/chat/completions");
     expect(calledBody.model).toBe("doubao-seed-2.0-mini");
-    expect(calledBody.max_tokens).toBe(900);
+    // 面试模式输出双层回答（答题思路 + 详细回答），max_tokens 由 900 提升至 1600
+    expect(calledBody.max_tokens).toBe(1600);
     expect(calledBody.thinking).toEqual({ type: "disabled" });
     expect((calledBody.messages as Array<{ content: string }>)[0].content).toContain("实时面试回答助手");
+    expect((calledBody.messages as Array<{ content: string }>)[0].content).toContain("答题思路");
+    expect((calledBody.messages as Array<{ content: string }>)[0].content).toContain("详细回答");
     expect(result.items[0].answer).toBe("回答");
   });
 });

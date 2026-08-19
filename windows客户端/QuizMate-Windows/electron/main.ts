@@ -311,6 +311,8 @@ function createOverlayWindow() {
 
   state.overlayWindow.on('move', () => {
     if (!state.overlayWindow) return;
+    // 窗口移动后复位鼠标穿透，修复按钮悬停状态可能卡在“可点击”
+    state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
     const b = state.overlayWindow.getBounds();
     state.windowPosition = { x: b.x, y: b.y };
     state.currentX = b.x;
@@ -320,6 +322,8 @@ function createOverlayWindow() {
 
   state.overlayWindow.on('resize', () => {
     if (!state.overlayWindow) return;
+    // 窗口缩放后复位鼠标穿透
+    state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
     const b = state.overlayWindow.getBounds();
     state.windowSize = { width: b.width, height: b.height };
     configHelper.setWindowSize({ width: b.width, height: b.height });
@@ -456,11 +460,17 @@ function setTheme(theme: 'dark' | 'light') {
   broadcastTheme(theme);
 }
 
-function setIgnoreMouseEvents(_ignore: boolean) {
-  // 悬浮窗始终鼠标穿透，不接受 false 参数
-  // 这是核心设计：用户通过快捷键操作，悬浮窗不干扰下方应用
+function setIgnoreMouseEvents(ignore: boolean) {
+  // 悬浮窗默认鼠标穿透（forward 保持 mousemove 转发以支持按钮 hover 检测）。
+  // 仅渲染层头部“截图/搜题/复制”按钮悬停时临时传 false，供快捷键被
+  // 考试输入框/输入法拦截时的鼠标兜底触发；窗口移动/缩放/显隐/截图流程
+  // 都会重新恢复穿透，避免悬浮窗长期可点击而遮挡考试页面。
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
-    state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    if (ignore) {
+      state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    } else {
+      state.overlayWindow.setIgnoreMouseEvents(false);
+    }
   }
 }
 
@@ -1021,6 +1031,25 @@ function createTrayManager(): void {
           if (r.success) updateTrayState();
         });
       }
+    },
+    // 托盘兜底：考试输入框/输入法拦截全局快捷键时，可用鼠标从托盘触发截图与搜题
+    captureScreenshot: async () => {
+      if (state.interviewOverlayActive) return;
+      const mode = configHelper.getProcessingMode();
+      if (mode !== 'voice' && (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible)) {
+        const r = await launchExamClient();
+        if (!r.success) return;
+      }
+      await handleScreenshot(false);
+    },
+    searchQuestion: async () => {
+      if (state.interviewOverlayActive) return;
+      const mode = configHelper.getProcessingMode();
+      if (mode !== 'voice' && (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible)) {
+        const r = await launchExamClient();
+        if (!r.success) return;
+      }
+      await handleSearchAction(mode);
     },
     refreshCredits: () => {
       authManager.isAuthenticated().then((authed) => {

@@ -15,6 +15,8 @@ export interface TrayCallbacks {
   showLogin: () => void
   showSettings: () => void
   toggleOverlay: () => void
+  captureScreenshot: () => void
+  searchQuestion: () => void
   refreshCredits: () => void
   quit: () => void
 }
@@ -114,12 +116,23 @@ export class TrayManager {
     items.push({
       label: this.state.isOverlayActive ? '隐藏悬浮框' : '显示悬浮框',
       click: () => this.callbacks.toggleOverlay(),
-    })
+    });
+
+    // 兜底入口：考试输入框/输入法拦截全局快捷键时，可用鼠标从托盘触发
+    items.push({
+      label: '全屏截图',
+      click: () => this.callbacks.captureScreenshot(),
+    });
+
+    items.push({
+      label: '搜题',
+      click: () => this.callbacks.searchQuestion(),
+    });
 
     items.push({
       label: '设置',
       click: () => this.callbacks.showSettings(),
-    })
+    });
 
     items.push({ type: 'separator' })
 

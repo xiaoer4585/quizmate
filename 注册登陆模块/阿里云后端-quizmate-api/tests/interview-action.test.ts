@@ -61,11 +61,35 @@ describe("interview speech action", () => {
     expect(prompt).not.toContain("回答要点，每个要点单独一行");
   });
 
+  it("requires the two-layer answer structure with divider and position-expert persona", () => {
+    const logicPrompt = buildInterviewPrompt("给定一个字符串流，如何实现滑动窗口求最长不重复子串长度", context);
+    expect(logicPrompt).toContain("答题思路");
+    expect(logicPrompt).toContain("详细回答");
+    expect(logicPrompt).toContain("----------");
+    expect(logicPrompt).toContain("资深专家");
+    // 逻辑题先思路后详细回答，常规面试问题顺序相反（由提示词约束模型自适应）
+    expect(logicPrompt).toContain("先输出【答题思路】再输出【详细回答】");
+    expect(logicPrompt).toContain("先输出【详细回答】");
+    expect(logicPrompt).toContain("应聘岗位：Product Manager");
+    expect(logicPrompt).toContain("【详细回答】给出简洁、自然、可直接口述的回答");
+  });
+
   it("keeps the conclusion and numbered support in readable paragraphs", () => {
     expect(formatInterviewAnswer("我会先明确目标。 1、统一口径。 2、拆解责任。 3、跟踪复盘。"))
       .toBe("我会先明确目标。\n\n1、统一口径。\n\n2、拆解责任。\n\n3、跟踪复盘。");
     expect(formatInterviewAnswer("结论\n- 第一项\n- 第二项\n- 第三项"))
       .toBe("结论\n\n1、第一项\n\n2、第二项\n\n3、第三项");
+  });
+
+  it("preserves the two-layer divider and section headers when formatting", () => {
+    expect(formatInterviewAnswer(
+      "【答题思路】\n第一步 定位题型\n第二步 给出框架\n----------\n【详细回答】\n我的结论。 1、支撑点一。 2、支撑点二。"
+    )).toBe(
+      "【答题思路】\n\n第一步 定位题型\n第二步 给出框架\n\n----------\n\n【详细回答】\n\n我的结论。\n\n1、支撑点一。\n\n2、支撑点二。"
+    );
+    // 模型输出不同长度的横线分隔符时统一规范，且不再被当作项目符号吞噬
+    expect(formatInterviewAnswer("结论A\n-------------\n结论B"))
+      .toBe("结论A\n\n----------\n\n结论B");
   });
 
   it("registers the interview answer action", () => {
