@@ -44,6 +44,7 @@ function publicAccount(account: AccountRow) {
     credits: Number(account.credits),
     totalChargedCredits: Number(account.total_charged_credits),
     totalConsumedCredits: Number(account.total_consumed_credits),
+    isOldUser: Number(account.total_charged_credits) > 0,
     registerBonusCredits: Number(account.register_bonus_credits),
     status: account.status,
     role: account.role || "user",
@@ -76,6 +77,17 @@ async function findAccountByEmail(client: PoolClient, email: string, lock = fals
     [email]
   );
   return result.rows[0];
+}
+
+async function resolveInviterId(client: PoolClient, inviteCode: string): Promise<string | undefined> {
+  if (!inviteCode) return undefined;
+  const result = await client.query<{ account_id: string }>(
+    "SELECT account_id FROM accounts WHERE invite_code = $1",
+    [inviteCode]
+  );
+  const inviterId = result.rows[0]?.account_id;
+  if (!inviterId) throw new PublicError("邀请码无效，请检查后重试或留空。", "INVALID_INVITE_CODE");
+  return inviterId;
 }
 
 async function verifyCode(
@@ -211,6 +223,7 @@ function registerHandler(deps: ActionDependencies): ActionHandler {
     const inviteCode = String(input.inviteCode ?? input.ref ?? "").trim().toUpperCase();
     const deviceId = String(input.deviceId ?? "").trim().slice(0, 200);
     return transaction(deps, async (client) => {
+      const inviterId = await resolveInviterId(client, inviteCode);
       const codeId = await verifyCode(client, deps, email, "register", input.code ?? input.emailCode);
       if (await findAccountByEmail(client, email, true)) throw new PublicError("该邮箱已经注册，请直接登录。", "ACCOUNT_EXISTS");
       const accountId = crypto.randomUUID();
@@ -235,70 +248,57 @@ function registerHandler(deps: ActionDependencies): ActionHandler {
 
       // 邀请码绑定：查找邀请人并创建邀请关系
       let referralStatus = "";
-      if (inviteCode) {
-        const inviterResult = await client.query<{ account_id: string }>(
-          "SELECT account_id FROM accounts WHERE invite_code = $1 AND account_id <> $2",
-          [inviteCode, accountId]
+      if (inviteCode && inviterId) {
+        // 检查邀请人是否已达上限
+        const countResult = await client.query<{ count: string }>(
+          "SELECT COUNT(*)::text AS count FROM referrals WHERE inviter_account_id = $1 AND status <> 'device_blocked'",
+          [inviterId]
         );
-        const inviterId = inviterResult.rows[0]?.account_id;
-        if (inviterId) {
-          // 检查邀请人是否已达上限
-          const countResult = await client.query<{ count: string }>(
-            "SELECT COUNT(*)::text AS count FROM referrals WHERE inviter_account_id = $1 AND status <> 'device_blocked'",
-            [inviterId]
-          );
-          const invitedCount = Number(countResult.rows[0]?.count ?? 0);
-          const MAX_REFERRAL = 50;
+        const invitedCount = Number(countResult.rows[0]?.count ?? 0);
+        const MAX_REFERRAL = 50;
 
-          let status = "registered";
-          let isDeviceBlocked = false;
+        let status = "registered";
+        let isDeviceBlocked = false;
 
-          // 同设备检查：邀请人是否在同一设备注册过
-          if (deviceId) {
-            const deviceCheck = await client.query<{ account_id: string }>(
-              `SELECT a.account_id FROM devices d
+        // 同设备检查：邀请人是否在同一设备注册过
+        if (deviceId) {
+          const deviceCheck = await client.query<{ account_id: string }>(
+            `SELECT a.account_id FROM devices d
                 JOIN accounts a ON d.account_id = a.account_id
                WHERE d.device_id = $1 AND a.account_id = $2 AND d.revoked_at IS NULL
                LIMIT 1`,
-              [deviceId, inviterId]
-            );
-            // 也检查邀请关系表中是否已有同设备记录
-            const existingDeviceReferral = await client.query(
-              "SELECT referral_id FROM referrals WHERE inviter_account_id = $1 AND device_id = $2",
-              [inviterId, deviceId]
-            );
-            if (deviceCheck.rows.length > 0 || existingDeviceReferral.rows.length > 0) {
-              status = "device_blocked";
-              isDeviceBlocked = true;
-            }
-          }
-
-          if (invitedCount >= MAX_REFERRAL && !isDeviceBlocked) {
-            status = "registered";
-          }
-
-          await client.query(
-            `INSERT INTO referrals(inviter_account_id, invitee_account_id, invite_code, status, device_id, registered_at)
-             VALUES ($1, $2, $3, $4, NULLIF($5, ''), now())`,
-            [inviterId, accountId, inviteCode, status, deviceId]
+            [deviceId, inviterId]
           );
-          await client.query(
-            "UPDATE accounts SET referred_by = $2 WHERE account_id = $1",
-            [accountId, inviterId]
+          const existingDeviceReferral = await client.query(
+            "SELECT referral_id FROM referrals WHERE inviter_account_id = $1 AND device_id = $2",
+            [inviterId, deviceId]
           );
-
-          // 风险标记：同设备
-          if (isDeviceBlocked) {
-            await client.query(
-              `INSERT INTO referral_risk_flags(referral_id, risk_type, detail)
-               VALUES (currval('referrals_referral_id_seq'::regclass), 'same_device', $1)`,
-              [`邀请人与被邀请人使用同一设备 ${deviceId}`]
-            );
+          if (deviceCheck.rows.length > 0 || existingDeviceReferral.rows.length > 0) {
+            status = "device_blocked";
+            isDeviceBlocked = true;
           }
-
-          // 风险标记：自邀请检查（理论上不会触发，因为 invite_code 查询排除了自己）
-          referralStatus = status;
         }
+
+        if (invitedCount >= MAX_REFERRAL && !isDeviceBlocked) status = "registered";
+
+        await client.query(
+          `INSERT INTO referrals(inviter_account_id, invitee_account_id, invite_code, status, device_id, registered_at)
+             VALUES ($1, $2, $3, $4, NULLIF($5, ''), now())`,
+          [inviterId, accountId, inviteCode, status, deviceId]
+        );
+        await client.query(
+          "UPDATE accounts SET referred_by = $2 WHERE account_id = $1",
+          [accountId, inviterId]
+        );
+
+        if (isDeviceBlocked) {
+          await client.query(
+            `INSERT INTO referral_risk_flags(referral_id, risk_type, detail)
+               VALUES (currval('referrals_referral_id_seq'::regclass), 'same_device', $1)`,
+            [`邀请人与被邀请人使用同一设备 ${deviceId}`]
+          );
+        }
+        referralStatus = status;
       }
 
       await client.query("UPDATE email_codes SET status = 'used', used_at = now() WHERE code_id = $1", [codeId]);

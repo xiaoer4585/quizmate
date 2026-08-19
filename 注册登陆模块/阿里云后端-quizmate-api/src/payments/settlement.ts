@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { PoolClient } from "pg";
 import type { Database } from "../db.js";
-import { REFERRAL_COMMISSION_RATE } from "../domain/credits.js";
+import { OLD_USER_RECHARGE_BONUS, REFERRAL_COMMISSION_RATE } from "../domain/credits.js";
 import type { PaymentRuntimeConfig } from "./config.js";
 import {
   paymentPayloadDigest,
@@ -163,7 +163,8 @@ export async function settlePaymentCallback(
       await client.query("COMMIT");
       return { accepted: false, duplicate: false, settled: false, reason: "amount_mismatch" };
     }
-    if (accountReference && accountReference !== order.account_id) {
+    // shop_credits 订单不需要关联账户（购买者可能未注册），跳过 account 匹配检查
+    if (order.order_type !== "shop_credits" && accountReference && accountReference !== order.account_id) {
       await finishEvent(client, provider, eventId, "rejected_account_mismatch");
       await client.query("COMMIT");
       return { accepted: false, duplicate: false, settled: false, reason: "account_mismatch" };
@@ -209,20 +210,49 @@ export async function settlePaymentCallback(
       return { accepted: true, duplicate: false, settled: true, reason: "settled" };
     }
 
+    // shop_credits 订单：支付成功后生成兑换码，不直接加积分
+    if (order.order_type === "shop_credits") {
+      const { fulfillShopOrder } = await import("../actions/redemption-codes.js");
+      const fulfillment = await fulfillShopOrder(client, outTradeNo);
+      if (!fulfillment) {
+        await finishEvent(client, provider, eventId, "rejected_shop_order_not_found");
+        await client.query("COMMIT");
+        return { accepted: false, duplicate: false, settled: false, reason: "shop_order_not_found" };
+      }
+      await client.query(
+        `UPDATE orders SET status='paid', provider_trade_no=$2, provider_status=$3,
+            paid_at = COALESCE(paid_at, now()), notify_at = now(), updated_at = now()
+          WHERE out_trade_no=$1`,
+        [outTradeNo, tradeNo, callbackStatus(provider, params)]
+      );
+      await finishEvent(client, provider, eventId, "settled");
+      await client.query("COMMIT");
+      return { accepted: true, duplicate: false, settled: true, reason: "settled", fulfillment };
+    }
+
     if (order.order_type !== "credits" || !order.account_id || Number(order.total_credits ?? 0) <= 0) {
       await finishEvent(client, provider, eventId, "rejected_unsupported_order");
       await client.query("COMMIT");
       return { accepted: false, duplicate: false, settled: false, reason: "unsupported_order" };
     }
 
+    // 老用户充值额外赠送：查询充值前的累计充值积分，判断是否为老用户
+    const prevCharged = await client.query<{ total_charged_credits: string | number }>(
+      "SELECT total_charged_credits FROM credit_accounts WHERE account_id = $1",
+      [order.account_id]
+    );
+    const isOldUser = Number(prevCharged.rows[0]?.total_charged_credits ?? 0) > 0;
+    const bonusCredits = isOldUser ? OLD_USER_RECHARGE_BONUS : 0;
+    const totalToCredit = Number(order.total_credits) + bonusCredits;
+
     const creditResult = await client.query<{ credits: string | number }>(
       `UPDATE credit_accounts
           SET credits = credits + $2,
-              total_charged_credits = total_charged_credits + $2,
+              total_charged_credits = total_charged_credits + $3,
               updated_at = now()
         WHERE account_id = $1
         RETURNING credits`,
-      [order.account_id, order.total_credits]
+      [order.account_id, totalToCredit, order.total_credits]
     );
     const balance = creditResult.rows[0]?.credits;
     if (balance === undefined) throw new Error("credit account missing");
@@ -232,12 +262,22 @@ export async function settlePaymentCallback(
        VALUES ($1, 'recharge', $2, $3, $4, $5, $6, 'payment_callback')`,
       [order.account_id, order.total_credits, balance, provider, outTradeNo, order.package_id]
     );
+
+    // 老用户充值额外赠送积分流水
+    if (bonusCredits > 0) {
+      await client.query(
+        `INSERT INTO credit_ledger(account_id, operation_type, credits, balance_after, source, order_no, package_id, reason)
+         VALUES ($1, 'old_user_bonus', $2, $3, $4, $5, $6, '老用户充值额外赠送')`,
+        [order.account_id, bonusCredits, balance, provider, outTradeNo, order.package_id]
+      );
+    }
     await client.query(
       `UPDATE orders
           SET status = 'paid', provider_trade_no = $2, provider_status = $3,
-              paid_at = COALESCE(paid_at, now()), notify_at = now(), updated_at = now()
+              paid_at = COALESCE(paid_at, now()), credited_at = COALESCE(credited_at, now()),
+              credit_balance_after = $4, notify_at = now(), updated_at = now()
         WHERE out_trade_no = $1`,
-      [outTradeNo, tradeNo, callbackStatus(provider, params)]
+      [outTradeNo, tradeNo, callbackStatus(provider, params), balance]
     );
 
     // 邀请充值提成：检查充值用户是否有邀请人

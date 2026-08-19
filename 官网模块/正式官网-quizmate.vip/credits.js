@@ -2,6 +2,7 @@ const CREDIT_API_ENDPOINT = "https://api.quizmate.vip/study-auth-api";
 const CREDIT_STORAGE_KEY = "quizmate_credit_account";
 const ACTIVE_ORDER_STORAGE_KEY = "quizmate_active_credit_order";
 const CODE_COOLDOWN_PREFIX = "quizmate_code_cooldown";
+const EARLY_BIRD_DEADLINE = new Date("2026-08-31T23:59:59+08:00").getTime();
 // 轮询间隔与失败上限：前端轮询每 3 秒一次，连续 5 次失败转为异常态并停止轮询
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_FAIL = 5;
@@ -15,6 +16,7 @@ let accountState = loadCreditState();
 let activeOrder = loadActiveOrder();
 let pollTimer = 0;
 let countdownTimer = 0;
+let earlyBirdTimer = 0;
 let queryFailCount = 0;
 let payState = "idle";
 
@@ -55,6 +57,7 @@ function collectCreditElements() {
   creditEls.payLoading = document.querySelector("[data-pay-loading]");
   creditEls.paySuccess = document.querySelector("[data-pay-success]");
   creditEls.payRefresh = document.querySelector("[data-pay-refresh]");
+  creditEls.oldUserBonus = document.querySelector("[data-old-user-bonus]");
 }
 
 function bindCreditEvents() {
@@ -107,11 +110,21 @@ function bindCreditEvents() {
     event.preventDefault();
     wrapAuth(async () => {
       const form = event.currentTarget;
+      const email = form.querySelector("[name='email']")?.value.trim() || "";
+      const codeInput = form.querySelector("[name='code']");
+      const inviteInput = form.querySelector("[name='inviteCode']");
+      const password = form.querySelector("[name='password']")?.value || "";
+      const code = codeInput?.value.trim() || "";
+      const inviteCode = inviteInput?.value.trim().toUpperCase() || "";
+      if (!/^\d{6}$/.test(code)) {
+        codeInput?.focus();
+        throw new Error("请输入邮箱收到的 6 位数字验证码（不是邀请码）。");
+      }
       const result = await creditApi("registerAccount", {
-        email: form.elements.email.value,
-        code: form.elements.code.value,
-        password: form.elements.password.value,
-        inviteCode: form.elements.inviteCode?.value || ""
+        email,
+        code,
+        password,
+        inviteCode
       });
       setLoggedIn(result);
       closeAuthModal();
@@ -138,6 +151,12 @@ function bindCreditEvents() {
     button.addEventListener("click", () => sendEmailCode(button));
   });
 
+  document.querySelectorAll("[data-auth-form='register'] input").forEach((input) => {
+    input.addEventListener("input", () => {
+      if (creditEls.authStatus?.classList.contains("error")) setAuthStatus("");
+    });
+  });
+
   // 刷新二维码：同一订单重新出码，避免创建重复订单
   creditEls.payRefresh?.addEventListener("click", () => {
     refreshQrCode().catch((error) => showPayError(error.message || String(error), refreshQrCode));
@@ -155,6 +174,7 @@ function bindCreditEvents() {
 
 async function initCredits() {
   updateAccountView();
+  startEarlyBirdCountdown();
   if (accountState?.token) await refreshAccountProfile();
   if (!creditEls.packages) {
     window.lucide?.createIcons();
@@ -435,8 +455,9 @@ function onPaymentSuccess(result) {
   saveActiveOrder(null);
   setPayState("success");
   const credited = result.creditedCredits || activeOrder.totalCredits || 0;
-  setPaymentInfo(`支付成功，已到账 ${formatNumber(credited)} 积分。`, "success");
-  setCreditStatus(`充值成功，已到账 ${formatNumber(credited)} 积分。`, "success");
+  const successMsg = result.message || `支付成功，已到账 ${formatNumber(credited)} 积分。`;
+  setPaymentInfo(successMsg, "success");
+  setCreditStatus(successMsg, "success");
   // 1.6 秒后自动关闭弹窗
   window.setTimeout(() => closePayModal(), 1600);
 }
@@ -461,7 +482,12 @@ function renderPayModalOrder(order) {
   if (creditEls.payAmount) creditEls.payAmount.textContent = trimAmount(order.amount);
   if (creditEls.payOrderNo) creditEls.payOrderNo.textContent = order.outTradeNo || "-";
   if (creditEls.payPackage) creditEls.payPackage.textContent = order.packageName || "-";
-  if (creditEls.payCredits) creditEls.payCredits.textContent = `${formatNumber(order.totalCredits)} 积分`;
+  if (creditEls.payCredits) {
+    const bonus = Number(order.oldUserBonus) || 0;
+    creditEls.payCredits.textContent = bonus > 0
+      ? `${formatNumber(Number(order.totalCredits) + bonus)} 积分（含老用户赠送 ${formatNumber(bonus)}）`
+      : `${formatNumber(order.totalCredits)} 积分`;
+  }
   startCountdown(order.expiresAt);
 }
 
@@ -515,6 +541,55 @@ function stopCountdown() {
   if (countdownTimer) {
     window.clearInterval(countdownTimer);
     countdownTimer = 0;
+  }
+}
+
+function startEarlyBirdCountdown() {
+  stopEarlyBirdCountdown();
+  const render = () => {
+    const nodes = document.querySelectorAll("[data-aug-promo-countdown]");
+    const deadlineNodes = document.querySelectorAll("[data-aug-promo-deadline]");
+    if (!nodes.length && !deadlineNodes.length) {
+      stopEarlyBirdCountdown();
+      return;
+    }
+
+    const remain = Math.max(0, EARLY_BIRD_DEADLINE - Date.now());
+    const totalSec = Math.floor(remain / 1000);
+    const days = Math.floor(totalSec / 86400);
+    const hours = Math.floor((totalSec % 86400) / 3600);
+    const minutes = Math.floor((totalSec % 3600) / 60);
+    const seconds = totalSec % 60;
+    const expired = remain <= 0;
+    const units = [
+      [days, "天"],
+      [hours, "时"],
+      [minutes, "分"],
+      [seconds, "秒"]
+    ];
+
+    nodes.forEach((node) => {
+      node.innerHTML = units.map(([value, label]) => `
+        <span><strong>${String(value).padStart(2, "0")}</strong><small>${label}</small></span>
+      `).join("");
+      node.classList.toggle("is-expired", expired);
+    });
+    deadlineNodes.forEach((node) => {
+      node.textContent = expired ? "优惠已结束" : "2026-08-31 23:59";
+    });
+
+    if (expired) {
+      stopEarlyBirdCountdown();
+    }
+  };
+  render();
+  earlyBirdTimer = window.setInterval(render, 1000);
+}
+
+function stopEarlyBirdCountdown() {
+  if (earlyBirdTimer) {
+    window.clearInterval(earlyBirdTimer);
+    earlyBirdTimer = 0;
   }
 }
 
@@ -686,6 +761,10 @@ function updateAccountView() {
   document.querySelectorAll("[data-open-referral]").forEach((button) => {
     button.hidden = !loggedIn;
   });
+  // 老用户充值额外赠送横幅：仅累计充值过的用户可见
+  if (creditEls.oldUserBonus) {
+    creditEls.oldUserBonus.hidden = !(loggedIn && Number(account?.totalChargedCredits) > 0);
+  }
 }
 
 async function creditApi(action, payload) {
@@ -695,7 +774,11 @@ async function creditApi(action, payload) {
     body: JSON.stringify({ action, ...payload })
   });
   const data = await response.json().catch(() => ({}));
-  if (!response.ok || !data.ok) throw new Error(data.error || "请求失败，请稍后再试。");
+  if (!response.ok || !data.ok) {
+    const error = new Error(data.error || "请求失败，请稍后再试。");
+    error.code = data.code || "REQUEST_FAILED";
+    throw error;
+  }
   return data.data || {};
 }
 
@@ -1405,7 +1488,7 @@ async function drawPoster(ctx, inviteCode, inviteLink) {
   // 10. 底部
   ctx.fillStyle = "rgba(255,255,255,0.5)";
   ctx.font = "18px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillText("quizmate.vip", W / 2, 1060);
+  ctx.fillText("quizmate.cn", W / 2, 1060);
   ctx.font = "16px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
   ctx.fillText("长按二维码或复制链接注册", W / 2, 1090);
 }
@@ -1663,4 +1746,178 @@ function escapeHtml(value) {
     .replaceAll(">", "&gt;")
     .replaceAll('"', "&quot;")
     .replaceAll("'", "&#39;");
+}
+
+// ===================== 兑换码功能 =====================
+
+// 注入兑换码弹窗 + 样式 + 事件
+function ensureRedeemFeature() {
+  injectRedeemStyles();
+  if (!document.querySelector("[data-redeem-modal]")) {
+    document.body.insertAdjacentHTML("beforeend", `
+      <div class="credit-modal" data-redeem-modal hidden>
+        <div class="credit-modal-backdrop" data-close-redeem></div>
+        <section class="credit-dialog redeem-dialog" role="dialog" aria-modal="true" aria-labelledby="redeem-title">
+          <button class="credit-close" type="button" aria-label="关闭" data-close-redeem><i data-lucide="x"></i></button>
+          <p class="section-kicker">兑换中心</p>
+          <h2 id="redeem-title">兑换码兑换积分</h2>
+          <form class="redeem-form" data-redeem-form>
+            <label>兑换码
+              <input name="code" type="text" placeholder="QM-XXXXXX-XXXXXX" autocomplete="off"
+                spellcheck="false" maxlength="20" required />
+            </label>
+            <p class="redeem-hint">兑换码格式：QM-XXXXXX-XXXXXX，购买充值包后由店铺发货。</p>
+            <button class="button button-primary" type="submit" data-redeem-submit><i data-lucide="ticket-check"></i>立即兑换</button>
+          </form>
+          <div class="redeem-result" data-redeem-result hidden>
+            <div class="redeem-result-icon"><i data-lucide="party-popper"></i></div>
+            <strong data-redeem-result-title>兑换成功</strong>
+            <p data-redeem-result-text></p>
+            <button class="button button-primary" type="button" data-redeem-done>完成</button>
+          </div>
+          <p class="credit-status" data-redeem-status></p>
+        </section>
+      </div>
+    `);
+  }
+  bindRedeemEvents();
+  window.lucide?.createIcons();
+}
+
+function injectRedeemStyles() {
+  if (document.getElementById("qm-redeem-styles")) return;
+  const style = document.createElement("style");
+  style.id = "qm-redeem-styles";
+  style.textContent = `
+    .redeem-dialog { max-width: 460px; }
+    .redeem-form { display: grid; gap: 12px; margin-top: 12px; }
+    .redeem-form label { display: grid; gap: 6px; font-size: 14px; color: #344054; font-weight: 600; }
+    .redeem-form input {
+      width: 100%; border: 1.5px solid #d8e1ec; border-radius: 10px;
+      padding: 12px 14px; font-size: 17px; letter-spacing: 1px;
+      font-family: ui-monospace, "SF Mono", Consolas, monospace;
+      text-transform: uppercase; transition: border-color .15s ease;
+    }
+    .redeem-form input:focus { outline: none; border-color: #2563eb; }
+    .redeem-hint { margin: 0; font-size: 13px; color: #667085; }
+    .redeem-result { display: grid; gap: 10px; justify-items: center; text-align: center; padding: 18px 0 6px; }
+    .redeem-result-icon {
+      width: 56px; height: 56px; border-radius: 50%;
+      display: grid; place-items: center; background: #e8f7ef; color: #067647;
+    }
+    .redeem-result-icon svg { width: 28px; height: 28px; }
+    .redeem-result strong { font-size: 18px; }
+    .redeem-result p { margin: 0; color: #667085; font-size: 14px; }
+    .redeem-entry {
+      margin-top: 18px; padding: 18px 20px; border: 1.5px dashed #c3d2e8;
+      border-radius: 14px; background: #f7fafc;
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    .redeem-entry-copy { display: grid; gap: 4px; }
+    .redeem-entry-copy strong { font-size: 15px; display: flex; align-items: center; gap: 8px; }
+    .redeem-entry-copy strong svg { width: 18px; height: 18px; color: #2563eb; }
+    .redeem-entry-copy span { font-size: 13px; color: #667085; }
+  `;
+  document.head.appendChild(style);
+}
+
+function bindRedeemEvents() {
+  // 打开兑换弹窗
+  document.querySelectorAll("[data-open-redeem]").forEach((button) => {
+    button.addEventListener("click", () => openRedeemModal());
+  });
+  // 关闭
+  document.querySelectorAll("[data-close-redeem]").forEach((button) => {
+    button.addEventListener("click", closeRedeemModal);
+  });
+  // 完成
+  document.querySelector("[data-redeem-done]")?.addEventListener("click", () => {
+    closeRedeemModal();
+    refreshAccountProfile().catch(() => undefined);
+  });
+  // 输入时清空错误
+  document.querySelector("[data-redeem-form] [name='code']")?.addEventListener("input", (event) => {
+    const input = event.currentTarget;
+    input.value = input.value.toUpperCase().replace(/\s+/g, "");
+    setRedeemStatus("");
+  });
+  // 提交兑换
+  document.querySelector("[data-redeem-form]")?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    submitRedeemCode().catch((error) => setRedeemStatus(error.message || String(error), "error"));
+  });
+}
+
+function openRedeemModal() {
+  if (!accountState?.token) {
+    openAuthModal("login");
+    setAuthStatus("请先登录后再兑换积分。", "error");
+    return;
+  }
+  const modal = document.querySelector("[data-redeem-modal]");
+  if (!modal) return;
+  const form = document.querySelector("[data-redeem-form]");
+  const result = document.querySelector("[data-redeem-result]");
+  if (form) { form.hidden = false; form.reset(); }
+  if (result) result.hidden = true;
+  setRedeemStatus("");
+  modal.hidden = false;
+  document.querySelector("[data-redeem-form] [name='code']")?.focus();
+  window.lucide?.createIcons();
+}
+
+function closeRedeemModal() {
+  const modal = document.querySelector("[data-redeem-modal]");
+  if (modal) modal.hidden = true;
+}
+
+function setRedeemStatus(text, type = "") {
+  const el = document.querySelector("[data-redeem-status]");
+  if (!el) return;
+  el.textContent = text || "";
+  el.className = `credit-status ${type}`.trim();
+}
+
+async function submitRedeemCode() {
+  const form = document.querySelector("[data-redeem-form]");
+  if (!form) return;
+  const code = (form.querySelector("[name='code']")?.value || "").trim().toUpperCase();
+  if (!code) throw new Error("请输入兑换码。");
+  if (!accountState?.token) {
+    openAuthModal("login");
+    throw new Error("请先登录后再兑换。");
+  }
+  const submitBtn = document.querySelector("[data-redeem-submit]");
+  if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = "正在兑换..."; }
+  try {
+    const result = await creditApi("redeemCode", { accountToken: accountState.token, code });
+    const formEl = document.querySelector("[data-redeem-form]");
+    const resultEl = document.querySelector("[data-redeem-result]");
+    const titleEl = document.querySelector("[data-redeem-result-title]");
+    const textEl = document.querySelector("[data-redeem-result-text]");
+    if (formEl) formEl.hidden = true;
+    if (resultEl) resultEl.hidden = false;
+    if (titleEl) titleEl.textContent = "兑换成功";
+    if (textEl) textEl.textContent = `${result.packageName || "积分包"} 已到账 ${formatNumber(result.credits)} 积分，当前余额 ${formatNumber(result.balance)} 积分。`;
+    setRedeemStatus("");
+    // 更新页面上的余额显示
+    if (accountState && result.balance !== undefined) {
+      accountState.credits = result.balance;
+      saveCreditState(accountState);
+      updateAccountView();
+    }
+    window.lucide?.createIcons();
+  } finally {
+    if (submitBtn) { submitBtn.disabled = false; submitBtn.innerHTML = `<i data-lucide="ticket-check"></i>立即兑换`; }
+    window.lucide?.createIcons();
+  }
+}
+
+// 自动初始化（页面含 [data-redeem-entry] 容器时启用）
+if (document.querySelector("[data-redeem-entry]") || document.querySelector("[data-open-redeem]")) {
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", ensureRedeemFeature);
+  } else {
+    ensureRedeemFeature();
+  }
 }

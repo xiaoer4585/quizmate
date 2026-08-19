@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import QRCode from "qrcode";
-import { CREDIT_PACKAGES } from "../domain/credits.js";
+import { CREDIT_PACKAGES, OLD_USER_RECHARGE_BONUS } from "../domain/credits.js";
 import { PublicError } from "../errors.js";
 import { hashToken } from "../security/crypto.js";
 import type { ActionDependencies, ActionHandler, ActionInput } from "../types.js";
@@ -15,6 +15,7 @@ interface AccountRow {
   email: string;
   status: string;
   credits: string | number;
+  total_charged_credits: string | number;
 }
 
 interface CreditOrderRow {
@@ -36,21 +37,21 @@ interface CreditOrderRow {
   created_at: Date | string | null;
 }
 
-function paymentDeps(deps: ActionDependencies) {
+export function paymentDeps(deps: ActionDependencies) {
   if (!deps.payment) throw new PublicError("支付服务尚未配置。", "PAYMENT_NOT_CONFIGURED", 503);
   return deps.payment;
 }
 
-async function runtimePaymentConfig(deps: ActionDependencies): Promise<PaymentRuntimeConfig> {
+export async function runtimePaymentConfig(deps: ActionDependencies): Promise<PaymentRuntimeConfig> {
   if (deps.settings) return paymentRuntimeFromSetting(await loadPaymentSetting(deps));
   return paymentDeps(deps).config;
 }
 
-async function authenticate(deps: ActionDependencies, input: ActionInput): Promise<AccountRow> {
+export async function authenticate(deps: ActionDependencies, input: ActionInput): Promise<AccountRow> {
   const tokenHash = hashToken(input.accountToken ?? input.token);
   if (!tokenHash) throw new PublicError("请先登录积分账户。", "AUTH_REQUIRED", 401);
   const result = await deps.db.query<AccountRow>(
-    `SELECT a.account_id, a.email, a.status, c.credits
+    `SELECT a.account_id, a.email, a.status, c.credits, c.total_charged_credits
        FROM account_sessions s
        JOIN accounts a USING(account_id)
        JOIN credit_accounts c USING(account_id)
@@ -71,7 +72,7 @@ function creditPackage(input: ActionInput) {
   return found;
 }
 
-function buildEpayUrl(baseUrl: string, path: string): string {
+export function buildEpayUrl(baseUrl: string, path: string): string {
   return `${baseUrl.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
 }
 
@@ -96,7 +97,7 @@ function isRetryableNetworkError(error: unknown): boolean {
 
 // 调用 niman.cn V2 API (api/pay/create)：RSA 签名，响应验签
 // 对网络错误快速重试，对"有响应但无 qrcode"也重试以争取拿到二维码
-async function callNimanCreate(
+export async function callNimanCreate(
   payment: { fetch: typeof globalThis.fetch },
   endpoint: string,
   orderParams: NimanParams,
@@ -175,7 +176,7 @@ async function callNimanCreate(
   );
 }
 
-function normalizeClientIp(value: unknown): string {
+export function normalizeClientIp(value: unknown): string {
   const text = String(value ?? "").split(",")[0]?.trim() ?? "";
   if (/^(?:\d{1,3}\.){3}\d{1,3}$/.test(text)) {
     // niman V2 API 拒绝私有/回环 IP（返回"系统异常无法完成付款"），需要公网 IP
@@ -198,17 +199,17 @@ function normalizeEpayDevice(value: unknown): string {
 }
 
 // 前端支付方式 → 易支付平台 type 参数映射
-function epayPaymentType(method: unknown): "alipay" | "wxpay" {
+export function epayPaymentType(method: unknown): "alipay" | "wxpay" {
   const text = String(method ?? "alipay").trim().toLowerCase();
   return text === "wechat" || text === "wxpay" ? "wxpay" : "alipay";
 }
 
 // 易支付平台 type → 前端展示用 method 名称
-function epayTypeToMethod(type: string | null): "alipay" | "wechat" {
+export function epayTypeToMethod(type: string | null): "alipay" | "wechat" {
   return type === "wxpay" ? "wechat" : "alipay";
 }
 
-function publicOrder(order: CreditOrderRow & { qrCode?: string; payUrl?: string; qrDataUrl?: string; refreshable?: boolean }) {
+function publicOrder(order: CreditOrderRow & { qrCode?: string; payUrl?: string; qrDataUrl?: string; refreshable?: boolean; oldUserBonus?: number }) {
   const method = epayTypeToMethod(order.payment_type);
   // viewStatus 为前端展示态，向后兼容保留原始 status（其他客户端仍用 created/waiting/paid/closed/failed/expired）
   return {
@@ -223,6 +224,7 @@ function publicOrder(order: CreditOrderRow & { qrCode?: string; payUrl?: string;
     baseCredits: Number(order.base_credits),
     bonusCredits: Number(order.bonus_credits),
     totalCredits: Number(order.total_credits),
+    oldUserBonus: order.oldUserBonus ?? 0,
     subject: order.subject,
     qrCode: order.qrCode ?? "",
     payUrl: order.payUrl ?? "",
@@ -305,7 +307,7 @@ export function epayQuerySettlementPayload(
 }
 
 // V2: 查询订单并直接用平台返回的签名数据进行结算（响应已由平台 RSA 签名）
-async function reconcileEpayCreditOrder(
+export async function reconcileEpayCreditOrder(
   deps: ActionDependencies,
   config: PaymentRuntimeConfig,
   account: AccountRow,
@@ -365,6 +367,36 @@ async function reconcileEpayCreditOrder(
   if (!outcome.accepted && outcome.reason !== "duplicate_event") {
     throw new Error(`聚合易支付查单结算未通过：${outcome.reason}`);
   }
+}
+
+// Reconcile independently of client polling because provider callbacks can be delayed or dropped.
+export async function reconcilePendingCreditOrders(deps: ActionDependencies, limit = 50): Promise<{ checked: number; settled: number }> {
+  const config = await runtimePaymentConfig(deps);
+  if (!paymentReadiness(config).epay) return { checked: 0, settled: 0 };
+  const result = await deps.db.query<CreditOrderRow & { account_id: string; email: string; credits: string | number; account_status: string; total_charged_credits: string | number }>(
+    `SELECT o.out_trade_no, o.status, o.provider, o.payment_type, o.package_id, o.package_name,
+            o.amount, o.base_credits, o.bonus_credits, o.total_credits, o.subject,
+            o.provider_trade_no, o.provider_status, o.expires_at, o.paid_at, o.created_at,
+            a.account_id, a.email, ca.credits, ca.total_charged_credits, a.status AS account_status
+       FROM orders o JOIN accounts a ON a.account_id = o.account_id
+       JOIN credit_accounts ca ON ca.account_id = a.account_id
+      WHERE o.order_type = 'credits' AND o.provider = 'epay'
+        AND o.status IN ('created', 'waiting')
+        AND o.created_at >= now() - interval '24 hours'
+      ORDER BY o.created_at ASC LIMIT $1`,
+    [Math.max(1, Math.min(200, limit))]
+  );
+  let settled = 0;
+  for (const row of result.rows) {
+    try {
+      await reconcileEpayCreditOrder(deps, config, { account_id: row.account_id, email: row.email, status: row.account_status, credits: row.credits, total_charged_credits: row.total_charged_credits }, row);
+      const state = await deps.db.query<{ status: string }>("SELECT status FROM orders WHERE out_trade_no = $1", [row.out_trade_no]);
+      if (state.rows[0]?.status === "paid") settled += 1;
+    } catch (error) {
+      await deps.db.query("UPDATE orders SET error_message = $2, updated_at = now() WHERE out_trade_no = $1", [row.out_trade_no, (error instanceof Error ? error.message : String(error)).slice(0, 500)]).catch(() => undefined);
+    }
+  }
+  return { checked: result.rows.length, settled };
 }
 
 function licenseDays(input: ActionInput): number {
@@ -507,6 +539,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
     if (!ready.epay) throw new PublicError("积分充值暂未开启。", "EPAY_NOT_READY", 503);
     const account = await authenticate(deps, input);
     const pkg = creditPackage(input);
+    const oldUserBonus = Number(account.total_charged_credits) > 0 ? OLD_USER_RECHARGE_BONUS : 0;
     const requestedPayType = epayPaymentType(input.method);
 
     // 幂等：若该账户同一套餐且同一支付方式存在未过期的待支付订单，直接复用，避免重复下单 + 重复请求 epay
@@ -536,6 +569,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
           qrCode: String(hasQr.rows[0].qr_code),
           payUrl: String(hasQr.rows[0].qr_code),
           qrDataUrl,
+          oldUserBonus,
           refreshable: orderRefreshable(existingOrder)
         });
       }
@@ -571,7 +605,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
             WHERE out_trade_no = $1`,
           [outTradeNo, qrCode, payUrl, qrDataUrl, String(result.trade_no ?? "")]
         );
-        return publicOrder({ ...existingOrder, status: "waiting", qrCode, payUrl, qrDataUrl, refreshable: orderRefreshable(existingOrder) });
+        return publicOrder({ ...existingOrder, status: "waiting", qrCode, payUrl, qrDataUrl, oldUserBonus, refreshable: orderRefreshable(existingOrder) });
       } catch (error) {
         const errMsg = (error instanceof Error ? error.message : String(error)).slice(0, 500);
         await deps.db.query(
@@ -629,7 +663,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
           WHERE out_trade_no = $1`,
         [outTradeNo, String(result.trade_no ?? "")]
       );
-      return publicOrder({ ...order, status: "waiting", qrCode, payUrl, qrDataUrl, refreshable: orderRefreshable({ ...order, status: "waiting" }) });
+      return publicOrder({ ...order, status: "waiting", qrCode, payUrl, qrDataUrl, oldUserBonus, refreshable: orderRefreshable({ ...order, status: "waiting" }) });
     } catch (error) {
       const errMsg = (error instanceof Error ? error.message : String(error)).slice(0, 500);
       await deps.db.query(
@@ -673,13 +707,24 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
       "SELECT credits FROM credit_accounts WHERE account_id = $1",
       [account.account_id]
     );
-    const creditedCredits = order.status === "paid" ? Number(order.total_credits) : 0;
+    // 老用户充值额外赠送：已支付订单查 credit_ledger 确认实际赠送积分，未支付则按当前账户状态预估
+    let oldUserBonus = 0;
+    if (order.status === "paid") {
+      const bonusLedger = await deps.db.query<{ credits: string | number }>(
+        "SELECT credits FROM credit_ledger WHERE account_id = $1 AND order_no = $2 AND operation_type = 'old_user_bonus'",
+        [account.account_id, outTradeNo]
+      );
+      oldUserBonus = Number(bonusLedger.rows[0]?.credits ?? 0);
+    } else {
+      oldUserBonus = Number(account.total_charged_credits) > 0 ? OLD_USER_RECHARGE_BONUS : 0;
+    }
+    const creditedCredits = order.status === "paid" ? Number(order.total_credits) + oldUserBonus : 0;
     return {
-      order: publicOrder({ ...order, refreshable: orderRefreshable(order) }),
+      order: publicOrder({ ...order, oldUserBonus, refreshable: orderRefreshable(order) }),
       account: { accountId: account.account_id, email: account.email, credits: Number(latest.rows[0]?.credits ?? account.credits) },
       creditedCredits,
       message: order.status === "paid"
-        ? `充值成功，已到账 ${creditedCredits} 积分。`
+        ? `充值成功，已到账 ${creditedCredits} 积分${oldUserBonus > 0 ? `（含老用户额外赠送 ${oldUserBonus} 积分）` : ""}。`
         : order.status === "expired"
           ? "二维码已过期，请刷新二维码或重新购买。"
           : "订单等待支付。如果您已支付完成，时间可能有点延迟，可以退出之后查看积分。"
@@ -691,6 +736,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
     const config = await runtimePaymentConfig(deps);
     if (!paymentReadiness(config).epay) throw new PublicError("积分充值暂未开启。", "EPAY_NOT_READY", 503);
     const account = await authenticate(deps, input);
+    const oldUserBonus = Number(account.total_charged_credits) > 0 ? OLD_USER_RECHARGE_BONUS : 0;
     const outTradeNo = String(input.outTradeNo ?? "").trim();
     if (!outTradeNo) throw new PublicError("订单号不能为空。", "ORDER_NO_REQUIRED");
 
@@ -762,7 +808,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
       [outTradeNo, qrCode, payUrl, qrDataUrl, providerTradeNo]
     );
     const refreshed = updated.rows[0] ?? order;
-    return publicOrder({ ...refreshed, status: "waiting", qrCode, payUrl, qrDataUrl, refreshable: orderRefreshable({ ...refreshed, status: "waiting" }) });
+    return publicOrder({ ...refreshed, status: "waiting", qrCode, payUrl, qrDataUrl, oldUserBonus, refreshable: orderRefreshable({ ...refreshed, status: "waiting" }) });
   };
 
   return new Map([

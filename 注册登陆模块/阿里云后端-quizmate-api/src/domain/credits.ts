@@ -1,6 +1,7 @@
 export const CREDIT_COST_PER_SUCCESS = 10;
 export const CREDIT_COST_PER_INTERVIEW = 20;
 export const REGISTER_BONUS_CREDITS = 50;
+export const OLD_USER_RECHARGE_BONUS = 50; // 老用户充值额外赠送积分
 
 // 邀请注册机制常量
 export const REFERRAL_BONUS_CREDITS = 20;       // 邀请注册双方各得积分

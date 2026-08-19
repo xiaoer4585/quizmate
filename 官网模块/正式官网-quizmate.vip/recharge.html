@@ -5,12 +5,14 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="description" content="QuizMate积分充值，电脑客户端、浏览器插件和安卓端共用同一个邮箱账户。" />
     <meta name="theme-color" content="#ffffff" />
+    <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
+    <link rel="canonical" href="https://quizmate.cn/recharge.html" />
     <title>积分充值 - AI笔试助手_AI面试助手 - QuizMate</title>
-    <link rel="icon" href="data:," />
+    <link rel="icon" type="image/svg+xml" href="assets/quizmate-favicon.svg" />
     <link rel="stylesheet" href="styles.css?v=20260731-noloading" />
     <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script defer src="app.js?v=20260715-encodingfix1"></script>
-    <script defer src="credits.js?v=20260801-pkgs"></script>
+    <script defer src="credits.js?v=20260819-olduserbonus"></script>
   </head>
   <body data-page="recharge">
     <a class="skip-link" href="#main">跳到主要内容</a>
@@ -44,6 +46,31 @@
             </div>
           </div>
 
+          <div class="recharge-offer" data-aug-promo>
+            <div class="recharge-offer-copy">
+              <span class="recharge-offer-label"><i data-lucide="badge-percent"></i>早鸟优惠</span>
+              <div>
+                <strong>8月底前充值，保留本轮早鸟价</strong>
+                <p>截至 2026 年 8 月 31 日 23:59，页面会实时显示剩余时间，先充先享。</p>
+              </div>
+            </div>
+            <div class="recharge-offer-deadline">
+              <span class="recharge-offer-deadline-label">优惠截止</span>
+              <time data-aug-promo-deadline datetime="2026-08-31T23:59:59+08:00">2026-08-31 23:59</time>
+              <div class="recharge-countdown" data-aug-promo-countdown aria-live="polite"></div>
+            </div>
+          </div>
+
+          <div class="recharge-offer recharge-old-user-bonus" data-old-user-bonus hidden>
+            <div class="recharge-offer-copy">
+              <span class="recharge-offer-label"><i data-lucide="gift"></i>老用户专享</span>
+              <div>
+                <strong>充值额外赠送 50 积分</strong>
+                <p>感谢您持续支持 QuizMate，每次充值额外赠送 50 积分，与套餐赠送叠加享受。</p>
+              </div>
+            </div>
+          </div>
+
           <div class="credit-usage-note">
             <span><i data-lucide="monitor-smartphone"></i>一个积分账户，多端共用</span>
             <span><i data-lucide="circle-dot"></i>模型成功返回一次扣 10 积分</span>
@@ -52,6 +79,14 @@
 
           <div class="credit-package-grid" data-credit-packages></div>
           <p class="credit-status" data-credit-status>正在读取积分套餐...</p>
+
+          <div class="redeem-entry" data-redeem-entry>
+            <div class="redeem-entry-copy">
+              <strong><i data-lucide="ticket-check"></i>已有兑换码？</strong>
+              <span>在店铺购买充值包后，输入发货的兑换码即可兑换对应积分。</span>
+            </div>
+            <button class="button button-primary" type="button" data-open-redeem><i data-lucide="gift"></i>兑换码兑换</button>
+          </div>
         </div>
       </section>
     </main>
