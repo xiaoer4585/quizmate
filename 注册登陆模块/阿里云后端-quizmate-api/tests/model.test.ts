@@ -62,6 +62,36 @@ describe("model result parser", () => {
     expect(result.items[0].answer).toContain("三年产品经验");
   });
 
+  it("repairs interview JSON whose answer string contains raw newlines (2026-08-19 production failure)", () => {
+    const content = '{"items":[{"summary":"面试官询问Redis所有数据结构、底层实现及各自好处","answer":"我先整理一下我对Redis数据结构、底层实现和优势的理解。\n1、Redis基于内存，读写性能高。\n2、支持多种数据结构。","explanation":"要点"}]}';
+    const result = parseModelResult(content, { allowInterviewText: true });
+    expect(result.items[0].answer).toContain("我先整理一下");
+    expect(result.items[0].answer).toContain("1、Redis基于内存");
+    expect(result.items[0].answer).toContain("\n");
+  });
+
+  it("repairs exam JSON with raw control characters inside string values", () => {
+    const content = '{"items":[{"summary":"题目1","answer":"第1题答案是：B第二个","explanation":"选项B正确。\n原因：\t直接套用公式。","code":"if (a > b) {\n  return a;\n}"}]}';
+    const result = parseModelResult(content);
+    expect(result.items[0].explanation).toContain("直接套用公式");
+    expect(result.items[0].code).toContain("return a;");
+  });
+
+  it("keeps valid JSON untouched and does not escape whitespace outside strings", () => {
+    const content = '{\n  "items": [\n    {"summary": "题目1", "answer": "B"}\n  ],\n  "note": "ok"\n}';
+    const result = parseModelResult(content);
+    expect(result.items[0].answer).toBe("B");
+    expect(result.note).toBe("ok");
+  });
+
+  it("falls back to the raw interview answer when the JSON cannot be repaired", () => {
+    // 字符串内未转义英文引号，控制字符转义无法修复，但面试模式应降级为原文而不是 502
+    const content = '{"items":[{"answer":"我认为"Redis"很快，适合缓存场景"}]}';
+    const result = parseModelResult(content, { allowInterviewText: true });
+    expect(result.items[0].answer).toContain("Redis");
+    expect(result.items[0].answer).toContain("缓存场景");
+  });
+
   it("normalizes a root-level interview answer object", () => {
     const result = parseModelResult('{"answer":"我会结合简历介绍与岗位最匹配的经历。"}', { allowInterviewText: true });
     expect(result.items[0].answer).toContain("结合简历");
