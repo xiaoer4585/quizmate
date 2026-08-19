@@ -7,7 +7,6 @@ on:
       - feature/mac-client
     tags:
       - mac-build-*
-
 permissions:
   contents: read
 
@@ -49,7 +48,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          npm ci 2>&1 | tee -a build.log
+          npm ci --no-audit --no-fund 2>&1 | tee -a build.log
 
       - name: Validate source
         shell: bash
