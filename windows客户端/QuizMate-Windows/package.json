@@ -1,7 +1,7 @@
 {
   "name": "quizmate",
   "productName": "QuizMate",
-  "version": "2026.8.18",
+  "version": "2026.8.20",
   "description": "QuizMate Windows 客户端 - 笔试与面试实时辅助",
   "main": "out/main/index.js",
   "author": {

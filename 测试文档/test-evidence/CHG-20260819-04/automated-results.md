@@ -73,7 +73,38 @@
 - 真实用户面试回答的双层结构命中率、逻辑题/常规题顺序正确性、detailed 模式回答长度（max_tokens 1600 是否出现截断）、回答耗时变化（输出变长带来的延迟）。
 - 若管理后台 interview_prompt_config 存在自定义提示词，需确认未覆盖新默认值。
 
-## 5. 待人工实测项（阻塞清单）
+## 5. Windows 客户端 2026.8.20 发布（2026-08-20 14:05 CST）
+
+发布脚本：`其他/部署工具/deploy-windows-release-20260820.cjs`
+
+### 5.1 打包与产物验证
+
+- 版本号升级：`package.json` 与 `resources/config.json` 2026.8.18 -> 2026.8.20；官网 download.html / index.html / blog/article-exam-skills.html 的 Windows 下载链接同步指向 2026.8.20。
+- 命令：`npm run package:win`（electron-vite build + electron-builder nsis x64）。构建后内置校验输出 `PACKAGED_APP_OK version=2026.8.20 asar=46721194`。
+- 产物：`release/QuizMate-Windows-2026.8.20.exe`（87,924,738 字节）+ `.blockmap` + `latest.yml`（sha512 pWUnZDCb...）。
+- asar 内容抽查：包含托盘菜单"全屏截图"/"搜题"、`setIgnoreMouseEvents` 穿透切换逻辑、`OverlayActionButton` 按钮组件，确认鼠标兜底改动已进入安装包。
+- 工作区核验：打包时 windows客户端 目录无未提交源码改动（仅历史 test-release 未跟踪目录），mac-build-fix 分支的 CI workflow 改动不影响 Windows 产物；产物等效 main@358a568 + 版本号。
+
+### 5.2 发布与线上验证
+
+- 上传对象：`suite/latest.yml`、`suite/QuizMate-Windows-2026.8.20.exe`（+blockmap）至 quizmate-vip；`downloads/QuizMate-Windows-2026.8.20.exe` 至 quizmate-vip 与 quizmate-cn；download.html / index.html / blog/article-exam-skills.html 至 quizmate-cn。全部 UPLOAD_OK。
+- 线上验证：https://www.quizmate.vip/suite/latest.yml 返回 version 2026.8.20 与新 sha512（老客户端 electron-updater 将自动提示更新）；https://quizmate.cn/download.html Windows 卡片版本 2026.8.20 且链接指向新 exe。
+- 旧版本 2026.8.18 的 exe 对象未被覆盖（新包为独立文件名），仍可回滚。
+
+### 5.3 回滚路径（注意：本次 OSS 侧 rollback 备份实际未生效）
+
+- 发现并修复脚本 bug：原 backup() 的 `client.copy(object, rollback)` 参数顺序颠倒（copy(name, sourceName) 应为 copy(rollback, object)），导致 head 通过后 copy 因源不存在抛 NoSuchKey 被 catch 吞掉、日志误打 BACKUP_SKIP；该 bug 同样存在于 2026-08-19 的 windows 发布脚本。已在 20260820 脚本中修正，后续发布才会真正产生 `rollback/2026.8.20/` 备份对象。
+- 本次实际回滚方式：
+  1. 自动更新回滚：将本目录 `rollback-latest-yml-2026.8.18.yml` 内容（部署前线上抓取存档）覆盖上传 quizmate-vip 的 `suite/latest.yml`，客户端即回到 2026.8.18 更新通道；
+  2. 官网页面回滚：`git checkout` 恢复 download.html / index.html / blog/article-exam-skills.html 后用发布脚本重传；
+  3. 直装回滚：`downloads/QuizMate-Windows-2026.8.18.exe` 仍在线上，可直接分发旧包。
+
+### 5.4 发布后待观察
+
+- 老客户端（2026.8.18 及更早）自动更新到 2026.8.20 的成功率与安装完整性。
+- DT-032/DT-033 的真实用户反馈：填空/输入题场景下按钮兜底的可用性、悬停穿透恢复是否正常。
+
+## 6. 待人工实测项（阻塞清单）
 
 1. DT-032：悬浮窗头部按钮触发截图->搜题->复制全链路；鼠标移开后穿透恢复；窗口 Ctrl+方向移动后穿透复位；悬浮窗不遮挡考试页面点击。
 2. DT-033：托盘右键菜单"全屏截图/搜题"在悬浮窗隐藏时自动拉起悬浮窗并执行；voice 模式下"搜题"走截图+播报链路。
