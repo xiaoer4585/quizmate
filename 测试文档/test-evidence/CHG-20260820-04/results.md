@@ -44,4 +44,8 @@ GitHub macOS Intel/Apple Silicon 最终构建：通过，运行 `32347275779`。
 
 ## 发布边界
 
-- 本轮未上传官网、OSS 或更新清单；实体 Mac P0 验收前不覆盖线上安装包。
+- 用户随后明确要求更新官网并完成推送。生产发布脚本 `其他/部署工具/deploy-mac-release-20260821.cjs` 已执行成功，将 `2026.8.21` 双架构 DMG/ZIP、下载页和更新清单部署至 `quizmate-cn` 与 `quizmate-vip`。
+- 上传前已将两桶原 `latest-mac.yml` 与 `download.html` 备份到 `rollback/CHG-20260820-04/`，四个回滚对象 HEAD 均返回 200。
+- `quizmate.cn`、`www.quizmate.vip` 的下载页与 `latest-mac.yml` 均公网返回 200 且包含 `2026.8.21`；两个域名下四个正式大文件共八个 URL 均返回 200，Content-Length 与最终云构建一致。
+- 正式更新清单已从 `2026.8.20` 提升至 `2026.8.21`。使用 `https://quizmate.cn/mac/` 当前更新通道且本地版本低于 `2026.8.21` 的历史客户端会发现更新；本地已是 `2026.8.21` 时不会重复提示。
+- 当前包仍为 ad-hoc 签名，无 Developer ID、公证和 stapling；更新入口按既定策略打开对应芯片 DMG，不执行未签名 ZIP 的静默替换。
