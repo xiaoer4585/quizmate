@@ -43,8 +43,10 @@ export interface ShortcutBinding {
 
 export const defaultShortcutBindings: Record<ShortcutAction, string> = {
   // 可配置
-  screenshot: 'Alt+Q',
-  search: 'Alt+E',
+  // Command+Q is reserved by macOS for Quit. Keep the familiar Q/E keys while
+  // requiring Option as a safety modifier so exam input cannot close the app.
+  screenshot: 'Command+Alt+Q',
+  search: 'Command+Alt+E',
   toggle_visibility: 'Command+B',
   copy_content: 'Command+Shift+C',
   replay: 'Command+R',

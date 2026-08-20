@@ -84,6 +84,9 @@ export default function Exam() {
     unsubs.push(api?.on('processing-mode-changed', (data: any) => {
       setProcessingMode(data.mode);
     }));
+    unsubs.push(api?.on('shortcuts:updated', (bindings: Record<string, string>) => {
+      setShortcutBindings(bindings);
+    }));
     return () => {
       unsubs.forEach((u) => u && u());
     };

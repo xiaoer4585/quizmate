@@ -38,9 +38,9 @@ export class ShortcutsHelper {
     for (const action of Object.keys(defaultShortcutBindings) as ShortcutAction[]) {
       if (!stored[action]) continue
       const normalized = normalizeMacAccelerator(stored[action])
-      const replacement = action === 'screenshot' && normalized.toLowerCase() === 'command+w'
+      const replacement = action === 'screenshot' && ['command+w', 'alt+q'].includes(normalized.toLowerCase())
         ? defaultShortcutBindings.screenshot
-        : action === 'search' && normalized.toLowerCase() === 'command+e'
+        : action === 'search' && ['command+e', 'alt+e'].includes(normalized.toLowerCase())
           ? defaultShortcutBindings.search
           : normalized
       this.bindings[action] = replacement

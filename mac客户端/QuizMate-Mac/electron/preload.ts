@@ -61,7 +61,7 @@ const api = {
     onError: (cb: (data: unknown) => void) => on('exam:error', cb),
     onProcessingModeChanged: (cb: (data: unknown) => void) => on('processing-mode-changed', cb),
     onShortcutTest: (cb: (data: unknown) => void) => on('shortcut-test', cb),
-    onShortcutChanged: (cb: (data: unknown) => void) => on('shortcut-changed', cb),
+    onShortcutChanged: (cb: (data: unknown) => void) => on('shortcuts:updated', cb),
     onTrayBusy: (cb: (data: unknown) => void) => on('tray:busy', cb),
   },
   // 面试助手

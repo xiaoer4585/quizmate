@@ -1,5 +1,5 @@
 // Screenshot helper - uses screenshot-desktop with macOS screencapture fallback.
-import { app, nativeImage, systemPreferences } from 'electron'
+import { app, desktopCapturer, nativeImage, screen, systemPreferences } from 'electron'
 import fs from 'fs'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
@@ -62,18 +62,41 @@ export class ScreenshotHelper {
       return { success: false, error: '截图过于频繁，请稍后再试' }
     }
     this.lastScreenshotTime = Date.now()
-    if (process.platform === 'darwin') {
-      const permission = systemPreferences.getMediaAccessStatus('screen')
-      if (permission === 'denied' || permission === 'restricted') {
-        return {
-          success: false,
-          error: '请在“系统设置 > 隐私与安全性 > 屏幕录制”中允许 QuizMate，然后重新打开应用',
-        }
-      }
-    }
+    return this.captureFullScreenInternal()
+  }
+
+  private async captureFullScreenInternal(): Promise<ScreenshotResult> {
+    const permissionError = this.getScreenPermissionError()
+    if (permissionError) return { success: false, error: permissionError }
+
     const fileName = `${uuidv4()}.png`
     const tempPath = path.join(this.tempDir, fileName)
-    // Primary: screenshot-desktop
+
+    // Electron's native capture path triggers the macOS Screen Recording prompt
+    // when permission has not been decided yet and avoids shell-path differences.
+    try {
+      const display = screen.getPrimaryDisplay()
+      const thumbnailSize = {
+        width: Math.max(1, Math.round(display.size.width * display.scaleFactor)),
+        height: Math.max(1, Math.round(display.size.height * display.scaleFactor)),
+      }
+      const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize })
+      const source = sources.find((item) => item.display_id === String(display.id)) || sources[0]
+      if (source && !source.thumbnail.isEmpty()) {
+        const png = source.thumbnail.toPNG()
+        if (png.length > 0) {
+          fs.writeFileSync(tempPath, png)
+          return { success: true, filePath: tempPath }
+        }
+      }
+      const permissionAfterCapture = this.getScreenPermissionError()
+      if (permissionAfterCapture) return { success: false, error: permissionAfterCapture }
+    } catch (e) {
+      console.warn('[ScreenshotHelper] Electron screen capture failed, trying screenshot-desktop:', e)
+      const permissionAfterCapture = this.getScreenPermissionError()
+      if (permissionAfterCapture) return { success: false, error: permissionAfterCapture }
+    }
+
     try {
       const screenshot = await import('screenshot-desktop')
       await screenshot.default({ filename: tempPath, format: 'png' })
@@ -92,7 +115,10 @@ export class ScreenshotHelper {
     } catch (e) {
       console.error('[ScreenshotHelper] macOS screencapture fallback failed:', e)
     }
-    return { success: false, error: '截图失败，请稍后重试' }
+    return {
+      success: false,
+      error: '截图失败。请在“系统设置 > 隐私与安全性 > 屏幕与系统音频录制”中允许 QuizMate，重新打开应用后再试',
+    }
   }
 
   public async captureRegion(x: number, y: number, width: number, height: number): Promise<ScreenshotResult> {
@@ -111,8 +137,9 @@ export class ScreenshotHelper {
     } catch (e) {
       console.error('[ScreenshotHelper] Region capture failed:', e)
     }
-    // Fallback to full screen
-    return this.captureFullScreen()
+    // This capture already passed the rate limiter. Do not run it again during
+    // the same user action or the fallback will always report "too frequent".
+    return this.captureFullScreenInternal()
   }
 
   public async saveToQueue(filePath: string, isExtra: boolean = false): Promise<string> {
@@ -286,5 +313,12 @@ export class ScreenshotHelper {
         else resolve()
       })
     })
+  }
+
+  private getScreenPermissionError(): string | null {
+    if (process.platform !== 'darwin') return null
+    const permission = systemPreferences.getMediaAccessStatus('screen')
+    if (permission !== 'denied' && permission !== 'restricted') return null
+    return '请在“系统设置 > 隐私与安全性 > 屏幕与系统音频录制”中允许 QuizMate，然后彻底退出并重新打开应用'
   }
 }

@@ -186,6 +186,10 @@ export default function OverlayPage() {
       setBackgroundOpacity(opacity)
     }))
 
+    unsubs.push(api?.on('shortcuts:updated', (bindings: Record<string, string>) => {
+      setShortcutBindings(bindings)
+    }))
+
     unsubs.push(api?.on('toggle-raw-output', () => {
       setView((v) => v === 'raw-output' ? 'solutions' : 'raw-output')
     }))

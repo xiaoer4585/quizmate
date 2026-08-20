@@ -89,9 +89,9 @@ export class RealtimeVoiceHelper {
     });
     ses.setDisplayMediaRequestHandler((_request, callback) => {
       desktopCapturer.getSources({ types: ['screen'] })
-        .then((sources) => callback({ video: sources[0], audio: 'loopback' }))
+        .then((sources) => callback(sources[0] ? { video: sources[0] } : {}))
         .catch(() => callback({}));
-    });
+    }, { useSystemPicker: process.platform === 'darwin' });
 
     // 注入 ASR API 鉴权头到 WebSocket 握手请求
     ses.webRequest.onBeforeSendHeaders(
@@ -149,17 +149,26 @@ export class RealtimeVoiceHelper {
 
     // 启动隐藏窗口中的识别
     const audioMode = options.audioMode === 'formal' ? 'formal' : 'demo';
-    await this.audioWindow.webContents.executeJavaScript(`startListening(${JSON.stringify(audioMode)})`, true).catch((e) => {
+    await this.audioWindow.webContents.executeJavaScript(`void startListening(${JSON.stringify(audioMode)}); true`, true).catch((e) => {
       this.running = false;
       console.error('[RealtimeVoice] start error:', e);
       throw new Error(e?.message || '启动语音识别失败');
     });
 
-    const deadline = Date.now() + 8000;
+    const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
-      const state = await this.audioWindow.webContents.executeJavaScript('getConnectionState()', true);
-      if (state === 'open') break;
-      if (state === 'closed' || state === 'error') {
+      const startup = await this.audioWindow.webContents.executeJavaScript('getStartupState()', true) as {
+        state: string;
+        stage: string;
+        error: string;
+      };
+      if (startup.state === 'open') break;
+      if (startup.error) {
+        this.running = false;
+        await this.audioWindow.webContents.executeJavaScript('stopListening(false)', true).catch(() => {});
+        throw new Error(startup.error);
+      }
+      if (startup.state === 'closed' || startup.state === 'error') {
         this.running = false;
         throw new Error('火山引擎实时语音连接被拒绝，请检查专属 API Key、Resource-Id 和模型授权');
       }
@@ -168,6 +177,14 @@ export class RealtimeVoiceHelper {
     if (!this.running || Date.now() >= deadline) {
       this.running = false;
       this.audioWindow.webContents.executeJavaScript('stopListening()', true).catch(() => {});
+      const startup = await this.audioWindow.webContents.executeJavaScript('getStartupState()', true).catch(() => null);
+      const stage = startup && startup.stage ? startup.stage : 'connect-asr';
+      if (stage === 'capture-system') {
+        throw new Error('等待系统音频授权超时，请在系统共享窗口中选择屏幕并开启音频共享');
+      }
+      if (stage === 'capture-microphone') {
+        throw new Error('等待麦克风授权超时，请在系统设置中允许 QuizMate 使用麦克风');
+      }
       throw new Error('火山引擎实时语音连接超时，请检查网络和后台模型配置');
     }
 
@@ -250,6 +267,8 @@ let needsWavHeader = true;
 let keepSession = false;
 let reconnectTimer = null;
 let reconnectDelay = 500;
+let startupStage = 'idle';
+let startupError = '';
 
 // ===== 二进制协议构造 =====
 function makeHeader(msgType, flags, serialization, compression) {
@@ -514,6 +533,8 @@ async function startListening(audioMode = 'demo') {
   keepSession = true;
   reconnectDelay = 500;
   pendingResults = [];
+  startupStage = 'capture-system';
+  startupError = '';
   seqNum = 1;
   audioSendQueue = Promise.resolve();
   needsWavHeader = true;
@@ -521,18 +542,33 @@ async function startListening(audioMode = 'demo') {
   try {
     // Formal mode captures only meeting/speaker audio. Demo mode mixes microphone and speaker audio.
     captureStreams = [];
-    const systemStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-    if (systemStream.getAudioTracks().length === 0) {
-      throw new Error('未获取到电脑声音，请确认系统允许共享音频');
+    let systemCaptureError = '';
+    try {
+      const systemStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      if (systemStream.getAudioTracks().length > 0) {
+        captureStreams.push(systemStream);
+      } else {
+        systemStream.getTracks().forEach(track => track.stop());
+        systemCaptureError = '未获取到电脑声音，请在系统共享窗口中开启“共享系统音频”';
+      }
+    } catch (error) {
+      systemCaptureError = error && error.message ? error.message : String(error);
     }
-    captureStreams.push(systemStream);
+    if (audioMode === 'formal' && captureStreams.length === 0) {
+      throw new Error(systemCaptureError + '；macOS 15 以下版本不支持当前系统音频采集方式');
+    }
     if (audioMode === 'demo') {
+      startupStage = 'capture-microphone';
       const microphoneStream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       });
       captureStreams.push(microphoneStream);
+      if (systemCaptureError) {
+        pendingResults.push({ text: '', isFinal: false, error: '未能采集系统音频，演示模式已自动改用麦克风：' + systemCaptureError });
+      }
     }
 
+    startupStage = 'prepare-audio';
     // 2. 创建 AudioContext (浏览器实际采样率可能是48k，我们做重采样)
     audioContext = new AudioContext();
     const actualSampleRate = audioContext.sampleRate;
@@ -558,6 +594,7 @@ async function startListening(audioMode = 'demo') {
     // 3. 连接 WebSocket（使用注入的配置）
     const asrWsUrl = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.wsUrl) || 'wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async';
     const asrModel = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.model) || 'bigmodel';
+    startupStage = 'connect-asr';
     ws = new WebSocket(asrWsUrl);
     const initialWs = ws;
     initialWs.binaryType = 'arraybuffer';
@@ -585,6 +622,7 @@ async function startListening(audioMode = 'demo') {
           },
         });
         isListening = true;
+        startupStage = 'open';
       } catch (error) {
         console.error('[ASR] Full request error:', error);
         pendingResults.push({ text: '', isFinal: false, error: '语音识别初始化请求发送失败' });
@@ -645,7 +683,8 @@ async function startListening(audioMode = 'demo') {
     initialWs.onerror = (e) => {
       if (ws !== initialWs) return;
       console.error('[ASR] WebSocket error:', e);
-      pendingResults.push({ text: '', isFinal: false, error: '语音识别服务连接失败，请检查网络' });
+      startupError = '语音识别服务连接失败，请检查网络和后台模型配置';
+      pendingResults.push({ text: '', isFinal: false, error: startupError });
     };
 
     initialWs.onclose = (e) => {
@@ -657,7 +696,16 @@ async function startListening(audioMode = 'demo') {
 
   } catch (e) {
     console.error('[ASR] Start error:', e);
-    pendingResults.push({ text: '', isFinal: false, error: '麦克风采集失败: ' + (e.message || e) });
+    const detail = e && e.message ? e.message : String(e);
+    if (startupStage === 'capture-system') {
+      startupError = '系统音频采集失败：' + detail;
+    } else if (startupStage === 'capture-microphone') {
+      startupError = '麦克风采集失败：' + detail;
+    } else {
+      startupError = '实时语音启动失败：' + detail;
+    }
+    keepSession = false;
+    pendingResults.push({ text: '', isFinal: false, error: startupError });
   }
 }
 
@@ -722,6 +770,14 @@ function getConnectionState() {
   if (ws.readyState === WebSocket.OPEN && isListening) return 'open';
   if (ws.readyState === WebSocket.CLOSING || ws.readyState === WebSocket.CLOSED) return 'closed';
   return 'connecting';
+}
+
+function getStartupState() {
+  return {
+    state: getConnectionState(),
+    stage: startupStage,
+    error: startupError,
+  };
 }
 </script>
 </body></html>`;
