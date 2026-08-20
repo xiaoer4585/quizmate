@@ -15,6 +15,28 @@ const voiceModeActions: Set<string> = new Set<string>([
   'interview_next_question',
 ])
 
+// 面试模式下同样可用的窗口调节动作（与笔试悬浮窗一致：移动/缩放/透明度/界面缩放/复位）。
+// 这些动作在 handleShortcutAction 中按 interviewActive 路由到面试悬浮窗，
+// 若不加入白名单，interview:activateShortcuts 切换注册模式后快捷键将无法触发。
+const interviewWindowActions: Set<string> = new Set<string>([
+  'move_up',
+  'move_down',
+  'move_left',
+  'move_right',
+  'resize_height_larger',
+  'resize_height_smaller',
+  'resize_width_smaller',
+  'resize_width_larger',
+  'opacity_brighter',
+  'opacity_darker',
+  'opacity_brighter_alt',
+  'opacity_darker_alt',
+  'zoom_in',
+  'zoom_out',
+  'zoom_reset',
+  'reset_position',
+])
+
 export class ShortcutsHelper {
   private configHelper: ConfigHelper
   private bindings: Record<string, string> = {}
@@ -145,7 +167,7 @@ export class ShortcutsHelper {
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!accelerator) continue
       if (mode === 'voice' && !voiceModeActions.has(action)) continue
-      if (mode === 'interview' && !interviewShortcutActions.includes(action as ShortcutAction) && !['quit', 'reset', 'toggle_visibility', 'replay'].includes(action)) continue
+      if (mode === 'interview' && !interviewShortcutActions.includes(action as ShortcutAction) && !['quit', 'reset', 'toggle_visibility', 'replay'].includes(action) && !interviewWindowActions.has(action)) continue
       try {
         const ret = globalShortcut.register(accelerator, () => {
           if (this.testMode && this.testCallback) {
@@ -176,7 +198,7 @@ export class ShortcutsHelper {
     if (mode === 'overlay') {
       return all.filter(action => !!this.bindings[action])
     }
-    if (mode === 'interview') return all.filter(action => !!this.bindings[action] && (interviewShortcutActions.includes(action) || ['quit', 'reset', 'toggle_visibility', 'replay'].includes(action)))
+    if (mode === 'interview') return all.filter(action => !!this.bindings[action] && (interviewShortcutActions.includes(action) || ['quit', 'reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)))
     return all.filter(action => !!this.bindings[action] && voiceModeActions.has(action))
   }
 

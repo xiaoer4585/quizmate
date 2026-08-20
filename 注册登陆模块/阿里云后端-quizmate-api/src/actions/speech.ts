@@ -19,6 +19,7 @@ interface InterviewContext {
   resumeText: string;
   language: string;
   answerStyle: "concise" | "detailed";
+  recentConversation: string;
 }
 
 // 鉴权：语音配置和播报只校验账号；面试回答在模型成功返回后单独扣积分。
@@ -52,7 +53,9 @@ function normalizeInterviewContext(input: Record<string, unknown>): InterviewCon
     jobDescription: String(raw.jobDescription ?? "").trim().slice(0, 8_000),
     resumeText: String(raw.resumeText ?? "").trim().slice(0, 20_000),
     language: String(raw.language ?? "zh").trim().slice(0, 20) || "zh",
-    answerStyle: raw.answerStyle === "detailed" ? "detailed" : "concise"
+    answerStyle: raw.answerStyle === "detailed" ? "detailed" : "concise",
+    // 客户端一直在传最近对话上下文，此前被丢弃；现在供占位符模板使用
+    recentConversation: String(raw.recentConversation ?? "").trim().slice(0, 4_000)
   };
 }
 
@@ -78,26 +81,54 @@ export function buildInterviewPrompt(
   context: InterviewContext,
   configuredPrompt = DEFAULT_INTERVIEW_PROMPT
 ): string {
-  const detail = context.answerStyle === "detailed"
-    ? "【详细回答】给出结构完整、可直接口述的详细回答"
-    : "【详细回答】给出简洁、自然、可直接口述的回答，优先控制在 150 至 300 字";
   const answerLanguage = resolveAnswerLanguage(question, context.language);
+  const styleText = context.answerStyle === "detailed" ? "详细" : "简洁";
   const selfIntroduction = /(?:介绍|介绍下|介绍一下|自我介绍|about yourself|tell me about yourself|introduce yourself)/i.test(question);
+  const selfIntroInstruction = selfIntroduction
+    ? "这是自我介绍问题：必须优先从候选人简历提取真实经历、技能和成果，先概括个人定位，再选择与应聘岗位和岗位描述最匹配的 1 至 2 段经历，明确说明能为目标公司带来的价值；简历没有对应信息时只能使用通用表述并明确不虚构经历。"
+    : "";
+  const jsonRequirement = [
+    "仅输出 JSON，格式为：",
+    '{"items":[{"summary":"问题摘要","answer":"完整可口述的回答","explanation":""}]}'
+  ].join("\n");
+  const base = configuredPrompt.trim() || DEFAULT_INTERVIEW_PROMPT;
+
+  // 新版占位符模板（含 {question}）：直接填充占位符，不再追加重复的上下文标签
+  if (base.includes("{question}")) {
+    const filled = base
+      .replaceAll("{question}", question)
+      .replaceAll("{context.position}", context.position || "（未提供）")
+      .replaceAll("{context.company}", context.company || "（未提供）")
+      .replaceAll("{context.jobDescription}", context.jobDescription || "（未提供）")
+      .replaceAll("{context.resumeText}", context.resumeText || "（未提供）")
+      .replaceAll("{context.language}", answerLanguage)
+      .replaceAll("{context.answerStyle}", styleText)
+      .replaceAll("{context.recentConversation}", context.recentConversation || "（无）");
+    return [
+      filled,
+      selfIntroInstruction,
+      "不要虚构简历中不存在的事实；信息不足时给出稳妥的通用表述。",
+      jsonRequirement
+    ].filter(Boolean).join("\n\n");
+  }
+
+  // 旧版纯文本模板（后台 interview_prompt_config 自定义提示词兼容）：沿用标签拼接
+  const detail = context.answerStyle === "detailed"
+    ? "给出结构完整、可直接口述的详细回答"
+    : "给出简洁、自然、可直接口述的回答，优先控制在 150 至 300 字";
   return [
-    configuredPrompt.trim() || DEFAULT_INTERVIEW_PROMPT,
+    base,
     detail + "。不要虚构简历中不存在的事实；信息不足时给出稳妥的通用表述。",
-    selfIntroduction
-      ? "这是自我介绍问题：必须优先从候选人简历提取真实经历、技能和成果，先概括个人定位，再选择与应聘岗位和岗位描述最匹配的 1 至 2 段经历，明确说明能为目标公司带来的价值；简历没有对应信息时只能使用通用表述并明确不虚构经历。"
-      : "回答必须结合候选人简历、岗位描述、应聘岗位和目标公司；优先使用简历中的真实项目和成果，不能只给脱离上下文的通用答案。",
+    selfIntroInstruction || "回答必须结合候选人简历、岗位描述、应聘岗位和目标公司；优先使用简历中的真实项目和成果，不能只给脱离上下文的通用答案。",
     `本次回答语言（必须遵守）：${answerLanguage}`,
     context.position ? `应聘岗位：${context.position}` : "",
     context.company ? `目标公司：${context.company}` : "",
     context.jobDescription ? `岗位描述：\n${context.jobDescription}` : "",
     context.resumeText ? `候选人简历：\n${context.resumeText}` : "",
+    context.recentConversation ? `最近对话上下文：\n${context.recentConversation}` : "",
     `面试官问题：${question}`,
-    "硬性排版要求：参考回答固定分两层，两层中间单独一行输出分隔符“" + INTERVIEW_SECTION_DIVIDER + "”；【答题思路】分 3 至 5 步、每步独占一行；【详细回答】结论单独一段，1、2、3 各自单独一段，段落之间空一行；禁止把三个编号写在同一行。",
-    "仅输出 JSON，格式为：",
-    '{"items":[{"summary":"问题摘要","answer":"【答题思路】\\n第一步…\\n第二步…\\n\\n' + INTERVIEW_SECTION_DIVIDER + '\\n\\n【详细回答】\\n结论段\\n\\n1、第一点\\n\\n2、第二点\\n\\n3、第三点\\n\\n简短收束","explanation":""}]}'
+    "硬性排版要求：结论单独一段；1、2、3 各自单独一段，段落之间空一行；禁止把三个编号写在同一行。",
+    jsonRequirement
   ].filter(Boolean).join("\n\n");
 }
 

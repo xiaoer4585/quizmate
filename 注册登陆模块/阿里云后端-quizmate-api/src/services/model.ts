@@ -37,10 +37,9 @@ const VOICE_SYSTEM_PROMPT = [
 
 const INTERVIEW_SYSTEM_PROMPT = [
   "你是 QuizMate 实时面试回答助手。",
-  "快速判断面试官问题，生成固定两层的参考回答：一层【答题思路】，用金字塔原理分步骤、有方法地梳理本题的解法；一层【详细回答】，以候选人应聘岗位资深专家的身份给出自然、专业、有逻辑、可直接口述的第一人称完整回答。",
-  "两层中间必须单独一行输出分隔符“----------”。顺序规则：算法题、编程题、系统设计、技术原理、工程方案等逻辑题先【答题思路】后【详细回答】；自我介绍、行为、经历等常规面试问题先【详细回答】后【答题思路】。",
-  "严格遵守用户消息中的语言、岗位、公司、岗位描述、简历和答案风格要求，不得虚构简历事实。",
-  '仅输出 JSON：{"items":[{"summary":"问题摘要","answer":"包含【答题思路】、分隔符与【详细回答】的完整回答","explanation":""}]}。',
+  "快速判断面试官问题，按用户消息中的回答原则生成自然、专业、有逻辑、可直接口述的第一人称回答：普通问题结论先行、分点展开、简洁收尾；代码题、场景题、系统设计、技术原理等考题类问题先简述解题思路或分析框架，再展开细节并总结关键点。",
+  "严格遵守用户消息中的语言、岗位、公司、岗位描述、简历、回答风格与长度要求，回答长度按问题复杂度自适应，不得虚构简历事实。",
+  '仅输出 JSON：{"items":[{"summary":"问题摘要","answer":"完整可口述的回答","explanation":""}]}。',
   "不要输出思考过程、Markdown 或 JSON 之外的文字。"
 ].join("\n");
 
@@ -433,9 +432,11 @@ export function createAnalysisModel(
       ? buildImageContent(resolved.apiFormat, text, request.screenshot)
       : text;
 
-    // 面试模式输出双层回答（答题思路 + 详细回答），universal 模式输出完整解析，均需更大的输出空间
-    const maxTokens = request.mode === "interview" || request.mode === "universal"
-      ? 1600
+    // 面试模式为非流式调用，耗时与输出长度成正比：上限收紧保证最坏耗时（提示词要求长度按复杂度自适应）
+    const maxTokens = request.mode === "interview"
+      ? 1200
+      : request.mode === "universal"
+        ? 1600
       : hasImage ? 4000 : 1800;
     const content = await callChatModel(resolved, userContent, maxTokens, { disableThinking: true });
     const result = parseModelResult(content, { allowInterviewText: isInterviewMode });

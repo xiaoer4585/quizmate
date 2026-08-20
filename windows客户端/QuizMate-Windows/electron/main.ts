@@ -882,6 +882,19 @@ function createInterviewOverlayWindow() {
     state.interviewOverlayVisible = false;
   });
 
+  // 与笔试悬浮窗一致：移动/缩放后持久化窗口位置与尺寸（两个悬浮窗共享已保存配置）
+  state.interviewOverlayWindow.on('move', () => {
+    if (!state.interviewOverlayWindow) return;
+    const b = state.interviewOverlayWindow.getBounds();
+    configHelper.setWindowPosition({ x: b.x, y: b.y });
+  });
+
+  state.interviewOverlayWindow.on('resize', () => {
+    if (!state.interviewOverlayWindow) return;
+    const b = state.interviewOverlayWindow.getBounds();
+    configHelper.setWindowSize({ width: b.width, height: b.height });
+  });
+
   const interviewUrl = getRendererUrl('#/overlay-interview');
   if (interviewUrl) state.interviewOverlayWindow.loadURL(interviewUrl);
 

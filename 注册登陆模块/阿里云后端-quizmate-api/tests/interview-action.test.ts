@@ -29,22 +29,52 @@ describe("interview speech action", () => {
     jobDescription: "Own product strategy and launch cross-functional initiatives.",
     resumeText: "Led a cross-functional product launch.",
     language: "zh",
-    answerStyle: "concise" as const
+    answerStyle: "concise" as const,
+    recentConversation: "面试官：先简单聊聊你的经历。"
   };
 
   it("selects the response language from the question and explicit instructions", () => {
-    expect(buildInterviewPrompt("请介绍一下自己", context)).toContain("本次回答语言（必须遵守）：中文");
-    expect(buildInterviewPrompt("Tell me about yourself", context)).toContain("本次回答语言（必须遵守）：English");
-    expect(buildInterviewPrompt("请用英文介绍一下你自己", context)).toContain("本次回答语言（必须遵守）：English");
+    expect(buildInterviewPrompt("请介绍一下自己", context)).toContain("本次回答语言：中文");
+    expect(buildInterviewPrompt("Tell me about yourself", context)).toContain("本次回答语言：English");
+    expect(buildInterviewPrompt("请用英文介绍一下你自己", context)).toContain("本次回答语言：English");
   });
 
-  it("keeps the configured prompt and interview context", () => {
+  it("fills the placeholder template with question, context and conversation", () => {
+    const prompt = buildInterviewPrompt("谈谈你对 RAG 的理解", context);
+    expect(prompt).toContain("面试官问题：谈谈你对 RAG 的理解");
+    expect(prompt).toContain("应聘岗位：Product Manager");
+    expect(prompt).toContain("目标公司：Example Inc.");
+    expect(prompt).toContain("候选人简历：Led a cross-functional product launch.");
+    expect(prompt).toContain("最近对话上下文：面试官：先简单聊聊你的经历。");
+    expect(prompt).toContain("回答风格：简洁");
+    expect(prompt).not.toContain("{question}");
+    expect(prompt).not.toContain("{context.");
+  });
+
+  it("falls back to placeholders when context fields are empty", () => {
+    const prompt = buildInterviewPrompt("说说你的优点", {
+      ...context,
+      position: "",
+      company: "",
+      jobDescription: "",
+      resumeText: "",
+      recentConversation: ""
+    });
+    expect(prompt).toContain("应聘岗位：（未提供）");
+    expect(prompt).toContain("目标公司：（未提供）");
+    expect(prompt).toContain("最近对话上下文：（无）");
+  });
+
+  it("keeps legacy custom prompts working with labeled context appends", () => {
     const prompt = buildInterviewPrompt("Why this role?", context, "CUSTOM INTERVIEW ROLE");
     expect(prompt).toContain("CUSTOM INTERVIEW ROLE");
     expect(prompt).toContain("应聘岗位：Product Manager");
     expect(prompt).toContain("目标公司：Example Inc.");
     expect(prompt).toContain("岗位描述：\nOwn product strategy and launch cross-functional initiatives.");
     expect(prompt).toContain("候选人简历：\nLed a cross-functional product launch.");
+    expect(prompt).toContain("最近对话上下文：\n面试官：先简单聊聊你的经历。");
+    expect(prompt).toContain("本次回答语言（必须遵守）：English");
+    expect(prompt).toContain("优先控制在 150 至 300 字");
   });
 
   it("prioritizes resume evidence for self-introduction", () => {
@@ -53,25 +83,16 @@ describe("interview speech action", () => {
     expect(prompt).toContain("优先从候选人简历提取真实经历");
   });
 
-  it("requires a concise pyramid answer with numbered support and no separate key-point field", () => {
+  it("uses the candidate-persona template with adaptive length and JSON-only output", () => {
     const prompt = buildInterviewPrompt("请说说你如何推进跨团队项目", context);
-    expect(prompt).toContain("金字塔原理");
-    expect(prompt).toContain("1、2、3");
+    expect(prompt).toContain("候选人第一人称");
+    expect(prompt).toContain("结论先行");
+    expect(prompt).toContain("回答长度根据问题复杂度自动调整");
     expect(prompt).toContain('"explanation":""');
     expect(prompt).not.toContain("回答要点，每个要点单独一行");
-  });
-
-  it("requires the two-layer answer structure with divider and position-expert persona", () => {
-    const logicPrompt = buildInterviewPrompt("给定一个字符串流，如何实现滑动窗口求最长不重复子串长度", context);
-    expect(logicPrompt).toContain("答题思路");
-    expect(logicPrompt).toContain("详细回答");
-    expect(logicPrompt).toContain("----------");
-    expect(logicPrompt).toContain("资深专家");
-    // 逻辑题先思路后详细回答，常规面试问题顺序相反（由提示词约束模型自适应）
-    expect(logicPrompt).toContain("先输出【答题思路】再输出【详细回答】");
-    expect(logicPrompt).toContain("先输出【详细回答】");
-    expect(logicPrompt).toContain("应聘岗位：Product Manager");
-    expect(logicPrompt).toContain("【详细回答】给出简洁、自然、可直接口述的回答");
+    // 不再强制双层结构与分隔符（CHG-20260820-07 速度修复）
+    expect(prompt).not.toContain("【答题思路】");
+    expect(prompt).not.toContain("----------");
   });
 
   it("keeps the conclusion and numbered support in readable paragraphs", () => {
@@ -81,13 +102,7 @@ describe("interview speech action", () => {
       .toBe("结论\n\n1、第一项\n\n2、第二项\n\n3、第三项");
   });
 
-  it("preserves the two-layer divider and section headers when formatting", () => {
-    expect(formatInterviewAnswer(
-      "【答题思路】\n第一步 定位题型\n第二步 给出框架\n----------\n【详细回答】\n我的结论。 1、支撑点一。 2、支撑点二。"
-    )).toBe(
-      "【答题思路】\n\n第一步 定位题型\n第二步 给出框架\n\n----------\n\n【详细回答】\n\n我的结论。\n\n1、支撑点一。\n\n2、支撑点二。"
-    );
-    // 模型输出不同长度的横线分隔符时统一规范，且不再被当作项目符号吞噬
+  it("preserves divider lines when the model emits them", () => {
     expect(formatInterviewAnswer("结论A\n-------------\n结论B"))
       .toBe("结论A\n\n----------\n\n结论B");
   });
