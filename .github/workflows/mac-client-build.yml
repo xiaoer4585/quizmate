@@ -23,11 +23,13 @@ jobs:
             label: Intel
             expected: x86_64
             uploadKey: intel
+            zipUploadKey: intelZip
             logUploadKey: intelLog
           - arch: arm64
             label: Apple-Silicon
             expected: arm64
             uploadKey: apple
+            zipUploadKey: appleZip
             logUploadKey: appleLog
 
     defaults:
@@ -74,7 +76,7 @@ jobs:
           set -o pipefail
           {
             npm run build
-            npx electron-builder --mac dmg --${{ matrix.arch }} --publish never
+            npx electron-builder --mac dmg zip --${{ matrix.arch }} --publish never
           } 2>&1 | tee -a build.log
 
       - name: Re-sign app for local distribution
@@ -87,7 +89,8 @@ jobs:
           codesign --force --deep --sign - --timestamp=none "$APP_PATH"
           codesign --verify --deep --strict --verbose=4 "$APP_PATH"
           rm -f release/QuizMate-Mac-${{ matrix.arch }}-*.dmg
-          npx electron-builder --mac dmg --${{ matrix.arch }} --prepackaged "$APP_PATH" --publish never
+          rm -f release/QuizMate-Mac-${{ matrix.arch }}-*.zip
+          npx electron-builder --mac dmg zip --${{ matrix.arch }} --prepackaged "$APP_PATH" --publish never
 
       - name: Verify DMG and executable architecture
         id: artifact
@@ -96,7 +99,9 @@ jobs:
           set -euo pipefail
           exec > >(tee -a build.log) 2>&1
           DMG=$(find release -maxdepth 1 -name "QuizMate-Mac-${{ matrix.arch }}-*.dmg" -print -quit)
+          ZIP=$(find release -maxdepth 1 -name "QuizMate-Mac-${{ matrix.arch }}-*.zip" -print -quit)
           test -n "$DMG"
+          test -n "$ZIP"
           hdiutil verify "$DMG"
           MOUNT_DIR=$(mktemp -d)
           hdiutil attach "$DMG" -mountpoint "$MOUNT_DIR" -nobrowse -readonly
@@ -110,7 +115,9 @@ jobs:
           grep -q "${{ matrix.expected }}" architecture.txt
           hdiutil detach "$MOUNT_DIR"
           shasum -a 256 "$DMG" | tee sha256.txt
+          shasum -a 256 "$ZIP" | tee -a sha256.txt
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
+          echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
       - name: Upload Actions artifact
         continue-on-error: true
@@ -119,6 +126,7 @@ jobs:
           name: QuizMate-Mac-${{ matrix.label }}-2026.8.18
           path: |
             mac客户端/QuizMate-Mac/${{ steps.artifact.outputs.dmg }}
+            mac客户端/QuizMate-Mac/${{ steps.artifact.outputs.zip }}
             mac客户端/QuizMate-Mac/architecture.txt
             mac客户端/QuizMate-Mac/codesign.txt
             mac客户端/QuizMate-Mac/sha256.txt
@@ -131,19 +139,29 @@ jobs:
         env:
           BUILD_ARCH: ${{ matrix.arch }}
           UPLOAD_KEY: ${{ matrix.uploadKey }}
+          ZIP_UPLOAD_KEY: ${{ matrix.zipUploadKey }}
           DMG_PATH: ${{ steps.artifact.outputs.dmg }}
+          ZIP_PATH: ${{ steps.artifact.outputs.zip }}
         run: |
           set -euo pipefail
           git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
           TAG_PAYLOAD_B64=$(git cat-file tag "$GITHUB_REF_NAME" | sed '1,/^$/d' | tr -d '\n')
           UPLOAD_URL=$(TAG_PAYLOAD_B64="$TAG_PAYLOAD_B64" node -e "const p=JSON.parse(Buffer.from(process.env.TAG_PAYLOAD_B64, 'base64').toString('utf8')); process.stdout.write(p[process.env.UPLOAD_KEY])")
+          ZIP_UPLOAD_URL=$(TAG_PAYLOAD_B64="$TAG_PAYLOAD_B64" node -e "const p=JSON.parse(Buffer.from(process.env.TAG_PAYLOAD_B64, 'base64').toString('utf8')); process.stdout.write(p[process.env.ZIP_UPLOAD_KEY])")
           test -n "$UPLOAD_URL"
+          test -n "$ZIP_UPLOAD_URL"
           echo "::add-mask::$UPLOAD_URL"
+          echo "::add-mask::$ZIP_UPLOAD_URL"
           curl --fail --silent --show-error --retry 3 \
             -X PUT \
             -H "Content-Type: application/x-apple-diskimage" \
             --upload-file "$DMG_PATH" \
             "$UPLOAD_URL"
+          curl --fail --silent --show-error --retry 3 \
+            -X PUT \
+            -H "Content-Type: application/zip" \
+            --upload-file "$ZIP_PATH" \
+            "$ZIP_UPLOAD_URL"
 
       - name: Upload diagnostic log
         if: always() && startsWith(github.ref, 'refs/tags/mac-build-')
