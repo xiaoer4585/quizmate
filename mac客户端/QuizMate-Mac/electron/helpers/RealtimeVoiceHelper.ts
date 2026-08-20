@@ -89,7 +89,7 @@ export class RealtimeVoiceHelper {
     });
     ses.setDisplayMediaRequestHandler((_request, callback) => {
       desktopCapturer.getSources({ types: ['screen'] })
-        .then((sources) => callback(sources[0] ? { video: sources[0] } : {}))
+        .then((sources) => callback(sources[0] ? { video: sources[0], audio: 'loopback' } : {}))
         .catch(() => callback({}));
     }, { useSystemPicker: process.platform === 'darwin' });
 
@@ -555,7 +555,7 @@ async function startListening(audioMode = 'demo') {
       systemCaptureError = error && error.message ? error.message : String(error);
     }
     if (audioMode === 'formal' && captureStreams.length === 0) {
-      throw new Error(systemCaptureError + '；macOS 15 以下版本不支持当前系统音频采集方式');
+      throw new Error(systemCaptureError || '未获取到电脑声音，请检查系统音频录制权限');
     }
     if (audioMode === 'demo') {
       startupStage = 'capture-microphone';

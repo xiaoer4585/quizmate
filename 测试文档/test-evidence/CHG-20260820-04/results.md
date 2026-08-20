@@ -4,7 +4,7 @@
 
 - Mac 截图主要依赖 `screenshot-desktop`/`screencapture`，权限未决定时没有 Electron 原生权限触发路径；区域截图失败后再次进入全屏截图节流，必然返回“截图过于频繁”。
 - Mac 默认截图/搜题仍为 `Alt+Q/E`，主页面和笔试悬浮框没有统一订阅 `shortcuts:updated`。
-- 实时听写给 Mac 传入 Electron 文档标明仅支持 Windows 的 `audio: loopback`；隐藏页采集失败后主进程只轮询 WebSocket 状态，把真实采集错误覆盖成火山连接超时。
+- 实时听写缺少 macOS 14.2+ CoreAudio Tap 必需的用途声明；Electron 官方说明此时会产生无明显异常的死音轨。隐藏页采集失败后主进程又只轮询 WebSocket 状态，把真实采集错误覆盖成火山连接超时。
 - macOS 14.2+ 的系统音频采集需要 `NSAudioCaptureUsageDescription`，原包缺少该声明。
 
 ## 自动化结果
@@ -18,7 +18,7 @@
 | `npm run build` | 通过；main/preload/renderer 均生成 |
 | `git diff --check` | 通过；仅工作区 CRLF 提示 |
 | 快捷键默认值、旧值迁移和跨窗口广播 | 4/4 通过 |
-| Mac 源码移除 Windows-only loopback、启用原生 picker | 2/2 通过 |
+| Mac 保留 CoreAudio loopback 请求、启用 macOS 15+ 原生 picker | 2/2 通过 |
 | 听写异步启动与三阶段错误状态 | 2/2 通过 |
 | 系统音频 Info.plist 声明、区域截图回退 | 2/2 通过 |
 
@@ -40,7 +40,7 @@ GitHub macOS Intel/Apple Silicon 构建：通过，运行 `32346598933`。两架
 - 屏幕录制权限首次授权、拒绝后恢复、全屏/多屏截图：待用户测试。
 - Intel/Apple Silicon 的 `Command+Option+Q/E` 与自定义后即时刷新：待用户测试。
 - macOS 15+ 正式模式系统音频、演示模式系统音频+麦克风、真实火山 ASR：待用户测试。
-- macOS 14 及以下正式模式：Electron 当前系统音频采集能力不支持，客户端应给出明确版本/音频提示而不是火山连接超时。
+- macOS 14.2+ 正式模式 CoreAudio Tap、macOS 15+ 原生共享选择器：待用户测试；macOS 12.7.6 及以下受系统 API 限制，不支持无虚拟声卡的系统音频采集。
 
 ## 发布边界
 
