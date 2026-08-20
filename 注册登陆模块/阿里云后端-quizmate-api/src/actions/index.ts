@@ -11,6 +11,7 @@ import { createReferralActions } from "./referrals.js";
 import { createSpeechActions } from "./speech.js";
 import { createDomainInquiryActions } from "./domain-inquiries.js";
 import { createCuotiActions } from "./cuoti.js";
+import { createRedemptionCodeActions } from "./redemption-codes.js";
 
 export function createActionRegistry(deps: ActionDependencies): ActionRegistry {
   return new Map([
@@ -25,6 +26,7 @@ export function createActionRegistry(deps: ActionDependencies): ActionRegistry {
     ...createReferralActions(deps),
     ...createSpeechActions(deps),
     ...createDomainInquiryActions(deps),
-    ...createCuotiActions(deps)
+    ...createCuotiActions(deps),
+    ...createRedemptionCodeActions(deps)
   ]);
 }

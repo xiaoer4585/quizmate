@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="QuizMate积分充值卡购买，支付后立得兑换码，可在官网兑换对应积分包。" />
+    <meta name="theme-color" content="#ffffff" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>充值卡店铺 - QuizMate</title>
+    <link rel="icon" type="image/svg+xml" href="assets/quizmate-favicon.svg" />
+    <link rel="stylesheet" href="styles.css?v=20260731-noloading" />
+    <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script defer src="shop.js?v=20260819"></script>
+  </head>
+  <body data-page="shop">
+    <a class="skip-link" href="#main">跳到主要内容</a>
+    <header class="site-header" data-header>
+      <div class="header-inner">
+        <a class="brand" href="/" aria-label="QuizMate首页"><span class="brand-mark" aria-hidden="true">Q</span><span>QuizMate</span></a>
+        <nav class="desktop-nav" aria-label="主导航">
+          <a href="/">首页</a>
+          <a href="docs.html">操作文档</a>
+          <a href="recharge.html">充值</a>
+          <a href="download.html">下载</a>
+        </nav>
+        <button class="menu-button" type="button" aria-label="打开导航菜单" aria-expanded="false" data-menu-button>
+          <i data-lucide="menu"></i>
+        </button>
+      </div>
+      <nav class="mobile-nav" aria-label="移动端导航" data-mobile-nav>
+        <a href="/">首页</a><a href="docs.html">操作文档</a><a href="recharge.html">充值</a><a href="download.html">下载</a>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="section credit-section recharge-compact" aria-labelledby="shop-title">
+        <div class="section-inner">
+          <div class="credit-head compact-credit-head">
+            <div>
+              <p class="section-kicker">充值卡店铺</p>
+              <h1 id="shop-title">购买积分充值卡</h1>
+              <p>支付成功后立即生成兑换码，可自用也可转赠好友。兑换入口在 <a href="recharge.html">充值页</a> 的"兑换码兑换"。</p>
+            </div>
+          </div>
+
+          <div class="credit-usage-note">
+            <span><i data-lucide="ticket-check"></i>支付后立得兑换码</span>
+            <span><i data-lucide="monitor-smartphone"></i>兑换后多端共用积分</span>
+            <span><i data-lucide="shield-check"></i>兑换码一次性使用</span>
+          </div>
+
+          <div class="credit-package-grid" data-shop-products></div>
+          <p class="credit-status" data-shop-status>正在读取商品...</p>
+
+          <div class="shop-order-query" data-shop-order-query>
+            <div class="redeem-entry-copy">
+              <strong><i data-lucide="search"></i>查询我的订单</strong>
+              <span>输入下单时填写的订单号，可查看支付状态和兑换码。</span>
+            </div>
+            <div class="shop-order-query-form">
+              <input type="text" data-shop-query-order-no placeholder="SHOP 开头的订单号" autocomplete="off" spellcheck="false" />
+              <button class="button button-primary" type="button" data-shop-query-btn>查询</button>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="section-inner footer-inner">
+        <div>
+          <a class="brand brand-footer" href="/"><span class="brand-mark">Q</span><span>QuizMate</span></a>
+          <p>充值后在电脑客户端、浏览器插件和安卓端同步使用。</p>
+        </div>
+        <div class="footer-links">
+          <a href="/">首页</a><a href="download.html">下载</a><a href="recharge.html">充值</a><a href="docs.html">操作文档</a>
+        </div>
+        <p class="copyright">© 2026 QuizMate · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">赣ICP备2025058268号-2</a></p>
+      </div>
+    </footer>
+
+    <!-- 购买确认弹窗：商品 + 邮箱 + 支付方式 -->
+    <div class="credit-modal" data-shop-buy-modal hidden>
+      <div class="credit-modal-backdrop" data-close-shop-buy></div>
+      <section class="credit-dialog redeem-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-buy-title">
+        <button class="credit-close" type="button" aria-label="关闭" data-close-shop-buy><i data-lucide="x"></i></button>
+        <p class="section-kicker">确认购买</p>
+        <h2 id="shop-buy-title">填写收货信息</h2>
+        <form class="redeem-form" data-shop-buy-form>
+          <div class="shop-buy-summary">
+            <strong data-shop-buy-name>-</strong>
+            <span data-shop-buy-credits>-</span>
+            <em data-shop-buy-price>¥-</em>
+          </div>
+          <label>邮箱（用于订单查询）
+            <input name="email" type="email" placeholder="your@email.com" autocomplete="email" required />
+          </label>
+          <label>昵称（选填）
+            <input name="name" type="text" placeholder="便于核对订单，可留空" autocomplete="off" maxlength="50" />
+          </label>
+          <div class="shop-pay-methods" data-shop-pay-methods>
+            <button type="button" class="shop-pay-method active" data-shop-method="alipay"><i data-lucide="wallet"></i>支付宝</button>
+            <button type="button" class="shop-pay-method" data-shop-method="wechat"><i data-lucide="qr-code"></i>微信支付</button>
+          </div>
+          <button class="button button-primary" type="submit" data-shop-buy-submit><i data-lucide="credit-card"></i>去支付</button>
+        </form>
+        <p class="credit-status" data-shop-buy-status></p>
+      </section>
+    </div>
+
+    <!-- 支付二维码弹窗 -->
+    <div class="credit-modal" data-shop-pay-modal hidden>
+      <div class="credit-modal-backdrop" data-close-shop-pay></div>
+      <section class="credit-dialog redeem-dialog" role="dialog" aria-modal="true" aria-labelledby="shop-pay-title">
+        <button class="credit-close" type="button" aria-label="关闭" data-close-shop-pay><i data-lucide="x"></i></button>
+        <div class="shop-pay-body" data-shop-pay-body>
+          <p class="section-kicker">扫码支付</p>
+          <h2 id="shop-pay-title">等待支付</h2>
+          <div class="shop-pay-qr" data-shop-pay-qr></div>
+          <dl class="qm-pay-meta">
+            <div><dt>订单号</dt><dd data-shop-pay-order-no>-</dd></div>
+            <div><dt>商品</dt><dd data-shop-pay-name>-</dd></div>
+            <div><dt>金额</dt><dd data-shop-pay-price>-</dd></div>
+            <div><dt>剩余有效期</dt><dd data-shop-pay-countdown class="qm-countdown">--:--</dd></div>
+          </dl>
+          <p class="credit-status" data-shop-pay-status>订单创建后将在这里显示二维码。</p>
+          <button class="button button-secondary" type="button" data-shop-pay-refresh hidden><i data-lucide="refresh-cw"></i>刷新二维码</button>
+        </div>
+        <!-- 支付成功：显示兑换码 -->
+        <div class="shop-pay-success" data-shop-pay-success hidden>
+          <div class="redeem-result-icon"><i data-lucide="party-popper"></i></div>
+          <strong>支付成功，兑换码已生成</strong>
+          <div class="shop-code-display">
+            <code data-shop-redemption-code>-</code>
+            <button class="button button-primary" type="button" data-shop-copy-code><i data-lucide="copy"></i>复制兑换码</button>
+          </div>
+          <p>兑换码已同步到下单邮箱，请前往 <a href="recharge.html">充值页</a> 使用"兑换码兑换"入账积分。每个账户仅可兑换一次，多张充值卡可转赠好友。</p>
+          <button class="button button-secondary" type="button" data-close-shop-pay>完成</button>
+        </div>
+      </section>
+    </div>
+  </body>
+</html>

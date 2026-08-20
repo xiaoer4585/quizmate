@@ -1755,7 +1755,7 @@ function ensureRedeemFeature() {
               <input name="code" type="text" placeholder="QM-XXXXXX-XXXXXX" autocomplete="off"
                 spellcheck="false" maxlength="20" required />
             </label>
-            <p class="redeem-hint">兑换码格式：QM-XXXXXX-XXXXXX，购买充值包后由店铺发货。</p>
+            <p class="redeem-hint">兑换码格式：QM-XXXXXX-XXXXXX，购买充值包后由店铺发货。每个账户仅可兑换一次。</p>
             <button class="button button-primary" type="submit" data-redeem-submit><i data-lucide="ticket-check"></i>立即兑换</button>
           </form>
           <div class="redeem-result" data-redeem-result hidden>
