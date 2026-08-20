@@ -24,14 +24,14 @@
 
 首轮静态断言因 PowerShell 向 `node -e` 传递引号时解析失败；改用 PowerShell 原生断言后 10/10 通过，产品构建本身未失败。
 
-GitHub macOS Intel/Apple Silicon 构建：通过，运行 `32346598933`。两架构均通过类型检查、构建、ad-hoc 重签名、`hdiutil verify` 和可执行文件架构检查；Intel 为纯 `x86_64`，Apple Silicon 为纯 `arm64`。GitHub artifact 因账号存储配额无法保存，使用带时效签名的隔离 OSS 上传通道交付，临时标签已删除。
+GitHub macOS Intel/Apple Silicon 最终构建：通过，运行 `32347275779`。两架构均通过类型检查、构建、ad-hoc 重签名、`hdiutil verify` 和可执行文件架构检查；Intel 为纯 `x86_64`，Apple Silicon 为纯 `arm64`。GitHub artifact 因账号存储配额无法保存，使用带时效签名的隔离 OSS test2 上传通道交付，临时标签已删除。
 
 | 测试包 | 字节 | Runner DMG SHA-256 |
 |---|---:|---|
-| Apple Silicon DMG | 126893646 | `60ffb6de1aef31fdb815e4d648a4b1832252be107b53d140091c466cab9ec5fe` |
-| Intel DMG | 130585931 | `015582da174f6b1f6a908f3277d099e3ab7864b4090e8b6dce249dc676f1a38f` |
-| Apple Silicon ZIP | 126877055 | 见隔离构建日志 |
-| Intel ZIP | 128983166 | 见隔离构建日志 |
+| Apple Silicon DMG | 126893824 | `d740ffd3b9de9d0f8c5cfb71f35bbc7bdeb5ca83def99bfcdbf7811f45d1d6d2` |
+| Intel DMG | 130586026 | `e14cff3cea6e4979595da3afce4c681856d84a4257e64a9c9bda16350b0dd5e6` |
+| Apple Silicon ZIP | 126877056 | 见隔离构建日志 |
+| Intel ZIP | 128983164 | 见隔离构建日志 |
 
 四个测试对象的公网 HEAD 均返回 200，Content-Length 与云构建产物一致。正式 `https://quizmate.cn/mac/latest-mac.yml` 仍为 `2026.8.20`，本轮没有让线上客户端发现或自动安装测试版。
 
