@@ -89,7 +89,7 @@ jobs:
           codesign --force --deep --sign - --timestamp=none "$APP_PATH"
           codesign --verify --deep --strict --verbose=4 "$APP_PATH"
           rm -f release/QuizMate-Mac-${{ matrix.arch }}-*.dmg
-          rm -f release/QuizMate-Mac-${{ matrix.arch }}-*.zip
+          rm -f release/QuizMate-*-${{ matrix.arch }}-mac.zip
           npx electron-builder --mac dmg zip --${{ matrix.arch }} --prepackaged "$APP_PATH" --publish never
 
       - name: Verify DMG and executable architecture
@@ -99,7 +99,7 @@ jobs:
           set -euo pipefail
           exec > >(tee -a build.log) 2>&1
           DMG=$(find release -maxdepth 1 -name "QuizMate-Mac-${{ matrix.arch }}-*.dmg" -print -quit)
-          ZIP=$(find release -maxdepth 1 -name "QuizMate-Mac-${{ matrix.arch }}-*.zip" -print -quit)
+          ZIP=$(find release -maxdepth 1 -name "QuizMate-*-${{ matrix.arch }}-mac.zip" -print -quit)
           test -n "$DMG"
           test -n "$ZIP"
           hdiutil verify "$DMG"
