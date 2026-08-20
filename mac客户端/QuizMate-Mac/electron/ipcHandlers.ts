@@ -41,7 +41,7 @@ export interface OverlayControls {
   minimizeWindow: (which: 'main' | 'overlay') => void;
   maximizeWindow: (which: 'main' | 'overlay') => void;
   closeWindow: (which: 'main' | 'overlay') => void;
-  handleScreenshot: (isExtra: boolean) => Promise<void>;
+  handleScreenshot: (isExtra: boolean) => Promise<boolean>;
   handleSearchAction: (mode: ProcessingMode) => Promise<void>;
   launchExamClient: () => Promise<{ success: boolean; error?: string }>;
   closeExamClient: () => Promise<void>;
@@ -79,10 +79,12 @@ export function registerIpcHandlers(
   // ===== 笔试助手 =====
   ipcMain.handle('exam:captureAndAnalyze', async () => {
     // 截图 + 分析一体化流程
-    await controls.handleScreenshot(false);
+    const captured = await controls.handleScreenshot(false);
+    if (!captured) return { success: false };
     await controls.handleSearchAction(ctx.configHelper.getProcessingMode());
+    return { success: true };
   });
-  ipcMain.handle('exam:screenshot', async () => { await controls.handleScreenshot(false); });
+  ipcMain.handle('exam:screenshot', async () => ({ success: await controls.handleScreenshot(false) }));
   ipcMain.handle('exam:search', async () => { await controls.handleSearchAction(ctx.configHelper.getProcessingMode()); });
   ipcMain.handle('exam:stopAnalyze', () => ctx.processing!.cancelStreaming());
   ipcMain.handle('exam:setTrainingMode', (_e, enabled: boolean) => {

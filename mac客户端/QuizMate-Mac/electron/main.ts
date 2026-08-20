@@ -658,7 +658,13 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
 }
 
 // ===== 截图→分析编排（完全沿用原考试插件流程） =====
-async function handleScreenshot(isExtra: boolean): Promise<void> {
+function sendClientEvent(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(channel, payload);
+  }
+}
+
+async function handleScreenshot(isExtra: boolean): Promise<boolean> {
   const appConfig = configHelper.getAppConfig();
   const procMode = configHelper.getProcessingMode();
 
@@ -677,10 +683,20 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
 
   if (result.success && result.filePath) {
     const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
+    if (!saved) {
+      sendClientEvent('screenshot-error', { error: '截图已获取，但保存失败，请检查磁盘空间后重试。', code: 'SCREENSHOT_SAVE_FAILED' });
+      return false;
+    }
     const base64 = await screenshotHelper.fileToBase64(saved || result.filePath);
-    state.overlayWindow?.webContents.send('screenshot-added', { path: saved, base64, isExtra });
+    if (!base64) {
+      sendClientEvent('screenshot-error', { error: '截图已保存，但读取失败，请重新截图。', code: 'SCREENSHOT_READ_FAILED' });
+      return false;
+    }
+    sendClientEvent('screenshot-added', { path: saved, base64, isExtra });
+    return true;
   } else {
-    state.overlayWindow?.webContents.send('screenshot-error', { error: result.error });
+    sendClientEvent('screenshot-error', { error: result.error || '截图失败，请重新授权后重试。', code: 'SCREENSHOT_CAPTURE_FAILED' });
+    return false;
   }
 }
 
@@ -692,7 +708,11 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   if (procMode === 'voice' && queue.length === 0) {
     notifyVoiceProgress('正在截图...');
     setTrayBusy(true);
-    await handleScreenshot(false);
+    const captured = await handleScreenshot(false);
+    if (!captured) {
+      setTrayBusy(false);
+      return;
+    }
     queue = screenshotHelper.getQueue(false);
   }
 
@@ -723,16 +743,18 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
     return;
   }
 
-  // 搜题后清空历史截图队列
-  screenshotHelper.clearAll();
-  state.overlayWindow?.webContents.send('screenshots-cleared');
-
   // 进度通知 + 托盘忙碌图标
   notifyVoiceProgress('正在调用 AI 分析...');
   setTrayBusy(true);
 
   // 直接调用 analyze 获取完整结果
   const result = await processingHelper.analyze({ images: [b64], mode });
+
+  // 失败时保留原截图，用户可直接重试；仅成功后清空队列。
+  if (result.success) {
+    screenshotHelper.clearAll();
+    sendClientEvent('screenshots-cleared', undefined);
+  }
 
   if (procMode === 'voice') {
     // voice 模式：不依赖悬浮框事件，改用 TTS 播报

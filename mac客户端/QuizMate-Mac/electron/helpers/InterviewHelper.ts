@@ -461,7 +461,11 @@ export class InterviewHelper {
       this.broadcast('interview:answer', { question, answer, keyPoints: data.keyPoints, taskId });
       if (typeof data.creditBalance === 'number') this.broadcast('credits-updated', data.creditBalance);
     } catch (e) {
-      const msg = e instanceof ApiError ? e.message : '答案生成失败';
+      const msg = e instanceof ApiError
+        ? `${e.message}${e.code ? `（${e.code}）` : ''}`
+        : e instanceof Error
+          ? e.message
+          : '答案生成失败';
       this.updateTask(taskId, { status: 'error', error: msg });
       this.broadcast('interview:answer', { question, error: msg, taskId });
     } finally {

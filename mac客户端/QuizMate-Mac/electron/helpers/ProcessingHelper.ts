@@ -361,7 +361,12 @@ export class LightweightProcessingHelper {
   }
 
   private sendEvent(event: string, data: unknown): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+    const windows = BrowserWindow.getAllWindows()
+    if (windows.length > 0) {
+      for (const win of windows) {
+        if (!win.isDestroyed()) win.webContents.send(event, data)
+      }
+    } else if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(event, data)
     }
   }

@@ -117,7 +117,7 @@ export class ScreenshotHelper {
     }
     return {
       success: false,
-      error: '截图失败。请在“系统设置 > 隐私与安全性 > 屏幕与系统音频录制”中允许 QuizMate，重新打开应用后再试',
+      error: '截图失败。请在“系统设置 > 隐私与安全性 > 屏幕录制”中允许 QuizMate，然后彻底退出并重新打开应用',
     }
   }
 
@@ -319,6 +319,6 @@ export class ScreenshotHelper {
     if (process.platform !== 'darwin') return null
     const permission = systemPreferences.getMediaAccessStatus('screen')
     if (permission !== 'denied' && permission !== 'restricted') return null
-    return '请在“系统设置 > 隐私与安全性 > 屏幕与系统音频录制”中允许 QuizMate，然后彻底退出并重新打开应用'
+    return '请在“系统设置 > 隐私与安全性 > 屏幕录制”中允许 QuizMate，然后彻底退出并重新打开应用'
   }
 }
