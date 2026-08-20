@@ -4,14 +4,14 @@ const path = require('path');
 const OSS = require('../../注册登陆模块/阿里云统一入口-study-auth-api/node_modules/ali-oss');
 
 const ROOT = path.resolve(__dirname, '../..');
-const RELEASE = path.join(ROOT, 'mac客户端/发布包/2026.8.18');
+const RELEASE = path.join(ROOT, 'mac客户端/发布包/2026.8.20');
 const SITE = path.join(ROOT, '官网模块/正式官网-quizmate.vip');
-const VERSION = '2026.8.18';
+const VERSION = '2026.8.20';
 const OBJECTS = [
-  ['downloads/QuizMate-Mac-Apple-Silicon-2026.8.18.dmg', path.join(RELEASE, 'QuizMate-Mac-Apple-Silicon-2026.8.18.dmg'), 'application/x-apple-diskimage'],
-  ['downloads/QuizMate-Mac-Intel-2026.8.18.dmg', path.join(RELEASE, 'QuizMate-Mac-Intel-2026.8.18.dmg'), 'application/x-apple-diskimage'],
-  ['mac/QuizMate-Mac-arm64-2026.8.18.zip', path.join(RELEASE, 'QuizMate-Mac-arm64-2026.8.18.zip'), 'application/zip'],
-  ['mac/QuizMate-Mac-x64-2026.8.18.zip', path.join(RELEASE, 'QuizMate-Mac-x64-2026.8.18.zip'), 'application/zip'],
+  ['downloads/QuizMate-Mac-Apple-Silicon-2026.8.20.dmg', path.join(RELEASE, 'QuizMate-Mac-Apple-Silicon-2026.8.20.dmg'), 'application/x-apple-diskimage'],
+  ['downloads/QuizMate-Mac-Intel-2026.8.20.dmg', path.join(RELEASE, 'QuizMate-Mac-Intel-2026.8.20.dmg'), 'application/x-apple-diskimage'],
+  ['mac/QuizMate-Mac-arm64-2026.8.20.zip', path.join(RELEASE, 'QuizMate-Mac-arm64-2026.8.20.zip'), 'application/zip'],
+  ['mac/QuizMate-Mac-x64-2026.8.20.zip', path.join(RELEASE, 'QuizMate-Mac-x64-2026.8.20.zip'), 'application/zip'],
   ['mac/latest-mac.yml', path.join(SITE, 'mac/latest-mac.yml'), 'text/yaml; charset=utf-8'],
   ['download.html', path.join(SITE, 'download.html'), 'text/html; charset=utf-8'],
 ];
@@ -41,7 +41,7 @@ function sha256(buffer) {
 }
 
 async function backup(storage, object) {
-  const target = `rollback/CHG-20260820-02/${object}`;
+  const target = `rollback/CHG-20260820-03/${object}`;
   try {
     await storage.head(object);
     await storage.copy(target, object);
