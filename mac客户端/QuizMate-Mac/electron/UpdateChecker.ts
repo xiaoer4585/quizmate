@@ -1,8 +1,9 @@
 // 客户端版本更新检测管理器
 // 基于 electron-updater 实现（项目已配置 generic publish provider: https://quizmate.cn/mac/）
 // electron-updater reads latest-mac.yml and selects the matching Mac architecture.
-import { app, BrowserWindow } from 'electron';
+import { app, BrowserWindow, shell } from 'electron';
 import { createRequire } from 'module';
+import { isNewerVersion } from './version';
 const require = createRequire(import.meta.url);
 const electronUpdater = require('electron-updater');
 const { autoUpdater } = electronUpdater;
@@ -19,6 +20,7 @@ export interface UpdateStatusPayload {
   transferred?: number;        // 已下载字节数
   total?: number;              // 总字节数
   message?: string;            // 附加信息（如错误描述）
+  downloadUrl?: string;        // 当前架构对应的官网 DMG
   currentVersion: string;      // 当前版本号
 }
 
@@ -26,26 +28,41 @@ export class UpdateChecker {
   private mainWindow: BrowserWindow | null = null;
   private current: UpdateStatusPayload = { status: 'idle', currentVersion: app.getVersion() };
   private timer: NodeJS.Timeout | null = null;
-  private downloaded = false; // 是否已下载完成（避免重复检测/下载）
+  private availableVersion: string | null = null;
 
   constructor() {
-    // 手动控制下载与安装，由 UI 触发
+    // 当前构建没有 Developer ID 签名，禁止 electron-updater 静默替换应用。
     autoUpdater.autoDownload = false;
-    // 下载完成后若用户主动退出，则在退出时安装
-    autoUpdater.autoInstallOnAppQuit = true;
+    autoUpdater.autoInstallOnAppQuit = false;
+    autoUpdater.allowDowngrade = false;
+    autoUpdater.allowPrerelease = false;
 
     autoUpdater.on('checking-for-update', () => {
       this.set({ status: 'checking' });
     });
     autoUpdater.on('update-available', (info: UpdateInfo) => {
+      if (!isNewerVersion(info.version, app.getVersion())) {
+        this.availableVersion = null;
+        this.set({
+          status: 'not-available',
+          version: undefined,
+          downloadUrl: undefined,
+          message: undefined,
+        });
+        return;
+      }
+      this.availableVersion = info.version;
       this.set({
         status: 'available',
         version: info.version,
         releaseNotes: info.releaseNotes,
+        downloadUrl: this.getDownloadUrl(info.version),
+        message: '请下载对应芯片版本并覆盖安装',
       });
     });
     autoUpdater.on('update-not-available', () => {
-      this.set({ status: 'not-available' });
+      this.availableVersion = null;
+      this.set({ status: 'not-available', version: undefined, downloadUrl: undefined, message: undefined });
     });
     autoUpdater.on('download-progress', (p: ProgressInfo) => {
       this.set({
@@ -56,10 +73,13 @@ export class UpdateChecker {
       });
     });
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
-      this.downloaded = true;
-      this.set({ status: 'downloaded', version: info.version });
-      // 下载成功后自动关闭客户端并启动安装（留 1.5s 让 UI 展示完成状态）
-      setTimeout(() => this.installUpdate(), 1500);
+      // 防御旧缓存或第三方调用：绝不自动退出并安装未正式签名的包。
+      this.set({
+        status: 'available',
+        version: info.version,
+        downloadUrl: this.getDownloadUrl(info.version),
+        message: '请下载对应芯片版本并覆盖安装',
+      });
     });
     autoUpdater.on('error', (err: Error) => {
       const msg = err?.message || String(err);
@@ -89,10 +109,6 @@ export class UpdateChecker {
       this.set({ status: 'not-available', message: '开发模式跳过更新检测' });
       return this.current;
     }
-    if (this.downloaded) {
-      // 已下载完成，无需重复检测
-      return this.current;
-    }
     try {
       await autoUpdater.checkForUpdates();
     } catch (e) {
@@ -106,16 +122,23 @@ export class UpdateChecker {
     return this.current;
   }
 
-  /** 下载更新包（平台对应的安装包由 electron-updater 自动选择） */
+  /** 在浏览器打开当前架构的官网 DMG，不使用未正式签名的自动替换链路。 */
   async downloadUpdate(): Promise<void> {
     if (!app.isPackaged) return;
-    if (this.downloaded) {
-      // 已下载则直接安装
-      this.installUpdate();
+    const version = this.availableVersion ?? this.current.version;
+    if (!version || !isNewerVersion(version, app.getVersion())) {
+      this.set({ status: 'not-available', version: undefined, downloadUrl: undefined, message: undefined });
       return;
     }
     try {
-      await autoUpdater.downloadUpdate();
+      const downloadUrl = this.getDownloadUrl(version);
+      await shell.openExternal(downloadUrl);
+      this.set({
+        status: 'available',
+        version,
+        downloadUrl,
+        message: '安装包已在浏览器中打开，下载后请覆盖安装',
+      });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       if (this.isNetworkError(msg)) {
@@ -126,13 +149,9 @@ export class UpdateChecker {
     }
   }
 
-  /** 安装更新：关闭应用并启动安装程序 */
+  /** 兼容旧 IPC：同样打开官网 DMG，不退出客户端。 */
   installUpdate(): void {
-    try {
-      autoUpdater.quitAndInstall(false, true);
-    } catch (e) {
-      this.set({ status: 'error', message: e instanceof Error ? e.message : String(e) });
-    }
+    void this.downloadUpdate();
   }
 
   /** 启动自动检测：启动后 5 秒检测一次，之后每小时检测一次 */
@@ -152,6 +171,14 @@ export class UpdateChecker {
   private set(patch: Partial<UpdateStatusPayload>): void {
     this.current = { ...this.current, ...patch, currentVersion: app.getVersion() };
     this.notify();
+  }
+
+  private getDownloadUrl(version: string): string {
+    const safeVersion = /^\d+(?:\.\d+)*$/.test(version) ? version : app.getVersion();
+    const filename = process.arch === 'arm64'
+      ? `QuizMate-Mac-Apple-Silicon-${safeVersion}.dmg`
+      : `QuizMate-Mac-Intel-${safeVersion}.dmg`;
+    return `https://quizmate.cn/downloads/${filename}`;
   }
 
   /** 判断是否为网络类错误（DNS解析失败、连接超时等），这类错误静默忽略 */

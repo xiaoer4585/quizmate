@@ -115,7 +115,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
                   onClick={handleUpdateClick}
                   className="ml-1 px-3 py-0.5 rounded-md bg-white/20 hover:bg-white/30 transition-colors font-medium text-xs shrink-0"
                 >
-                  立即更新
+                  浏览器下载安装包
                 </button>
                 <button
                   onClick={handleDismissUpdate}
@@ -141,7 +141,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
             {updateStatus?.status === 'downloaded' && (
               <>
                 <CheckCircle2 size={16} className="shrink-0" />
-                <span>下载完成，正在关闭客户端并启动安装…</span>
+                <span>安装包已下载，请打开 DMG 并覆盖安装</span>
               </>
             )}
             {updateStatus?.status === 'error' && (

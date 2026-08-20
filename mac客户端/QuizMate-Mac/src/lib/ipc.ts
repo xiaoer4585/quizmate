@@ -19,6 +19,7 @@ export interface UpdateStatus {
   transferred?: number;
   total?: number;
   message?: string;
+  downloadUrl?: string;
   currentVersion: string;
 }
 
