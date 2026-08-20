@@ -45,7 +45,35 @@
 - Windows `main.ts`：setIgnoreMouseEvents 按参数生效（true 时保持 forward:true），move/resize 复位穿透；托盘回调含 interviewActive 守卫与 overlay 模式自动拉起悬浮窗。
 - Windows `ExamOverlay.tsx`：头部 3 个按钮（截图/搜题/复制）经 `exam:screenshot`/`exam:search` IPC 与 `handleCopyContent` 触发，悬停经 `overlay:setIgnoreMouseEvents` 临时解除穿透。
 
-## 4. 待人工实测项（阻塞清单）
+## 4. 后端部署（2026-08-20 08:18 CST，生产 ECS i-2zedgehm045w1gsarawx）
+
+部署脚本：`其他/部署工具/deploy-interview-two-layer-20260820.cjs`（仅 3 个文件：dist speech.js / configuration.js / model.js）
+
+### 4.1 部署前构建完整性核验
+
+- 主工作区（含并行会话未提交改动）与 git worktree@358a568（纯已提交源码）两次独立构建，3 个目标 dist 文件 SHA256 逐一比对全部 IDENTICAL，证明产物只含本次已提交改动，未夹带并行开发中的兑换码/充值赠送逻辑。
+- 本地 dist 产物功能自检（node 导入 dist speech.js）：LOGIC_PROMPT_OK / NORMAL_PROMPT_OK / FORMAT_OK 全部 true。
+
+### 4.2 部署过程
+
+- 首次执行失败：ECS API `IncompleteSignature`。根因：远程命令含 `!` 字符，Node fetch 的 WHATWG URL 解析将其重编码为 %21，与本地签名串不一致（历史脚本无 `!` 故未触发）。修复：pctEncode 补齐 `!`/`~` 编码并改写命令避开裸 `!`，复跑成功。
+- 远程 diff（old -> new）逐文件核对：speech.js 仅新增 INTERVIEW_SECTION_DIVIDER、双层硬性排版要求、双层 JSON 示例、formatInterviewAnswer 分隔符规范与标题空行（另有几行 SQL 模板字符串行尾空白差异，无语义变化）；configuration.js 仅 DEFAULT_INTERVIEW_PROMPT 双层重写；model.js 仅 INTERVIEW_SYSTEM_PROMPT 重写与 max_tokens 900->1600。无其他文件改动。
+- 部署后服务器上 sha256 与本地一致：speech.js `347c94fe...`、configuration.js `8b6c74fb...`、model.js `3cefddc4...`。
+- 服务器上直接 import 部署产物冒烟：REMOTE_LOGIC_PROMPT_OK=true（系统设计题：双层+分隔符+资深专家+顺序规则）、REMOTE_NORMAL_PROMPT_OK=true（自我介绍：常规问题顺序）、REMOTE_FORMAT_OK=true（分隔线规范化排版）。
+- `systemctl is-active quizmate-api-shadow.service` = active；`/health` 返回 `{"status":"ok","database":"ok"}`。
+- 部署含 ERR trap 自动回滚（备份恢复 + 服务重启），本次未触发。
+
+### 4.3 回滚点
+
+- 服务器备份目录：`/opt/quizmate-api-shadow.rollback-interview-two-layer-20260820-081855/`（含部署前 speech.js / configuration.js / model.js）。
+- 回滚命令：`cp -a <备份>/speech.js /opt/quizmate-api-shadow/dist/src/actions/speech.js; cp -a <备份>/configuration.js /opt/quizmate-api-shadow/dist/src/actions/configuration.js; cp -a <备份>/model.js /opt/quizmate-api-shadow/dist/src/services/model.js; systemctl restart quizmate-api-shadow.service`。
+
+### 4.4 待线上观察
+
+- 真实用户面试回答的双层结构命中率、逻辑题/常规题顺序正确性、detailed 模式回答长度（max_tokens 1600 是否出现截断）、回答耗时变化（输出变长带来的延迟）。
+- 若管理后台 interview_prompt_config 存在自定义提示词，需确认未覆盖新默认值。
+
+## 5. 待人工实测项（阻塞清单）
 
 1. DT-032：悬浮窗头部按钮触发截图->搜题->复制全链路；鼠标移开后穿透恢复；窗口 Ctrl+方向移动后穿透复位；悬浮窗不遮挡考试页面点击。
 2. DT-033：托盘右键菜单"全屏截图/搜题"在悬浮窗隐藏时自动拉起悬浮窗并执行；voice 模式下"搜题"走截图+播报链路。
