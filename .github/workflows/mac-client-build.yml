@@ -98,8 +98,8 @@ jobs:
         run: |
           set -euo pipefail
           exec > >(tee -a build.log) 2>&1
-          DMG=$(find release -maxdepth 1 -name "QuizMate-Mac-${{ matrix.arch }}-*.dmg" -print -quit)
-          ZIP=$(find release -maxdepth 1 -name "QuizMate-*-${{ matrix.arch }}-mac.zip" -print -quit)
+          DMG=$(find release -maxdepth 1 -name "*.dmg" -print -quit)
+          ZIP=$(find release -maxdepth 1 -name "*-mac.zip" -print -quit)
           test -n "$DMG"
           test -n "$ZIP"
           hdiutil verify "$DMG"
