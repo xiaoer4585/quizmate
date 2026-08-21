@@ -670,6 +670,7 @@ async function handleScreenshot(isExtra: boolean): Promise<boolean> {
   const appConfig = configHelper.getAppConfig();
   const procMode = configHelper.getProcessingMode();
   const wasVisible = state.isOverlayVisible;
+  sendClientEvent('screenshot-start', { isExtra });
 
   // overlay 模式：截图前完全隐藏悬浮窗，确保截图无轮廓
   if (procMode === 'overlay' && wasVisible) {

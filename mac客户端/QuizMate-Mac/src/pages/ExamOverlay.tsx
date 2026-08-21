@@ -119,10 +119,22 @@ export default function OverlayPage() {
         const filtered = prev.filter(s => s.path !== data.path)
         return [...filtered, newShot]
       })
-      // Stay on queue view if not processing
-      if (status === 'idle' || status === 'error') {
-        setView('queue')
-      }
+      // A successful screenshot is a new operation. Clear any previous AI
+      // failure so the overlay does not imply that this screenshot was sent
+      // to the model before the user presses 搜题.
+      setStatus('idle')
+      setErrorMessage('')
+      setProgress(0)
+      setProgressMessage('截图完成，请点击搜题')
+      setView('queue')
+    }))
+
+    unsubs.push(api?.on('screenshot-start', () => {
+      setStatus('processing')
+      setErrorMessage('')
+      setProgress(10)
+      setProgressMessage('正在截图...')
+      setView('queue')
     }))
 
     unsubs.push(api?.on('screenshot-deleted', () => {
