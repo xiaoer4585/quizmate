@@ -478,11 +478,13 @@ function setTheme(theme: 'dark' | 'light') {
   broadcastTheme(theme);
 }
 
-function setIgnoreMouseEvents(_ignore: boolean) {
-  // 悬浮窗始终鼠标穿透，不接受 false 参数
-  // 这是核心设计：用户通过快捷键操作，悬浮窗不干扰下方应用
+function setIgnoreMouseEvents(ignore: boolean) {
+  // 悬浮窗默认鼠标穿透，接收 ignore=false 时临时解除以便悬浮窗内的按钮接收点击
+  // （如 OverlayActionButton 兜底按钮的 hover/click）。主进程在窗口隐藏/截图等流程
+  // 末尾会重新恢复 true，避免悬浮窗干扰下方应用。
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
-    state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    if (ignore) state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    else state.overlayWindow.setIgnoreMouseEvents(false);
   }
 }
 
@@ -916,6 +918,19 @@ function createInterviewOverlayWindow() {
     state.interviewOverlayVisible = false;
   });
 
+  // 与笔试悬浮窗一致：移动/缩放后持久化窗口位置与尺寸（两个悬浮窗共享已保存配置）
+  state.interviewOverlayWindow.on('move', () => {
+    if (!state.interviewOverlayWindow) return;
+    const b = state.interviewOverlayWindow.getBounds();
+    configHelper.setWindowPosition({ x: b.x, y: b.y });
+  });
+
+  state.interviewOverlayWindow.on('resize', () => {
+    if (!state.interviewOverlayWindow) return;
+    const b = state.interviewOverlayWindow.getBounds();
+    configHelper.setWindowSize({ width: b.width, height: b.height });
+  });
+
   const interviewUrl = getRendererUrl('#/overlay-interview');
   if (interviewUrl) state.interviewOverlayWindow.loadURL(interviewUrl);
 
@@ -1071,6 +1086,13 @@ function createTrayManager(): void {
         if (!authed) return;
         authManager.getProfile().then(() => updateTrayState());
       });
+    },
+    // 托盘兜底入口：填空/输入题场景下快捷键被拦截时，从托盘触发截图与搜题
+    captureScreenshot: () => {
+      void handleScreenshot(false);
+    },
+    searchQuestion: () => {
+      void handleSearchAction(configHelper.getProcessingMode());
     },
     quit: () => {
       state.quitting = true;

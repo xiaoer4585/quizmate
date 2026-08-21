@@ -17,6 +17,10 @@ export interface TrayCallbacks {
   toggleOverlay: () => void
   refreshCredits: () => void
   quit: () => void
+  // 鼠标兜底入口：考试输入框/中文输入法可能拦截全局快捷键（填空/输入题场景），
+  // 可通过托盘菜单触发全屏截图与搜题，避免用户无法继续答题。
+  captureScreenshot?: () => void
+  searchQuestion?: () => void
 }
 
 export class TrayManager {
@@ -114,12 +118,23 @@ export class TrayManager {
     items.push({
       label: this.state.isOverlayActive ? '隐藏悬浮框' : '显示悬浮框',
       click: () => this.callbacks.toggleOverlay(),
-    })
+    });
+
+    // 兜底入口：考试输入框/输入法拦截全局快捷键时，可用鼠标从托盘触发
+    items.push({
+      label: '全屏截图',
+      click: () => this.callbacks.captureScreenshot?.(),
+    });
+
+    items.push({
+      label: '搜题',
+      click: () => this.callbacks.searchQuestion?.(),
+    });
 
     items.push({
       label: '设置',
       click: () => this.callbacks.showSettings(),
-    })
+    });
 
     items.push({ type: 'separator' })
 
