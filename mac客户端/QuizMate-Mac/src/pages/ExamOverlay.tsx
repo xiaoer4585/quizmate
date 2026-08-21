@@ -140,7 +140,7 @@ export default function OverlayPage() {
     }))
 
     unsubs.push(api?.on('screenshot-error', (data: any) => {
-      setErrorMessage(data.error || '截图失败')
+      setErrorMessage(data.code ? `${data.error || '截图失败'}（${data.code}）` : (data.error || '截图失败'))
       setStatus('error')
     }))
 
@@ -193,9 +193,7 @@ export default function OverlayPage() {
 
     unsubs.push(api?.on('solution-stream-error', (data: any) => {
       setStatus('error')
-      setErrorMessage(data.error || '处理失败')
-      // Refund credits on error
-      api?.credits.refund(1).catch(() => {})
+      setErrorMessage(data.code ? `${data.error || '处理失败'}（${data.code}）` : (data.error || '处理失败'))
     }))
 
     unsubs.push(api?.on('solution-error', (data: any) => {

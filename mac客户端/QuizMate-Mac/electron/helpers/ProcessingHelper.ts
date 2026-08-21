@@ -52,10 +52,23 @@ interface ScreenshotUploadTicket {
 
 /** Parse the structured `data` field returned by the analyze action. */
 function parseStructuredAnswer(value: unknown): { answer: string; explanation: string; code: string } {
+  if (typeof value === 'string') {
+    const text = value.trim()
+    if (!text) return { answer: '', explanation: '', code: '' }
+    try {
+      const parsed = JSON.parse(text)
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parseStructuredAnswer(parsed)
+    } catch { /* model may legitimately return plain text */ }
+    return { answer: text, explanation: '', code: '' }
+  }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { answer: '', explanation: '', code: '' }
   }
   const record = value as Record<string, unknown>
+  const directAnswer = ['answer', 'result', 'content', 'text', 'raw'].map((key) => record[key]).find((item) => typeof item === 'string' && item.trim())
+  if (typeof directAnswer === 'string' && !Array.isArray(record.items)) {
+    return { answer: directAnswer.trim(), explanation: typeof record.explanation === 'string' ? record.explanation.trim() : '', code: typeof record.code === 'string' ? record.code.trim() : '' }
+  }
   const items = Array.isArray(record.items) ? record.items.filter((i) => i && typeof i === 'object') : []
   if (!items.length) {
     const note = typeof record.note === 'string' ? record.note.trim() : ''
@@ -329,13 +342,13 @@ export class LightweightProcessingHelper {
         } else if (e.kind === 'credits') {
           this.sendEvent('out-of-credits', { error: e.message })
         } else if (e.kind === 'timeout') {
-          this.sendEvent('solution-stream-error', { error: '分析超时，未扣积分。' })
+          this.sendEvent('solution-stream-error', { error: '分析超时，未扣积分。', code: e.code || 'TIMEOUT' })
         } else {
-          this.sendEvent('solution-stream-error', { error: e.message })
+          this.sendEvent('solution-stream-error', { error: e.message, code: e.code || 'RESPONSE_ERROR' })
         }
         return { success: false, error: e.message, code: e.code }
       }
-      this.sendEvent('solution-stream-error', { error: e.message || String(e) })
+      this.sendEvent('solution-stream-error', { error: e.message || String(e), code: e.code || 'UNKNOWN' })
       return { success: false, error: e.message || String(e), code: 'UNKNOWN' }
     } finally {
       this.currentController = null

@@ -669,36 +669,39 @@ function sendClientEvent(channel: string, payload: unknown): void {
 async function handleScreenshot(isExtra: boolean): Promise<boolean> {
   const appConfig = configHelper.getAppConfig();
   const procMode = configHelper.getProcessingMode();
+  const wasVisible = state.isOverlayVisible;
 
   // overlay 模式：截图前完全隐藏悬浮窗，确保截图无轮廓
-  if (procMode === 'overlay' && state.isOverlayVisible) {
+  if (procMode === 'overlay' && wasVisible) {
     hideOverlay();
     await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 500)));
   }
-
-  const result = await screenshotHelper.captureFullScreen();
-
-  if (procMode === 'overlay') {
-    await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
-    showOverlay();
-  }
-
-  if (result.success && result.filePath) {
-    const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
-    if (!saved) {
-      sendClientEvent('screenshot-error', { error: '截图已获取，但保存失败，请检查磁盘空间后重试。', code: 'SCREENSHOT_SAVE_FAILED' });
-      return false;
+  try {
+    const result = await screenshotHelper.captureFullScreen();
+    if (result.success && result.filePath) {
+      const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
+      if (!saved) {
+        sendClientEvent('screenshot-error', { error: '截图已获取，但保存失败，请检查磁盘空间后重试。', code: 'SCREENSHOT_SAVE_FAILED', stage: 'save' });
+        return false;
+      }
+      const base64 = await screenshotHelper.fileToBase64(saved);
+      if (!base64) {
+        sendClientEvent('screenshot-error', { error: '截图已保存，但读取失败，请重新截图。', code: 'SCREENSHOT_READ_FAILED', stage: 'read' });
+        return false;
+      }
+      sendClientEvent('screenshot-added', { path: saved, base64, isExtra });
+      return true;
     }
-    const base64 = await screenshotHelper.fileToBase64(saved || result.filePath);
-    if (!base64) {
-      sendClientEvent('screenshot-error', { error: '截图已保存，但读取失败，请重新截图。', code: 'SCREENSHOT_READ_FAILED' });
-      return false;
-    }
-    sendClientEvent('screenshot-added', { path: saved, base64, isExtra });
-    return true;
-  } else {
-    sendClientEvent('screenshot-error', { error: result.error || '截图失败，请重新授权后重试。', code: 'SCREENSHOT_CAPTURE_FAILED' });
+    sendClientEvent('screenshot-error', { error: result.error || '截图失败，请重新授权后重试。', code: 'SCREENSHOT_CAPTURE_FAILED', stage: 'capture' });
     return false;
+  } catch (error: any) {
+    sendClientEvent('screenshot-error', { error: error?.message || '截图失败，请重试。', code: 'SCREENSHOT_UNEXPECTED_ERROR', stage: 'capture' });
+    return false;
+  } finally {
+    if (procMode === 'overlay' && wasVisible) {
+      await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
+      showOverlay();
+    }
   }
 }
 
