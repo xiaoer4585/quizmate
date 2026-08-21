@@ -60,7 +60,11 @@ export class ShortcutsHelper {
     for (const action of Object.keys(defaultShortcutBindings) as ShortcutAction[]) {
       if (!stored[action]) continue
       const normalized = normalizeMacAccelerator(stored[action])
-      const replacement = action === 'screenshot' && ['command+w', 'alt+q'].includes(normalized.toLowerCase())
+      // Older Mac builds used Command+Q/Command+W (and one interim build used
+      // Alt+Q) for screenshots.  Command+Q is reserved by macOS and
+      // Command+W closes the current window, so migrate every legacy value
+      // before registering global shortcuts on upgrade.
+      const replacement = action === 'screenshot' && ['command+q', 'command+w', 'alt+q'].includes(normalized.toLowerCase())
         ? defaultShortcutBindings.screenshot
         : action === 'search' && ['command+e', 'alt+e'].includes(normalized.toLowerCase())
           ? defaultShortcutBindings.search
