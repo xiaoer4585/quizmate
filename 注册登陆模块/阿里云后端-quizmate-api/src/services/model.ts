@@ -240,6 +240,9 @@ function resolveVoiceModel(config: AppConfig, setting: Record<string, unknown>):
   };
 }
 
+// 解析失败自动重试一次时附加的强化指令：针对弱模型输出未转义引号等无法本地修复的非法 JSON（实测约 1% 概率）
+const STRICT_JSON_RETRY_HINT = "注意：上一次输出不是严格合法的 JSON。请重新作答：只输出一个 JSON 对象；字符串值内部的双引号必须转义为 \\\"，换行必须转义为 \\n；不得输出 JSON 之外的任何文字、注释或代码围栏。";
+
 function normalizeApiFormat(value: unknown): "openai" | "anthropic" {
   return String(value ?? "openai").toLowerCase() === "anthropic" ? "anthropic" : "openai";
 }
@@ -438,8 +441,22 @@ export function createAnalysisModel(
       : request.mode === "universal"
         ? 1600
       : hasImage ? 4000 : 1800;
-    const content = await callChatModel(resolved, userContent, maxTokens, { disableThinking: true });
-    const result = parseModelResult(content, { allowInterviewText: isInterviewMode });
+    // 首次调用并解析；INVALID_MODEL_RESULT（含空返回、无法修复的非法 JSON）时附严格 JSON 指令自动重试一次。
+    // 上游错误/超时不重试，避免成倍放大延迟。
+    let result: AnalysisModelResult;
+    try {
+      const content = await callChatModel(resolved, userContent, maxTokens, { disableThinking: true });
+      result = parseModelResult(content, { allowInterviewText: isInterviewMode });
+    } catch (error) {
+      if (!(error instanceof PublicError) || error.code !== "INVALID_MODEL_RESULT") throw error;
+      console.warn("[model] invalid model result, retrying once with strict JSON instruction");
+      const retryText = `${text}\n\n${STRICT_JSON_RETRY_HINT}`;
+      const retryUserContent = hasImage
+        ? buildImageContent(resolved.apiFormat, retryText, request.screenshot)
+        : retryText;
+      const retryContent = await callChatModel(resolved, retryUserContent, maxTokens, { disableThinking: true });
+      result = parseModelResult(retryContent, { allowInterviewText: isInterviewMode });
+    }
     // 仅在成功调用后记录，用于后台模型调用曲线图
     if (recorder) recorder({ modelType, modelName: resolved.model });
     return result;
