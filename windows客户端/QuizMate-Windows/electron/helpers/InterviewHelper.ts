@@ -61,11 +61,16 @@ interface InterviewStoreSchema {
 }
 
 export class InterviewHelper {
+  // 并发生成上限：新问题立即调用 AI 与上一题并行生成（后端按请求独立事务扣积分，并发安全），
+  // 超过上限才短暂排队，避免连续快速提问触发模型限流。原先的串行队列会让第二题
+  // 等待第一题完整生成（6~15 秒）才开始请求，是面试响应变慢的主要客户端原因。
+  private static readonly MAX_CONCURRENT_ANSWERS = 2;
   private listening = false;
   private context: InterviewContext = { language: 'zh', answerStyle: 'concise' };
   private lastAnswer = '';
   private answerRequests = new Map<string, AbortController>();
-  private answerQueue: Promise<void> = Promise.resolve();
+  private activeAnswerCount = 0;
+  private answerWaiters: Array<() => void> = [];
   private answerGeneration = 0;
   private pendingTranscript = '';
   private finalizedTranscript = '';
@@ -392,9 +397,8 @@ export class InterviewHelper {
     this.appendConversationContext(raw);
     this.broadcast('interview:transcript', { text: raw });
     const task = this.addTask(raw);
-    // Keep the ASR loop responsive while serializing model calls. This avoids
-    // racing the same fast model/account settlement when two questions arrive
-    // close together, while each question still gets its own task and answer.
+    // 并行生成：每个问题立即调用 AI，不再串行等待上一题生成完成；
+    // 积分扣减由后端每请求独立事务保证，余额不足时该题按既有 402 逻辑提示。
     await this.enqueueAnswer(raw, task.id);
   }
 
@@ -405,19 +409,43 @@ export class InterviewHelper {
 
   private enqueueAnswer(question: string, taskId: string): Promise<void> {
     const generation = this.answerGeneration;
-    const runIfCurrent = () => {
-      if (generation !== this.answerGeneration) {
-        this.updateTask(taskId, { status: 'error', error: '听写已停止，未提交该问题' });
-        return Promise.resolve();
-      }
-      return this.generateAnswer(question, taskId);
+    const expired = () => {
+      this.updateTask(taskId, { status: 'error', error: '听写已停止，未提交该问题' });
     };
-    const run = this.answerQueue.then(
-      runIfCurrent,
-      runIfCurrent,
-    );
-    this.answerQueue = run.catch(() => {});
-    return run;
+    if (generation !== this.answerGeneration) {
+      expired();
+      return Promise.resolve();
+    }
+    return this.acquireAnswerSlot().then(() => {
+      // 等到并发槽后再次校验，避免停止听写后仍发起请求
+      if (generation !== this.answerGeneration) {
+        expired();
+        this.releaseAnswerSlot();
+        return;
+      }
+      return this.generateAnswer(question, taskId).finally(() => this.releaseAnswerSlot());
+    });
+  }
+
+  /** 获取一个答案生成并发槽（立即或等待让出） */
+  private acquireAnswerSlot(): Promise<void> {
+    if (this.activeAnswerCount < InterviewHelper.MAX_CONCURRENT_ANSWERS) {
+      this.activeAnswerCount += 1;
+      return Promise.resolve();
+    }
+    return new Promise<void>((resolve) => {
+      this.answerWaiters.push(resolve);
+    });
+  }
+
+  /** 释放并发槽：优先直接交给等待者（计数不变），否则计数减一 */
+  private releaseAnswerSlot(): void {
+    const next = this.answerWaiters.shift();
+    if (next) {
+      next();
+    } else {
+      this.activeAnswerCount = Math.max(0, this.activeAnswerCount - 1);
+    }
   }
 
   /** 调后端 AI 生成答案（结合简历+岗位+公司） */
