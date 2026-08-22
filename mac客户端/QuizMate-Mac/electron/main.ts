@@ -179,7 +179,7 @@ function openEmbeddedWindow(kind: 'recharge' | 'register') {
       const headers = { ...details.requestHeaders };
       if (new URL(details.url).origin === rechargeOrigin) {
         if (token) headers['X-Account-Token'] = token;
-        headers['X-Client-Version'] = app.getVersion();
+        headers['X-Client-Version'] = configHelper.getAppConfig().version || app.getVersion();
         headers['X-Client-Platform'] = 'darwin-desktop';
       }
       cb({ requestHeaders: headers });
@@ -209,7 +209,7 @@ function openEmbeddedWindow(kind: 'recharge' | 'register') {
   win.webContents.session.webRequest.onBeforeSendHeaders((details, cb) => {
     const headers = { ...details.requestHeaders };
     if (token) headers['X-Account-Token'] = token;
-    headers['X-Client-Version'] = app.getVersion();
+    headers['X-Client-Version'] = configHelper.getAppConfig().version || app.getVersion();
     headers['X-Client-Platform'] = 'darwin-desktop';
     cb({ requestHeaders: headers });
   });
@@ -478,13 +478,11 @@ function setTheme(theme: 'dark' | 'light') {
   broadcastTheme(theme);
 }
 
-function setIgnoreMouseEvents(ignore: boolean) {
-  // 悬浮窗默认鼠标穿透，接收 ignore=false 时临时解除以便悬浮窗内的按钮接收点击
-  // （如 OverlayActionButton 兜底按钮的 hover/click）。主进程在窗口隐藏/截图等流程
-  // 末尾会重新恢复 true，避免悬浮窗干扰下方应用。
+function setIgnoreMouseEvents(_ignore: boolean) {
+  // 悬浮窗始终鼠标穿透，不接受 false 参数
+  // 这是核心设计：用户通过快捷键操作，悬浮窗不干扰下方应用
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
-    if (ignore) state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-    else state.overlayWindow.setIgnoreMouseEvents(false);
+    state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
   }
 }
 
@@ -656,49 +654,29 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
 }
 
 // ===== 截图→分析编排（完全沿用原考试插件流程） =====
-function sendClientEvent(channel: string, payload: unknown): void {
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.webContents.send(channel, payload);
-  }
-}
-
-async function handleScreenshot(isExtra: boolean): Promise<boolean> {
+async function handleScreenshot(isExtra: boolean): Promise<void> {
   const appConfig = configHelper.getAppConfig();
   const procMode = configHelper.getProcessingMode();
-  const wasVisible = state.isOverlayVisible;
-  sendClientEvent('screenshot-start', { isExtra });
 
   // overlay 模式：截图前完全隐藏悬浮窗，确保截图无轮廓
-  if (procMode === 'overlay' && wasVisible) {
+  if (procMode === 'overlay' && state.isOverlayVisible) {
     hideOverlay();
     await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 500)));
   }
-  try {
-    const result = await screenshotHelper.captureFullScreen();
-    if (result.success && result.filePath) {
-      const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
-      if (!saved) {
-        sendClientEvent('screenshot-error', { error: '截图已获取，但保存失败，请检查磁盘空间后重试。', code: 'SCREENSHOT_SAVE_FAILED', stage: 'save' });
-        return false;
-      }
-      const base64 = await screenshotHelper.fileToBase64(saved);
-      if (!base64) {
-        sendClientEvent('screenshot-error', { error: '截图已保存，但读取失败，请重新截图。', code: 'SCREENSHOT_READ_FAILED', stage: 'read' });
-        return false;
-      }
-      sendClientEvent('screenshot-added', { path: saved, base64, isExtra });
-      return true;
-    }
-    sendClientEvent('screenshot-error', { error: result.error || '截图失败，请重新授权后重试。', code: 'SCREENSHOT_CAPTURE_FAILED', stage: 'capture' });
-    return false;
-  } catch (error: any) {
-    sendClientEvent('screenshot-error', { error: error?.message || '截图失败，请重试。', code: 'SCREENSHOT_UNEXPECTED_ERROR', stage: 'capture' });
-    return false;
-  } finally {
-    if (procMode === 'overlay' && wasVisible) {
-      await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
-      showOverlay();
-    }
+
+  const result = await screenshotHelper.captureFullScreen();
+
+  if (procMode === 'overlay') {
+    await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
+    showOverlay();
+  }
+
+  if (result.success && result.filePath) {
+    const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
+    const base64 = await screenshotHelper.fileToBase64(saved || result.filePath);
+    state.overlayWindow?.webContents.send('screenshot-added', { path: saved, base64, isExtra });
+  } else {
+    state.overlayWindow?.webContents.send('screenshot-error', { error: result.error });
   }
 }
 
@@ -710,11 +688,7 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   if (procMode === 'voice' && queue.length === 0) {
     notifyVoiceProgress('正在截图...');
     setTrayBusy(true);
-    const captured = await handleScreenshot(false);
-    if (!captured) {
-      setTrayBusy(false);
-      return;
-    }
+    await handleScreenshot(false);
     queue = screenshotHelper.getQueue(false);
   }
 
@@ -745,18 +719,16 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
     return;
   }
 
+  // 搜题后清空历史截图队列
+  screenshotHelper.clearAll();
+  state.overlayWindow?.webContents.send('screenshots-cleared');
+
   // 进度通知 + 托盘忙碌图标
   notifyVoiceProgress('正在调用 AI 分析...');
   setTrayBusy(true);
 
   // 直接调用 analyze 获取完整结果
   const result = await processingHelper.analyze({ images: [b64], mode });
-
-  // 失败时保留原截图，用户可直接重试；仅成功后清空队列。
-  if (result.success) {
-    screenshotHelper.clearAll();
-    sendClientEvent('screenshots-cleared', undefined);
-  }
 
   if (procMode === 'voice') {
     // voice 模式：不依赖悬浮框事件，改用 TTS 播报
@@ -1107,13 +1079,6 @@ function createTrayManager(): void {
         authManager.getProfile().then(() => updateTrayState());
       });
     },
-    // 托盘兜底入口：填空/输入题场景下快捷键被拦截时，从托盘触发截图与搜题
-    captureScreenshot: () => {
-      void handleScreenshot(false);
-    },
-    searchQuestion: () => {
-      void handleSearchAction(configHelper.getProcessingMode());
-    },
     quit: () => {
       state.quitting = true;
       app.quit();
@@ -1185,7 +1150,7 @@ async function initializeApp(): Promise<void> {
   interviewHelper = new InterviewHelper(configHelper, authManager, overlayAdapter as unknown as OverlayManager, ttsHelper, byteDanceTtsHelper, realtimeVoiceHelper);
   ctx.interview = interviewHelper;
 
-  updateChecker = new UpdateChecker();
+  updateChecker = new UpdateChecker(() => configHelper.getAppConfig().version || app.getVersion());
   ctx.updateChecker = updateChecker;
 
   // 定期同步 processingHelper 的窗口引用，避免事件丢失

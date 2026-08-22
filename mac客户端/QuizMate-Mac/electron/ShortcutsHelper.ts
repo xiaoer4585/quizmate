@@ -6,10 +6,10 @@ import { ConfigHelper } from './ConfigHelper'
 type ActionHandler = (action: ShortcutAction) => void
 
 const voiceModeActions: Set<string> = new Set<string>([
-  'screenshot',
   'search',
   'toggle_visibility',
   'replay',
+  'quit',
   'reset',
   'interview_start',
   'interview_prev_question',
@@ -59,11 +59,6 @@ export class ShortcutsHelper {
     const migrated: Record<string, string> = {}
     let migrationNeeded = false
     for (const action of Object.keys(defaultShortcutBindings) as ShortcutAction[]) {
-      if (action === 'quit') {
-        if (stored[action]) migrationNeeded = true
-        migrated[action] = ''
-        continue
-      }
       if (!stored[action]) continue
       const normalized = normalizeMacAccelerator(stored[action])
       // Older Mac builds used Command+Q/Command+W (and one interim build used
@@ -151,7 +146,6 @@ export class ShortcutsHelper {
     this.pausedAccelerators.clear()
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!accelerator) continue
-      if (action === 'quit') continue
       const candidates = this.getRegistrationAccelerators(action as ShortcutAction, accelerator)
       let registeredAny = false
       for (const candidate of candidates) try {
@@ -183,9 +177,8 @@ export class ShortcutsHelper {
     this.pausedAccelerators.clear()
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!accelerator) continue
-      if (action === 'quit') continue
       if (mode === 'voice' && !voiceModeActions.has(action)) continue
-      if (mode === 'interview' && !interviewShortcutActions.includes(action as ShortcutAction) && !['reset', 'toggle_visibility', 'replay'].includes(action) && !interviewWindowActions.has(action)) continue
+      if (mode === 'interview' && !interviewShortcutActions.includes(action as ShortcutAction) && !['quit', 'reset', 'toggle_visibility', 'replay'].includes(action) && !interviewWindowActions.has(action)) continue
       const candidates = this.getRegistrationAccelerators(action as ShortcutAction, accelerator)
       let registeredAny = false
       for (const candidate of candidates) try {
@@ -229,7 +222,7 @@ export class ShortcutsHelper {
     if (mode === 'overlay') {
       return all.filter(action => !!this.bindings[action])
     }
-    if (mode === 'interview') return all.filter(action => !!this.bindings[action] && (interviewShortcutActions.includes(action) || ['reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)))
+    if (mode === 'interview') return all.filter(action => !!this.bindings[action] && (interviewShortcutActions.includes(action) || ['quit', 'reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)))
     return all.filter(action => !!this.bindings[action] && voiceModeActions.has(action))
   }
 

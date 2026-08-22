@@ -52,23 +52,10 @@ interface ScreenshotUploadTicket {
 
 /** Parse the structured `data` field returned by the analyze action. */
 function parseStructuredAnswer(value: unknown): { answer: string; explanation: string; code: string } {
-  if (typeof value === 'string') {
-    const text = value.trim()
-    if (!text) return { answer: '', explanation: '', code: '' }
-    try {
-      const parsed = JSON.parse(text)
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parseStructuredAnswer(parsed)
-    } catch { /* model may legitimately return plain text */ }
-    return { answer: text, explanation: '', code: '' }
-  }
   if (!value || typeof value !== 'object' || Array.isArray(value)) {
     return { answer: '', explanation: '', code: '' }
   }
   const record = value as Record<string, unknown>
-  const directAnswer = ['answer', 'result', 'content', 'text', 'raw'].map((key) => record[key]).find((item) => typeof item === 'string' && item.trim())
-  if (typeof directAnswer === 'string' && !Array.isArray(record.items)) {
-    return { answer: directAnswer.trim(), explanation: typeof record.explanation === 'string' ? record.explanation.trim() : '', code: typeof record.code === 'string' ? record.code.trim() : '' }
-  }
   const items = Array.isArray(record.items) ? record.items.filter((i) => i && typeof i === 'object') : []
   if (!items.length) {
     const note = typeof record.note === 'string' ? record.note.trim() : ''
@@ -127,6 +114,10 @@ export class LightweightProcessingHelper {
   private mainWindow: BrowserWindow | null = null
   private currentController: AbortController | null = null
 
+  constructor(configHelper: ConfigHelper) {
+    this.configHelper = configHelper
+  }
+
   public async getReferralOverview(): Promise<{ success: boolean; overview?: any; error?: string }> {
     const token = this.configHelper.getAuthToken()
     if (!token) return { success: false, error: '未登录，请先登录账号。' }
@@ -141,10 +132,6 @@ export class LightweightProcessingHelper {
     } catch (e: any) {
       return { success: false, error: e instanceof Error ? e.message : '获取邀请总览失败' }
     }
-  }
-
-  constructor(configHelper: ConfigHelper) {
-    this.configHelper = configHelper
   }
 
   public setMainWindow(win: BrowserWindow | null): void {
@@ -358,13 +345,13 @@ export class LightweightProcessingHelper {
         } else if (e.kind === 'credits') {
           this.sendEvent('out-of-credits', { error: e.message })
         } else if (e.kind === 'timeout') {
-          this.sendEvent('solution-stream-error', { error: '分析超时，未扣积分。', code: e.code || 'TIMEOUT' })
+          this.sendEvent('solution-stream-error', { error: '分析超时，未扣积分。' })
         } else {
-          this.sendEvent('solution-stream-error', { error: e.message, code: e.code || 'RESPONSE_ERROR' })
+          this.sendEvent('solution-stream-error', { error: e.message })
         }
         return { success: false, error: e.message, code: e.code }
       }
-      this.sendEvent('solution-stream-error', { error: e.message || String(e), code: e.code || 'UNKNOWN' })
+      this.sendEvent('solution-stream-error', { error: e.message || String(e) })
       return { success: false, error: e.message || String(e), code: 'UNKNOWN' }
     } finally {
       this.currentController = null
@@ -390,12 +377,7 @@ export class LightweightProcessingHelper {
   }
 
   private sendEvent(event: string, data: unknown): void {
-    const windows = BrowserWindow.getAllWindows()
-    if (windows.length > 0) {
-      for (const win of windows) {
-        if (!win.isDestroyed()) win.webContents.send(event, data)
-      }
-    } else if (this.mainWindow && !this.mainWindow.isDestroyed()) {
+    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
       this.mainWindow.webContents.send(event, data)
     }
   }
