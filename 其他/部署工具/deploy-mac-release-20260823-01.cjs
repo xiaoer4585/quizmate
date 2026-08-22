@@ -2,7 +2,13 @@ const crypto = require('crypto');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const OSS = require('ali-oss');
+const OSS = (() => {
+  try {
+    return require('../../注册登陆模块/阿里云统一入口-study-auth-api/node_modules/ali-oss');
+  } catch {
+    return require('ali-oss');
+  }
+})();
 
 const VERSION = '2026.8.23';
 const CHANGE_ID = 'CHG-20260823-01';
