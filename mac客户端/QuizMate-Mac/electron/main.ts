@@ -6,7 +6,7 @@
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
 //   - 托盘忙碌图标 + voice 模式进度通知
 // Mac 客户端只保留笔试助手与面试助手；求职流程由免费浏览器插件提供。
-import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, session, systemPreferences, Menu } from 'electron';
+import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, session, systemPreferences } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { pathToFileURL } from 'url';
@@ -569,9 +569,8 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       }
       break;
     case 'quit':
-      // Disable global quit shortcuts during exam/interview sessions. Users can
-      // still quit intentionally from the tray menu, but accidental Command+Q /
-      // Command+Shift+Q should never end an active exam.
+      state.quitting = true;
+      app.quit();
       break;
     case 'reset':
       if (interviewActive) {
@@ -725,17 +724,16 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
     return;
   }
 
+  // 搜题后清空历史截图队列
+  screenshotHelper.clearAll();
+  state.overlayWindow?.webContents.send('screenshots-cleared');
+
   // 进度通知 + 托盘忙碌图标
   notifyVoiceProgress('正在调用 AI 分析...');
   setTrayBusy(true);
 
   // 直接调用 analyze 获取完整结果
   const result = await processingHelper.analyze({ images: [b64], mode });
-
-  if (result.success) {
-    screenshotHelper.clearAll();
-    state.overlayWindow?.webContents.send('screenshots-cleared');
-  }
 
   if (procMode === 'voice') {
     // voice 模式：不依赖悬浮框事件，改用 TTS 播报
@@ -998,7 +996,7 @@ function closeInterviewOverlay() {
 
 /** One control for the interview workflow: overlay and realtime dictation share one lifecycle. */
 async function toggleInterviewSession(context?: unknown): Promise<{ listening: boolean; overlay: boolean }> {
-  if (interviewHelper?.isListening()) {
+  if (interviewHelper?.isListening() || state.interviewOverlayActive) {
     interviewHelper.stop();
     hideInterviewOverlay();
     return { listening: false, overlay: false };
@@ -1240,10 +1238,6 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
-    // Do not let macOS' default application menu consume Command+Q and quit
-    // the client while the user is working. The app remains tray-resident;
-    // quitting is available only through an explicit lifecycle action.
-    Menu.setApplicationMenu(null);
     await configureMacPermissions();
     await initializeApp().catch((e) => {
       console.error('[Main] Init failed:', e);
@@ -1260,15 +1254,7 @@ if (!gotLock) {
     // 保持后台运行（托盘），不退出应用
   });
 
-  app.on('before-quit', (event) => {
-    if (!state.quitting) {
-      event.preventDefault();
-      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-        state.mainWindow.show();
-        state.mainWindow.focus();
-      }
-      return;
-    }
+  app.on('before-quit', () => {
     state.quitting = true;
     shortcutsHelper?.unregisterAll();
     processingHelper?.cancelStreaming();

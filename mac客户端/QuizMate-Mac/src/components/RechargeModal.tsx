@@ -5,7 +5,9 @@ import { api, useProfile } from '../lib/ipc';
 interface PackageOption {
   id: string;
   name: string;
-  credits: number;
+  baseCredits: number;
+  bonusCredits: number;
+  totalCredits: number;
   price: number;
   unitPrice: string;
   feature: string;
@@ -13,10 +15,10 @@ interface PackageOption {
 }
 
 const PACKAGES: PackageOption[] = [
-  { id: 'trial', name: '笔面试体验包', credits: 210, price: 19.90, unitPrice: '0.095', feature: '先体验账户、充值和积分扣费流程' },
-  { id: 'starter', name: '笔面试实战包', credits: 600, price: 49.90, unitPrice: '0.083', feature: '适合日常练习与短期备考', recommended: true },
-  { id: 'pro', name: '笔面试上岸包', credits: 2500, price: 149, unitPrice: '0.060', feature: '适合密集练习和长期刷题' },
-  { id: 'unlimited', name: '无忧包', credits: 8000, price: 399.90, unitPrice: '0.050', feature: '大额储备，单次积分成本更低' },
+  { id: 'trial', name: '笔面试体验包', baseCredits: 200, bonusCredits: 10, totalCredits: 210, price: 19.90, unitPrice: '0.095', feature: '先体验账户、充值和积分扣费流程' },
+  { id: 'starter', name: '笔面试实战包', baseCredits: 500, bonusCredits: 100, totalCredits: 600, price: 49.90, unitPrice: '0.083', feature: '适合日常练习与短期备考', recommended: true },
+  { id: 'pro', name: '笔面试上岸包', baseCredits: 1500, bonusCredits: 1000, totalCredits: 2500, price: 149, unitPrice: '0.060', feature: '适合密集练习和长期刷题' },
+  { id: 'unlimited', name: '无忧包', baseCredits: 4000, bonusCredits: 4000, totalCredits: 8000, price: 399.90, unitPrice: '0.050', feature: '大额储备，单次积分成本更低' },
 ];
 
 type PayMethod = 'alipay' | 'wechat';
@@ -52,7 +54,7 @@ export default function RechargeModal({ open, onClose }: { open: boolean; onClos
   const fetchInviteEntry = async () => {
     try {
       const overview = await api.invite.getOverview();
-      if (overview?.success && overview.overview?.inviteCode) {
+      if (overview?.success && overview.overview?.hasRecharged && overview.overview?.inviteCode) {
         setPaidEntry({
           inviteCode: overview.overview.inviteCode,
           inviteLink: overview.overview.inviteLink || '',
@@ -155,8 +157,13 @@ export default function RechargeModal({ open, onClose }: { open: boolean; onClos
                     className={`relative text-left rounded-xl p-4 border transition-all ${pkg.recommended ? 'border-brand bg-brand/10' : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'} ${active ? 'ring-2 ring-brand' : ''}`}>
                     {pkg.recommended && <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-brand text-white text-xs font-semibold">推荐</span>}
                     <div className="text-sm font-semibold mb-1">{pkg.name}</div>
-                    <div className="flex items-baseline gap-1 mb-2"><Zap size={14} className="text-amber-400" /><span className="text-xl font-bold text-amber-400">{pkg.credits}</span><span className="text-xs text-slate-400">积分</span></div>
+                    <div className="flex items-baseline gap-1 mb-2"><Zap size={14} className="text-amber-400" /><span className="text-xl font-bold text-amber-400">{pkg.totalCredits}</span><span className="text-xs text-slate-400">积分</span></div>
                     <div className="mb-2"><span className="text-xs text-slate-400">¥</span><span className="text-2xl font-bold">{pkg.price}</span></div>
+                    <div className="grid grid-cols-3 gap-1 text-[11px] text-slate-400 mb-2">
+                      <span>充值 {pkg.baseCredits}</span>
+                      <span className="text-emerald-300">赠送 +{pkg.bonusCredits}</span>
+                      <span className="text-amber-300">总计 {pkg.totalCredits}</span>
+                    </div>
                     <div className="text-xs text-slate-500 mb-2">约 ¥{pkg.unitPrice}/积分</div>
                     <div className="text-xs text-slate-400 leading-relaxed">{pkg.feature}</div>
                     {active && <div className="absolute top-2 right-2 w-5 h-5 rounded-full bg-brand flex items-center justify-center"><Check size={12} /></div>}
@@ -165,7 +172,7 @@ export default function RechargeModal({ open, onClose }: { open: boolean; onClos
               })}
             </div>
             <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-slate-800/80 border border-slate-700">
-              <div className="text-sm text-slate-300">已选择 <span className="font-semibold text-slate-100">{selected?.name}</span><span className="text-slate-400"> · {selected?.credits} 积分 · </span><span className="text-amber-400 font-semibold">¥{selected?.price}</span></div>
+              <div className="text-sm text-slate-300">已选择 <span className="font-semibold text-slate-100">{selected?.name}</span><span className="text-slate-400"> · 充值 {selected?.baseCredits} + 赠送 {selected?.bonusCredits} = {selected?.totalCredits} 积分 · </span><span className="text-amber-400 font-semibold">¥{selected?.price}</span></div>
               <button onClick={() => setStep('pay')} className="btn-primary">确认支付</button>
             </div>
           </>
@@ -173,7 +180,7 @@ export default function RechargeModal({ open, onClose }: { open: boolean; onClos
 
         {step === 'pay' && selected && (
           <div className="py-4">
-            <div className="mb-5 p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-sm text-slate-300">已选择 <span className="font-semibold">{selected.name}</span> · {selected.credits} 积分 · <span className="text-amber-400">¥{selected.price}</span></div>
+            <div className="mb-5 p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-sm text-slate-300">已选择 <span className="font-semibold">{selected.name}</span> · 充值 {selected.baseCredits} + 赠送 {selected.bonusCredits} = {selected.totalCredits} 积分 · <span className="text-amber-400">¥{selected.price}</span></div>
             <p className="text-sm text-slate-300 mb-4 text-center">请选择支付方式</p>
             <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
               <button onClick={() => createOrder('alipay')} disabled={loading} className="flex flex-col items-center gap-3 rounded-xl p-6 border border-slate-700 bg-slate-800/50 hover:border-sky-500 hover:bg-sky-500/10 disabled:opacity-50"><div className="w-12 h-12 rounded-full bg-sky-500/15 flex items-center justify-center text-sky-400 text-xl font-bold">支</div><span className="text-sm font-medium">支付宝支付</span></button>
@@ -185,7 +192,7 @@ export default function RechargeModal({ open, onClose }: { open: boolean; onClos
 
         {step === 'qrcode' && selected && payMethod && (
           <div className="py-4 flex flex-col items-center">
-            <div className="mb-5 w-full max-w-sm p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-sm flex justify-between"><span>{selected.name} · {selected.credits} 积分</span><span className="text-amber-400">¥{selected.price}</span></div>
+            <div className="mb-5 w-full max-w-sm p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-sm flex justify-between"><span>{selected.name} · {selected.totalCredits} 积分</span><span className="text-amber-400">¥{selected.price}</span></div>
             <div className="bg-white rounded-xl p-3 mb-4"><img src={qrUrl} alt="支付二维码" width={240} height={240} /></div>
             <p className="text-sm text-slate-300 mb-1">请使用 <span className={payMethod === 'alipay' ? 'text-sky-400 font-semibold' : 'text-emerald-400 font-semibold'}>{payMethod === 'alipay' ? '支付宝' : '微信'}</span> 扫码支付</p>
             <p className="text-xs text-slate-500 mb-3">支付成功后积分会自动到账，也可以手动刷新。</p>
