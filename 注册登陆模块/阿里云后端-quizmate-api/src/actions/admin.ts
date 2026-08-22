@@ -107,13 +107,27 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
   actions.set("adminListCreditAccounts", async (input) => {
     await authenticateAdmin(deps, input);
     const { pageSize, requestedPage } = paging(input);
-    const total = Number((await deps.db.query<{ count: string }>("SELECT count(*)::text AS count FROM accounts")).rows[0]?.count ?? 0);
+    const emailKeyword = String(input.email ?? "").trim().slice(0, 200);
+    const params: unknown[] = [];
+    let whereClause = "";
+    if (emailKeyword) {
+      params.push(`%${emailKeyword.toLowerCase()}%`);
+      whereClause = "WHERE lower(a.email) LIKE $1";
+    }
+    const totalParams = params.length;
+    const total = Number((await deps.db.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM accounts a JOIN credit_accounts c USING(account_id) ${whereClause}`,
+      params
+    )).rows[0]?.count ?? 0);
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const page = Math.min(requestedPage, totalPages);
+    const limitParam = `$${totalParams + 1}`;
+    const offsetParam = `$${totalParams + 2}`;
     const result = await deps.db.query<Record<string, unknown>>(
       `SELECT a.*, c.credits, c.total_charged_credits, c.total_consumed_credits
-       FROM accounts a JOIN credit_accounts c USING(account_id) ORDER BY a.created_at DESC LIMIT $1 OFFSET $2`,
-      [pageSize, (page - 1) * pageSize]
+       FROM accounts a JOIN credit_accounts c USING(account_id) ${whereClause}
+       ORDER BY a.created_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`,
+      [...params, pageSize, (page - 1) * pageSize]
     );
     return { items: result.rows.map((row) => ({ accountId: String(row.account_id), email: String(row.email), credits: Number(row.credits), totalChargedCredits: Number(row.total_charged_credits), totalConsumedCredits: Number(row.total_consumed_credits), registerBonusCredits: Number(row.register_bonus_credits), status: String(row.status), role: String(row.role ?? "user"), createdAt: date(row.created_at), lastLoginAt: date(row.last_login_at), updatedAt: date(row.updated_at), type: "credits" })), page, pageSize, total, totalPages };
   });
@@ -225,6 +239,88 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
         adjustedCredits: credits,
         logId: String(ledgerResult.rows[0]?.log_id ?? "")
       };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+  actions.set("adminBatchAdjustCredits", async (input) => {
+    await authenticateAdmin(deps, input);
+    const operation = String(input.operation ?? "").trim();
+    if (operation !== "add" && operation !== "subtract") {
+      throw new PublicError("操作类型必须为 add 或 subtract。", "INVALID_OPERATION");
+    }
+    const credits = Math.floor(Number(input.credits ?? 0));
+    if (!Number.isFinite(credits) || credits <= 0) {
+      throw new PublicError("积分数量必须是大于 0 的整数。", "INVALID_CREDITS");
+    }
+    const reason = String(input.reason ?? "").trim().slice(0, 200);
+    const rawEmails = Array.isArray(input.emails) ? input.emails : [];
+    const emails = Array.from(new Set(rawEmails
+      .map((value) => normalizeEmail(value))
+      .filter(Boolean)));
+    if (!emails.length) throw new PublicError("请至少输入一个有效的用户邮箱。", "MISSING_EMAILS");
+    if (emails.length > 500) throw new PublicError("单次最多批量调整 500 个用户。", "TOO_MANY_EMAILS");
+    const client = await deps.db.connect();
+    const results: { email: string; status: "ok" | "skipped"; reason?: string; credits?: number }[] = [];
+    const summary = { total: emails.length, success: 0, skipped: 0 };
+    try {
+      await client.query("BEGIN");
+      for (const email of emails) {
+        const accountResult = await client.query<{
+          account_id: string; email: string; credits: string | number;
+        }>(
+          `SELECT a.account_id, a.email, c.credits
+             FROM accounts a JOIN credit_accounts c USING(account_id)
+            WHERE a.email = $1 FOR UPDATE OF a, c`,
+          [email]
+        );
+        const account = accountResult.rows[0];
+        if (!account) {
+          results.push({ email, status: "skipped", reason: "账户不存在" });
+          summary.skipped += 1;
+          continue;
+        }
+        const current = Number(account.credits);
+        const delta = operation === "add" ? credits : -credits;
+        const next = current + delta;
+        if (next < 0) {
+          results.push({ email, status: "skipped", reason: `余额不足（当前 ${current}）`, credits: current });
+          summary.skipped += 1;
+          continue;
+        }
+        const updateResult = await client.query<{ credits: string | number }>(
+          `UPDATE credit_accounts
+              SET credits = $2,
+                  total_charged_credits = total_charged_credits + CASE WHEN $3 = 'add' THEN $4 ELSE 0 END,
+                  total_consumed_credits = total_consumed_credits + CASE WHEN $3 = 'subtract' THEN $4 ELSE 0 END,
+                  updated_at = now()
+            WHERE account_id = $1
+            RETURNING credits`,
+          [account.account_id, next, operation, credits]
+        );
+        const updated = updateResult.rows[0]!;
+        await client.query(
+          `INSERT INTO credit_ledger(account_id, operation_type, credits, balance_after, source, reason)
+           VALUES ($1, 'admin_adjust', $2, $3, 'admin_panel_batch', NULLIF($4, ''))`,
+          [account.account_id, delta, Number(updated.credits), reason]
+        );
+        results.push({ email, status: "ok", credits: Number(updated.credits) });
+        summary.success += 1;
+      }
+      await client.query(
+        `INSERT INTO admin_audit_logs(actor_id, action, target_type, target_id, reason)
+         VALUES ($1, 'batch_adjust_credits', 'credit_accounts', $2, $3)`,
+        [
+          input.accountToken ? "admin" : "admin_secret",
+          emails.join(","),
+          `批量${operation === "add" ? "增加" : "减少"}积分：数量=${credits} 成功=${summary.success} 跳过=${summary.skipped} 备注=${reason || "-"}`
+        ]
+      );
+      await client.query("COMMIT");
+      return { operation, credits, reason, summary, results };
     } catch (error) {
       await client.query("ROLLBACK").catch(() => undefined);
       throw error;
