@@ -4,6 +4,7 @@ const os = require('os');
 const path = require('path');
 const OSS = require('../../注册登陆模块/阿里云统一入口-study-auth-api/node_modules/ali-oss');
 const version = process.env.MAC_RELEASE_VERSION || '2026.8.22';
+const gitRemote = process.env.GIT_REMOTE || 'newgithub';
 const versionToken = version.replaceAll('.', '');
 const tag = `mac-build-${versionToken}-${Date.now()}`;
 const prefix = 'downloads';
@@ -22,5 +23,5 @@ const payload = {
 };
 const message = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
 execFileSync('git', ['tag', '-a', tag, '-m', message], { stdio: 'inherit' });
-execFileSync('git', ['push', 'origin', `refs/tags/${tag}`], { stdio: 'inherit' });
+execFileSync('git', ['push', gitRemote, `refs/tags/${tag}`], { stdio: 'inherit' });
 console.log(`MAC_RELEASE_TAG_PUSHED ${tag}`);

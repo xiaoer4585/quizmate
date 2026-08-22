@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { X, Wallet, Zap, Check, ArrowLeft, RotateCw, AlertCircle, Users } from 'lucide-react';
+import QRCode from 'qrcode';
 import { api, useProfile } from '../lib/ipc';
 
 interface PackageOption {
@@ -22,7 +23,7 @@ const PACKAGES: PackageOption[] = [
 ];
 
 type PayMethod = 'alipay' | 'wechat';
-type Step = 'select' | 'pay' | 'qrcode' | 'success' | 'error';
+type Step = 'select' | 'qrcode' | 'success' | 'error';
 
 export default function RechargeModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { data: profile, refetch } = useProfile();
@@ -75,7 +76,7 @@ export default function RechargeModal({ open, onClose }: { open: boolean; onClos
       const qrSource = order.qrDataUrl || order.qrCode || order.payUrl;
       if (!order.outTradeNo || !qrSource) throw new Error('支付平台未返回付款二维码，请稍后重试');
       setOutTradeNo(order.outTradeNo);
-      setQrUrl(order.qrDataUrl || `https://api.qrserver.com/v1/create-qr-code/?size=240x240&data=${encodeURIComponent(qrSource)}`);
+      setQrUrl(order.qrDataUrl || await QRCode.toDataURL(qrSource, { width: 240, margin: 1 }));
       setStep('qrcode');
     } catch (e: any) {
       setError(e?.message || '创建支付订单失败，请稍后重试');
@@ -125,19 +126,17 @@ export default function RechargeModal({ open, onClose }: { open: boolean; onClos
 
   const goBack = () => {
     if (step === 'qrcode' || step === 'error') {
-      setStep('pay');
+      setStep('select');
       setPayMethod(null);
       setQrUrl('');
       setOutTradeNo('');
       setError('');
-    } else if (step === 'pay') {
-      setStep('select');
     }
   };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4" onClick={resetAndClose}>
-      <div className="w-full max-w-3xl max-h-[90vh] overflow-auto bg-slate-900 rounded-2xl border border-slate-700 p-6" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-4xl max-h-[90vh] overflow-auto bg-slate-900 rounded-lg border border-slate-700 p-6" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between mb-5">
           <h2 className="text-lg font-bold flex items-center gap-2">
             {step !== 'select' && step !== 'success' && <button onClick={goBack} className="text-slate-400 hover:text-slate-200 mr-1" title="返回"><ArrowLeft size={18} /></button>}
@@ -149,20 +148,20 @@ export default function RechargeModal({ open, onClose }: { open: boolean; onClos
         {step === 'select' && (
           <>
             <p className="text-xs text-slate-400 mb-4">选择适合你的套餐，积分用于笔试搜题和面试实时辅助。</p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-5">
               {PACKAGES.map((pkg) => {
                 const active = selected?.id === pkg.id;
                 return (
                   <button key={pkg.id} onClick={() => setSelected(pkg)}
-                    className={`relative text-left rounded-xl p-4 border transition-all ${pkg.recommended ? 'border-brand bg-brand/10' : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'} ${active ? 'ring-2 ring-brand' : ''}`}>
+                    className={`relative text-left rounded-lg p-4 border transition-all ${pkg.recommended ? 'border-brand bg-brand/10' : 'border-slate-700 bg-slate-800/50 hover:border-slate-600'} ${active ? 'ring-2 ring-brand' : ''}`}>
                     {pkg.recommended && <span className="absolute -top-2 left-1/2 -translate-x-1/2 px-2 py-0.5 rounded-full bg-brand text-white text-xs font-semibold">推荐</span>}
                     <div className="text-sm font-semibold mb-1">{pkg.name}</div>
                     <div className="flex items-baseline gap-1 mb-2"><Zap size={14} className="text-amber-400" /><span className="text-xl font-bold text-amber-400">{pkg.totalCredits}</span><span className="text-xs text-slate-400">积分</span></div>
                     <div className="mb-2"><span className="text-xs text-slate-400">¥</span><span className="text-2xl font-bold">{pkg.price}</span></div>
-                    <div className="grid grid-cols-3 gap-1 text-[11px] text-slate-400 mb-2">
-                      <span>充值 {pkg.baseCredits}</span>
-                      <span className="text-emerald-300">赠送 +{pkg.bonusCredits}</span>
-                      <span className="text-amber-300">总计 {pkg.totalCredits}</span>
+                    <div className="grid grid-cols-3 gap-2 text-[11px] mb-2">
+                      <span className="text-slate-400">充值 <b className="block text-slate-200">{pkg.baseCredits}</b></span>
+                      <span className="text-slate-400">赠送 <b className="block text-emerald-300">+{pkg.bonusCredits}</b></span>
+                      <span className="text-slate-400">总计 <b className="block text-amber-300">{pkg.totalCredits}</b></span>
                     </div>
                     <div className="text-xs text-slate-500 mb-2">约 ¥{pkg.unitPrice}/积分</div>
                     <div className="text-xs text-slate-400 leading-relaxed">{pkg.feature}</div>
@@ -171,23 +170,23 @@ export default function RechargeModal({ open, onClose }: { open: boolean; onClos
                 );
               })}
             </div>
-            <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-slate-800/80 border border-slate-700">
-              <div className="text-sm text-slate-300">已选择 <span className="font-semibold text-slate-100">{selected?.name}</span><span className="text-slate-400"> · 充值 {selected?.baseCredits} + 赠送 {selected?.bonusCredits} = {selected?.totalCredits} 积分 · </span><span className="text-amber-400 font-semibold">¥{selected?.price}</span></div>
-              <button onClick={() => setStep('pay')} className="btn-primary">确认支付</button>
+            <div className="p-4 rounded-lg bg-slate-800/80 border border-slate-700">
+              <div className="flex items-center justify-between gap-3 mb-4">
+                <div className="text-sm text-slate-300">已选择 <span className="font-semibold text-slate-100">{selected?.name}</span><span className="text-slate-400"> · 充值 {selected?.baseCredits} + 赠送 {selected?.bonusCredits} = {selected?.totalCredits} 积分</span></div>
+                <span className="text-lg text-amber-400 font-semibold shrink-0">¥{selected?.price}</span>
+              </div>
+              <div className="text-xs text-slate-400 mb-2">选择支付方式</div>
+              <div className="grid grid-cols-2 gap-3">
+                <button onClick={() => createOrder('wechat')} disabled={loading} className="btn-outline justify-center border-emerald-500/40 hover:bg-emerald-500/10 disabled:opacity-50">
+                  <span className="font-bold text-emerald-400">微</span> 微信支付
+                </button>
+                <button onClick={() => createOrder('alipay')} disabled={loading} className="btn-outline justify-center border-sky-500/40 hover:bg-sky-500/10 disabled:opacity-50">
+                  <span className="font-bold text-sky-400">支</span> 支付宝支付
+                </button>
+              </div>
+              {loading && <p className="text-center text-xs text-slate-400 mt-3 flex items-center justify-center gap-2"><RotateCw size={14} className="animate-spin" /> 正在创建支付订单...</p>}
             </div>
           </>
-        )}
-
-        {step === 'pay' && selected && (
-          <div className="py-4">
-            <div className="mb-5 p-3 rounded-lg bg-slate-800/80 border border-slate-700 text-sm text-slate-300">已选择 <span className="font-semibold">{selected.name}</span> · 充值 {selected.baseCredits} + 赠送 {selected.bonusCredits} = {selected.totalCredits} 积分 · <span className="text-amber-400">¥{selected.price}</span></div>
-            <p className="text-sm text-slate-300 mb-4 text-center">请选择支付方式</p>
-            <div className="grid grid-cols-2 gap-4 max-w-md mx-auto">
-              <button onClick={() => createOrder('alipay')} disabled={loading} className="flex flex-col items-center gap-3 rounded-xl p-6 border border-slate-700 bg-slate-800/50 hover:border-sky-500 hover:bg-sky-500/10 disabled:opacity-50"><div className="w-12 h-12 rounded-full bg-sky-500/15 flex items-center justify-center text-sky-400 text-xl font-bold">支</div><span className="text-sm font-medium">支付宝支付</span></button>
-              <button onClick={() => createOrder('wechat')} disabled={loading} className="flex flex-col items-center gap-3 rounded-xl p-6 border border-slate-700 bg-slate-800/50 hover:border-emerald-500 hover:bg-emerald-500/10 disabled:opacity-50"><div className="w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center text-emerald-400 text-xl font-bold">微</div><span className="text-sm font-medium">微信支付</span></button>
-            </div>
-            {loading && <p className="text-center text-xs text-slate-400 mt-4 flex items-center justify-center gap-2"><RotateCw size={14} className="animate-spin" /> 正在创建支付订单...</p>}
-          </div>
         )}
 
         {step === 'qrcode' && selected && payMethod && (

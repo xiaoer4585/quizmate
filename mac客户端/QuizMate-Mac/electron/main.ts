@@ -994,23 +994,44 @@ function closeInterviewOverlay() {
   state.interviewOverlayVisible = false;
 }
 
-/** One control for the interview workflow: overlay and realtime dictation share one lifecycle. */
+let interviewSessionTransition: Promise<{ listening: boolean; overlay: boolean }> | null = null;
+
+/** One atomic control for the interview workflow: overlay and dictation always move together. */
 async function toggleInterviewSession(context?: unknown): Promise<{ listening: boolean; overlay: boolean }> {
-  if (interviewHelper?.isListening() || state.interviewOverlayActive) {
-    interviewHelper.stop();
-    hideInterviewOverlay();
-    return { listening: false, overlay: false };
-  }
-  if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) createInterviewOverlayWindow();
-  else showInterviewOverlay();
-  try {
-    await interviewHelper?.start(context as any);
+  if (interviewSessionTransition) return interviewSessionTransition;
+
+  interviewSessionTransition = (async () => {
     const listening = !!interviewHelper?.isListening();
-    if (!listening) hideInterviewOverlay();
-    return { listening, overlay: listening && state.interviewOverlayVisible };
-  } catch {
-    hideInterviewOverlay();
-    return { listening: false, overlay: false };
+    const overlay = state.interviewOverlayActive && state.interviewOverlayVisible;
+
+    if (listening && overlay) {
+      interviewHelper!.stop();
+      closeInterviewOverlay();
+      return { listening: false, overlay: false };
+    }
+
+    // Recover any partial state before starting a fresh, synchronized session.
+    if (listening) interviewHelper!.stop();
+    if (state.interviewOverlayActive) closeInterviewOverlay();
+    if (!interviewHelper) throw new Error('面试助手尚未初始化，请稍后重试。');
+
+    createInterviewOverlayWindow();
+    try {
+      await interviewHelper.start(context as any);
+      if (!interviewHelper.isListening()) throw new Error('实时听写未能启动，请检查音频权限后重试。');
+      showInterviewOverlay();
+      return { listening: true, overlay: true };
+    } catch (error) {
+      interviewHelper.stop();
+      closeInterviewOverlay();
+      throw error;
+    }
+  })();
+
+  try {
+    return await interviewSessionTransition;
+  } finally {
+    interviewSessionTransition = null;
   }
 }
 

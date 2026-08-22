@@ -206,18 +206,22 @@ export default function Interview() {
     const off = api.interview.onTranscript((data: any) => {
       if (data?.status === 'started') {
         setListening(true);
+        setOverlayActive(true);
         setError('');
       } else if (data?.status === 'stopped') {
         setListening(false);
+        setOverlayActive(false);
       } else if (data?.error) {
         setError(data.error);
+        setListening(false);
+        setOverlayActive(false);
       }
     });
     return () => { off?.(); };
   }, []);
 
   const credits = profile?.creditBalance ?? profile?.account?.credits ?? 0;
-  const interviewRunning = listening || overlayActive;
+  const interviewRunning = listening && overlayActive;
 
   // 一个按钮统一控制面试悬浮窗和实时听写，快捷键走同一 IPC。
   const toggleInterviewSession = async () => {
@@ -294,24 +298,6 @@ export default function Interview() {
     setResumeEditing(true);
   };
 
-  // ===== 实时语音识别（通过主进程） =====
-  const startListening = async () => {
-    setError('');
-    try {
-      await api.interview.startListening(context);
-      setListening(true);
-    } catch (e: any) {
-      setError(e?.message || '启动语音识别失败');
-    }
-  };
-
-  const stopListening = async () => {
-    try {
-      await api.interview.stopListening();
-    } catch {}
-    setListening(false);
-  };
-
   const saveInterviewContext = async () => {
     setSavingContext(true);
     setContextStatus('');
@@ -377,9 +363,10 @@ export default function Interview() {
     setManualSending(true);
     try {
       // 确保面试助手已启动（设置上下文）
-      if (!listening) {
-        await api.interview.startListening(context);
-        setListening(true);
+      if (!interviewRunning) {
+        const result = await api.interview.toggleSession(context);
+        setListening(!!result?.listening);
+        setOverlayActive(!!result?.overlay);
       }
       api.interview.setContext(context);
       await api.interview.transcript(q);
