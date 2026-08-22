@@ -8,11 +8,28 @@ const VERSION = '2026.8.22.1';
 const CHANGE_ID = 'CHG-20260822-11';
 const ROOT = path.resolve(__dirname, '../..');
 const SITE = path.join(ROOT, '官网模块/正式官网-quizmate.vip');
-const RELEASE_OBJECTS = [
-  `downloads/QuizMate-Mac-Apple-Silicon-${VERSION}.dmg`,
-  `downloads/QuizMate-Mac-Intel-${VERSION}.dmg`,
-  `mac/QuizMate-Mac-arm64-${VERSION}.zip`,
-  `mac/QuizMate-Mac-x64-${VERSION}.zip`,
+const RELEASE_DIR = path.join(ROOT, 'mac客户端/发布包', VERSION);
+const RELEASE_FILES = [
+  {
+    object: `downloads/QuizMate-Mac-Apple-Silicon-${VERSION}.dmg`,
+    file: `QuizMate-Mac-Apple-Silicon-${VERSION}.dmg`,
+    contentType: 'application/x-apple-diskimage',
+  },
+  {
+    object: `downloads/QuizMate-Mac-Intel-${VERSION}.dmg`,
+    file: `QuizMate-Mac-Intel-${VERSION}.dmg`,
+    contentType: 'application/x-apple-diskimage',
+  },
+  {
+    object: `mac/QuizMate-Mac-arm64-${VERSION}.zip`,
+    file: `QuizMate-Mac-arm64-${VERSION}.zip`,
+    contentType: 'application/zip',
+  },
+  {
+    object: `mac/QuizMate-Mac-x64-${VERSION}.zip`,
+    file: `QuizMate-Mac-x64-${VERSION}.zip`,
+    contentType: 'application/zip',
+  },
 ];
 
 const config = JSON.parse(fs.readFileSync(path.join(os.homedir(), '.aliyun', 'config.json'), 'utf8'));
@@ -71,9 +88,32 @@ async function putText(storage, object, content, contentType) {
   console.log(`PUBLISH_OK quizmate-cn/${object}`);
 }
 
+async function putFile(storage, releaseFile) {
+  const filePath = path.join(RELEASE_DIR, releaseFile.file);
+  if (!fs.existsSync(filePath)) throw new Error(`missing local release file: ${filePath}`);
+  await backup(storage, releaseFile.object);
+  await storage.put(releaseFile.object, filePath, {
+    headers: {
+      'Content-Type': releaseFile.contentType,
+      'Cache-Control': 'public, max-age=31536000, immutable',
+    },
+  });
+  const head = await exists(storage, releaseFile.object);
+  const localSize = fs.statSync(filePath).size;
+  const remoteSize = Number(head.res.headers['content-length']);
+  if (remoteSize !== localSize) {
+    throw new Error(`upload size mismatch: ${releaseFile.object} local=${localSize} remote=${remoteSize}`);
+  }
+  console.log(`UPLOAD_OK quizmate-cn/${releaseFile.object} size=${remoteSize}`);
+}
+
 async function main() {
   const storage = client();
-  for (const object of RELEASE_OBJECTS) {
+  for (const releaseFile of RELEASE_FILES) {
+    await putFile(storage, releaseFile);
+  }
+
+  for (const { object } of RELEASE_FILES) {
     const head = await exists(storage, object);
     if (!head) throw new Error(`missing release object: ${object}`);
     console.log(`OBJECT_OK quizmate-cn/${object} size=${head.res.headers['content-length']}`);

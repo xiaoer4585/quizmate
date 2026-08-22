@@ -26,16 +26,35 @@
 | 发布脚本目标桶扫描 | 仅包含 `quizmate-cn`，未包含 `quizmate-vip` |
 | 业务版本/打包版本兼容 | Electron Builder 使用 semver `2026.8.22-1`；客户端展示、更新检测、请求头和下载 URL 使用 `resources/config.json` 业务版本 `2026.8.22.1` |
 
-## 待云构建/发布
+## 云构建与发布结果
 
-- `mac/latest-mac.yml` 仍待双架构 ZIP 上传后生成真实 sha512 和 size。
-- Apple Silicon / Intel DMG 与 ZIP、ad-hoc 签名、`hdiutil verify`、可执行文件架构检查待 GitHub Actions macOS runner 执行。
-- 正式站 `https://www.quizmate.cn/download.html`、两个 DMG URL 和 `https://quizmate.cn/mac/latest-mac.yml` 待发布后公网验证。
-- 原计划使用带 OSS PUT 签名 URL 的 tag 触发上传，被安全审查拦截，原因是签名 URL 写入 Git tag 存在凭据外泄风险。
-- 改用“推送代码分支后手动触发 GitHub Actions artifact，再本机上传 OSS”的更安全方案时，分支推送也被安全审查拦截，原因是需要用户明确授权向指定 GitHub 远端发布私有仓库内容。
-- 用户随后明确授权使用 `https://github.com/xiaoer4585/quizmate`；运行 `32550241802` 双架构构建通过。首轮发现 Electron Builder 将四段 `2026.8.22.1` 规范化为包内 `2026.8.2-2.1`，已修复为 semver 打包版本 `2026.8.22-1` + 业务版本 `2026.8.22.1`，需重跑云构建。
+- 用户明确授权使用 `https://github.com/xiaoer4585/quizmate` 发布；代码提交 `5d01e55 release(mac): prepare 2026.8.22.1 hybrid release` 已推送到分支 `codex/mac-20260822-1`。
+- GitHub Actions run `32552393717` 双架构通过：
+  - Apple Silicon artifact `9470442079`，大小 `253266444`。
+  - Intel artifact `9470447364`，大小 `259099121`。
+- 包内版本校验：
+  - `QuizMate.app/Contents/Resources/resources/config.json`：Apple Silicon 与 Intel 均为 `"version": "2026.8.22.1"`。
+  - `QuizMate.app/Contents/Resources/app-update.yml`：Apple Silicon 与 Intel 均为 `url: https://quizmate.cn/mac/`。
+  - `Info.plist` 打包版本为 Electron Builder semver 兼容值 `2026.8.22-1`，业务展示与更新比较使用 `resources/config.json` 的 `2026.8.22.1`。
+- 本地最终包 SHA-256：
+  - `QuizMate-Mac-Apple-Silicon-2026.8.22.1.dmg`：`02C87E2CB0D647F8906B78CD48724F12E094E0025F99026A6C8A1D4B7323AA63`
+  - `QuizMate-Mac-Intel-2026.8.22.1.dmg`：`5CDBD3C32FEA94DE79D55351819AF58BB8B8B26C37375F527554CFF99898467A`
+  - `QuizMate-Mac-arm64-2026.8.22.1.zip`：`459A11A5D91BA5DA4189812E5CF47D8A4CE63A96E432A3A2CC0B9D5B617229FE`
+  - `QuizMate-Mac-x64-2026.8.22.1.zip`：`A7C90775ED0AEBF8A2FE55E8B700CB3E74AE07B449440214F141BB4C85E11798`
+- OSS 发布目标仅 `quizmate-cn`。上传并远端大小校验通过：
+  - `downloads/QuizMate-Mac-Apple-Silicon-2026.8.22.1.dmg`：`126901897`
+  - `downloads/QuizMate-Mac-Intel-2026.8.22.1.dmg`：`130582164`
+  - `mac/QuizMate-Mac-arm64-2026.8.22.1.zip`：`126879386`
+  - `mac/QuizMate-Mac-x64-2026.8.22.1.zip`：`128985496`
+  - 已备份并发布 `mac/latest-mac.yml`、`download.html`。
+- 公网验证通过：
+  - `https://quizmate.cn/downloads/QuizMate-Mac-Apple-Silicon-2026.8.22.1.dmg`：HTTP 200，`126901897`
+  - `https://quizmate.cn/downloads/QuizMate-Mac-Intel-2026.8.22.1.dmg`：HTTP 200，`130582164`
+  - `https://quizmate.cn/mac/QuizMate-Mac-arm64-2026.8.22.1.zip`：HTTP 200，`126879386`
+  - `https://quizmate.cn/mac/QuizMate-Mac-x64-2026.8.22.1.zip`：HTTP 200，`128985496`
+  - `https://quizmate.cn/mac/latest-mac.yml`：HTTP 200，包含 `version: 2026.8.22.1`、两个 ZIP 的真实 `sha512` 和 `size`。
+  - `https://www.quizmate.cn/download.html`：HTTP 200，包含 `2026.8.22.1`、`QuizMate-Mac-Apple-Silicon-2026.8.22.1.dmg`、`QuizMate-Mac-Intel-2026.8.22.1.dmg`。
 
 ## 阻塞项
 
 - 实体 Mac 屏幕录制权限、全局快捷键、真实笔试截图/AI 搜题、麦克风/系统音频和真实面试 AI 链路无法在 Windows 本地推断通过，发布后需 Apple Silicon 与 Intel 实机验收。
-- 云构建/官网正式发布当前阻塞：等待用户明确授权使用 GitHub 远端 `git@github.com:wangxiaoer4585/quizmate.git` / 分支 `codex/mac-20260822-1`，或提供可直接构建 DMG/ZIP 的受控 Mac 环境。
