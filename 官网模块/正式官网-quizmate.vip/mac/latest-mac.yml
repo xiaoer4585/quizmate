@@ -1,11 +1,11 @@
-version: 2026.8.26
+version: 2026.8.27
 files:
-  - url: QuizMate-Mac-arm64-2026.8.26.zip
-    sha512: 5PbWQT6E5n6U0L6477hufkBcBwuL7tUmymxrBBzMM3xBXCCMs3ayuyp7Br08utiBkOHgiM+22ivDctsFlUJwSQ==
-    size: 126878960
-  - url: QuizMate-Mac-x64-2026.8.26.zip
-    sha512: Yg47IAR97HiNuaL6BLSXbeiBMwlb7zdJdwT2C+QGEuKvpSb6YMEPQHMMxmXc4MUVhboZwb2W69taRz4VfU3KxQ==
-    size: 128985066
-path: QuizMate-Mac-arm64-2026.8.26.zip
-sha512: 5PbWQT6E5n6U0L6477hufkBcBwuL7tUmymxrBBzMM3xBXCCMs3ayuyp7Br08utiBkOHgiM+22ivDctsFlUJwSQ==
-releaseDate: '2026-08-22T00:42:02.482Z'
+  - url: QuizMate-Mac-arm64-2026.8.27.zip
+    sha512: YMKI23VwbYmphsawYs22TTHTjwygtSW6zV1Qyro9lYVAOvn3VkGRSYrwRf0E+RHQQeXtr/jQDP3thTUW8PP+fg==
+    size: 126879540
+  - url: QuizMate-Mac-x64-2026.8.27.zip
+    sha512: ooMxLCYJTFUSPCOBTLMlvsdlc3uHkpvT6m/hgKucLx8qnDvWxU0s6b46CtbGwI09Ef5oefbYtXQ0vMKcMgao9g==
+    size: 128985651
+path: QuizMate-Mac-arm64-2026.8.27.zip
+sha512: YMKI23VwbYmphsawYs22TTHTjwygtSW6zV1Qyro9lYVAOvn3VkGRSYrwRf0E+RHQQeXtr/jQDP3thTUW8PP+fg==
+releaseDate: '2026-08-22T01:37:59.936Z'
