@@ -1,5 +1,5 @@
 // IPC 路由 - 注册所有渲染层调用的 handler，分发到各 Helper
-import { ipcMain, shell, app, BrowserWindow, dialog, session, clipboard } from 'electron';
+import { ipcMain, shell, app, BrowserWindow, dialog, session, clipboard, systemPreferences } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { ConfigHelper } from './ConfigHelper';
@@ -231,6 +231,18 @@ export function registerIpcHandlers(
   ipcMain.handle('system:openWeb', () => shell.openExternal(ctx.configHelper.getAppConfig().webBaseUrl));
   ipcMain.handle('system:openAdmin', () => shell.openExternal(ctx.configHelper.getAppConfig().adminWebUrl || 'https://www.quizmate.vip/admin-web/index.html'));
   ipcMain.handle('system:version', () => app.getVersion());
+  ipcMain.handle('system:getPermissions', () => ({
+    screen: process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('screen') : 'granted',
+    microphone: process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('microphone') : 'granted',
+  }));
+  ipcMain.handle('system:requestMicrophone', async () => {
+    if (process.platform !== 'darwin') return true;
+    return systemPreferences.askForMediaAccess('microphone');
+  });
+  ipcMain.handle('system:openPermissionSettings', (_e, kind: 'screen' | 'microphone') => {
+    const pane = kind === 'screen' ? 'Privacy_ScreenCapture' : 'Privacy_Microphone';
+    return shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${pane}`);
+  });
   ipcMain.handle('system:getAIConfigs', () => ctx.configHelper.getAllAIModelConfigs());
 
   // ===== 邀请代理 / 面经图片保存分享 =====

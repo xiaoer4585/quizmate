@@ -114,6 +114,9 @@ const api = {
     openAdmin: () => invoke('system:openAdmin'),
     getAIConfigs: () => invoke('system:getAIConfigs'),
     getAppVersion: () => invoke('system:version'),
+    getPermissions: () => invoke('system:getPermissions'),
+    requestMicrophone: () => invoke('system:requestMicrophone'),
+    openPermissionSettings: (kind: 'screen' | 'microphone') => invoke('system:openPermissionSettings', kind),
   },
   // 邀请代理
   invite: {

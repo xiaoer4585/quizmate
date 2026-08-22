@@ -152,8 +152,10 @@ export class ShortcutsHelper {
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!accelerator) continue
       if (action === 'quit') continue
-      try {
-        const ret = globalShortcut.register(accelerator, () => {
+      const candidates = this.getRegistrationAccelerators(action as ShortcutAction, accelerator)
+      let registeredAny = false
+      for (const candidate of candidates) try {
+        const ret = globalShortcut.register(candidate, () => {
           if (this.testMode && this.testCallback) {
             this.testCallback(accelerator)
             return
@@ -163,14 +165,15 @@ export class ShortcutsHelper {
           }
         })
         if (ret) {
-          this.registered.add(accelerator)
+          registeredAny = true
+          this.registered.add(candidate)
         } else {
-          console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
-          this.registrationErrorHandler?.({ action, accelerator, mode: this.activeMode })
+          console.warn(`[ShortcutsHelper] Failed to register: ${candidate} for ${action}`)
         }
       } catch (e) {
-        console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
+        console.warn(`[ShortcutsHelper] Error registering ${candidate}:`, e)
       }
+      if (!registeredAny) this.registrationErrorHandler?.({ action, accelerator, mode: this.activeMode })
     }
   }
 
@@ -183,8 +186,10 @@ export class ShortcutsHelper {
       if (action === 'quit') continue
       if (mode === 'voice' && !voiceModeActions.has(action)) continue
       if (mode === 'interview' && !interviewShortcutActions.includes(action as ShortcutAction) && !['reset', 'toggle_visibility', 'replay'].includes(action) && !interviewWindowActions.has(action)) continue
-      try {
-        const ret = globalShortcut.register(accelerator, () => {
+      const candidates = this.getRegistrationAccelerators(action as ShortcutAction, accelerator)
+      let registeredAny = false
+      for (const candidate of candidates) try {
+        const ret = globalShortcut.register(candidate, () => {
           if (this.testMode && this.testCallback) {
             this.testCallback(accelerator)
             return
@@ -194,15 +199,25 @@ export class ShortcutsHelper {
           }
         })
         if (ret) {
-          this.registered.add(accelerator)
+          registeredAny = true
+          this.registered.add(candidate)
         } else {
-          console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
-          this.registrationErrorHandler?.({ action, accelerator, mode })
+          console.warn(`[ShortcutsHelper] Failed to register: ${candidate} for ${action}`)
         }
       } catch (e) {
-        console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
+        console.warn(`[ShortcutsHelper] Error registering ${candidate}:`, e)
       }
+      if (!registeredAny) this.registrationErrorHandler?.({ action, accelerator, mode })
     }
+  }
+
+  private getRegistrationAccelerators(action: ShortcutAction, accelerator: string): string[] {
+    const normalized = accelerator.toLowerCase()
+    // Some macOS keyboard layouts reserve Option+Q/E for text input. Keep the
+    // configured shortcut, but register an Option+Shift fallback as well.
+    if (action === 'screenshot' && normalized === 'alt+q') return [accelerator, 'Alt+Shift+Q']
+    if (action === 'search' && normalized === 'alt+e') return [accelerator, 'Alt+Shift+E']
+    return [accelerator]
   }
 
   public refreshCurrentRegistration(): void {

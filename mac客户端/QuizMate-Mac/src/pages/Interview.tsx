@@ -2,7 +2,7 @@
 // 功能：配置面试上下文、上传简历、启动悬浮窗、查看历史 QA 记录
 // 语音识别通过主进程连接后台配置的实时语音模型
 import { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Loader2, ShieldCheck, Trash2, Sparkles, FileText, CheckCircle2, Circle, Monitor, Share2, History, Send, Keyboard, Save, RefreshCw, Edit3, Plus, HelpCircle, Bold, Italic, List, ListOrdered } from 'lucide-react';
+import { Mic, MicOff, Loader2, ShieldCheck, ShieldAlert, Trash2, Sparkles, FileText, CheckCircle2, Circle, Monitor, Share2, History, Send, Keyboard, Save, RefreshCw, Edit3, Plus, HelpCircle, Bold, Italic, List, ListOrdered } from 'lucide-react';
 import { api, useProfile } from '../lib/ipc';
 import ShareInterviewModal from '../components/ShareInterviewModal';
 import ShortcutSettings from '../components/ShortcutSettings';
@@ -95,12 +95,15 @@ export default function Interview() {
   const [switchingMode, setSwitchingMode] = useState(false);
   const [contextStatus, setContextStatus] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
+  const systemApi = (window as any).api?.system;
+  const [permissions, setPermissions] = useState<{ screen: string; microphone: string }>({ screen: 'unknown', microphone: 'unknown' });
   const jobDescriptionRef = useRef<HTMLDivElement | null>(null);
 
   const guideAccount = profile?.account?.email || profile?.email || 'current';
   const guideStorageKey = `quizmate.feature-guide.interview.${guideAccount}`;
 
   useEffect(() => {
+    systemApi?.getPermissions?.().then((p: any) => setPermissions({ screen: String(p?.screen || 'unknown'), microphone: String(p?.microphone || 'unknown') })).catch(() => {});
     if (!profile) return;
     const forced = window.location.hash.includes('guide=1');
     if (forced || window.localStorage.getItem(guideStorageKey) !== 'done') setGuideOpen(true);
@@ -114,6 +117,12 @@ export default function Interview() {
     window.addEventListener('quizmate:open-feature-guide', openGuide);
     return () => window.removeEventListener('quizmate:open-feature-guide', openGuide);
   }, []);
+
+  const openInterviewPermission = async (kind: 'screen' | 'microphone') => {
+    if (kind === 'microphone') await systemApi?.requestMicrophone?.().catch(() => {});
+    await systemApi?.openPermissionSettings?.(kind);
+    setTimeout(() => systemApi?.getPermissions?.().then((p: any) => setPermissions({ screen: String(p?.screen || 'unknown'), microphone: String(p?.microphone || 'unknown') })).catch(() => {}), 1000);
+  };
 
   const finishGuide = () => {
     window.localStorage.setItem(guideStorageKey, 'done');
@@ -360,6 +369,16 @@ export default function Interview() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
+      {(permissions.microphone !== 'granted' || permissions.screen !== 'granted') && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <div className="flex items-center gap-2 font-semibold"><ShieldAlert size={18} className="text-amber-400" /> 面试助手需要音频授权</div>
+          <div className="mt-1 text-xs text-amber-100/80">演示模式会识别麦克风和扬声器；正式面试模式只把扬声器作为面试官问题输入。系统音频采集还需要屏幕录制权限。</div>
+          <div className="mt-2 flex gap-2">
+            {permissions.microphone !== 'granted' && <button onClick={() => openInterviewPermission('microphone')} className="btn-outline text-xs border-amber-500/50 text-amber-200">授权麦克风</button>}
+            {permissions.screen !== 'granted' && <button onClick={() => openInterviewPermission('screen')} className="btn-outline text-xs border-amber-500/50 text-amber-200">授权扬声器/系统音频</button>}
+          </div>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
@@ -410,6 +429,11 @@ export default function Interview() {
               {switchingMode && context.audioMode === 'formal' ? <RefreshCw size={12} className="inline animate-spin mr-1" /> : null}正式面试模式
             </button>
           </div>
+        </div>
+        <div className={`rounded-md px-3 py-2 text-xs font-medium ${context.audioMode === 'formal' ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border border-amber-500/40 bg-amber-500/10 text-amber-200'}`}>
+          {context.audioMode === 'formal'
+            ? '正式面试模式：只识别扬声器/系统音频，作为面试官问题输入；忽略麦克风中的面试者回答。'
+            : '演示模式：同时识别麦克风和扬声器/系统音频，两路声音都会作为问题识别输入。'}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
