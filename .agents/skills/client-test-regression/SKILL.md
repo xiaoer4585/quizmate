@@ -19,6 +19,12 @@ Use the following domain policy for every website, client-download, installer-up
 - Before publishing, assert the target bucket/domain list explicitly. A website/client release must target `quizmate-cn` and the `quizmate.cn` public URLs; never include `quizmate-vip` merely because an older deployment script still lists it.
 - For legacy-domain changes, limit the operation to redirect verification and rollback checks. Never overwrite legacy download/update objects accidentally. Record any skipped legacy objects in the release evidence.
 
+### Release version naming
+
+- Use the calendar date as the base version: `YYYY.M.DD` (for example, `2026.8.22`).
+- When multiple releases are published on the same calendar day, append an incrementing suffix: `YYYY.M.DD.1`, `YYYY.M.DD.2` (zero-padded forms such as `.01` are accepted only when an existing platform convention requires them).
+- The suffix must be reflected consistently in the public download-page text, installer filename/object key, update manifest, release evidence, and rollback record. Never point a page at an object that has not been uploaded and HTTP-verified.
+
 ## Canonical test plan
 
 Locate and read `考试插件/多个版本的客户端的测试文档.md` completely before changing code. Also read the active requirement/design/task documents under `考试插件/specs/` when the change belongs to a spec.
