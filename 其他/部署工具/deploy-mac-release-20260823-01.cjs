@@ -10,8 +10,8 @@ const OSS = (() => {
   }
 })();
 
-const VERSION = '2026.8.23';
-const CHANGE_ID = 'CHG-20260823-01';
+const VERSION = '2026.8.23.2';
+const CHANGE_ID = 'CHG-20260823-02';
 const ROOT = path.resolve(__dirname, '../..');
 const SITE = path.join(ROOT, '官网模块/正式官网-quizmate.vip');
 const MANIFEST_PATH = path.join(SITE, 'mac/latest-mac.yml');
