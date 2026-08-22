@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { api, useProfile, useUpdateStatus } from '../lib/ipc';
 import ReleaseNotice from './ReleaseNotice';
+import RechargeModal from './RechargeModal';
 
 interface NavItem { to: string; label: string; icon: ReactNode; badge?: string; }
 
@@ -26,16 +27,19 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   const [version, setVersion] = useState('');
   const updateStatus = useUpdateStatus();
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
+  const [rechargeOpen, setRechargeOpen] = useState(false);
 
   useEffect(() => { api.system.getAppVersion().then(setVersion).catch(() => {}); }, []);
 
-  // 运营入口：未充值邀请用户或积分不足时统一打开充值页。
+  // 运营入口：未充值邀请用户或积分不足时统一打开客户端充值弹窗。
   useEffect(() => {
-    const openRecharge = () => { void api.system.openRecharge(); };
+    const openRecharge = () => setRechargeOpen(true);
     window.addEventListener('quizmate:open-recharge', openRecharge);
+    const offRecharge = api.system.onShowRechargeModal?.(openRecharge);
     const offCredits = (window as any).electronAPI?.on?.('out-of-credits', openRecharge);
     return () => {
       window.removeEventListener('quizmate:open-recharge', openRecharge);
+      offRecharge?.();
       offCredits?.();
     };
   }, []);
@@ -45,10 +49,10 @@ export default function MainLayout({ children }: { children: ReactNode }) {
 
   // ===== 版本更新提示 =====
   const updateKey = updateStatus ? `${updateStatus.status}:${updateStatus.version ?? updateStatus.message ?? ''}` : null;
-  const canDismissUpdate = updateStatus?.status === 'available' || updateStatus?.status === 'error';
+  const canDismissUpdate = updateStatus?.status === 'available';
   const updateDismissed = canDismissUpdate && updateKey === dismissedKey;
   const showUpdateBanner = !!updateStatus && !updateDismissed &&
-    ['available', 'downloading', 'downloaded', 'error'].includes(updateStatus.status);
+    ['available', 'downloading', 'downloaded'].includes(updateStatus.status);
   const handleUpdateClick = () => api.update.download();
   const handleRetryUpdate = () => api.update.check();
   const handleDismissUpdate = () => setDismissedKey(updateKey);
@@ -190,7 +194,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
             <button onClick={openGuide} className="btn-outline text-xs flex items-center gap-1.5" title="重新打开操作指引">
               <HelpCircle size={14} /> 操作指引
             </button>
-            <button onClick={() => api.system.openRecharge()} className="btn-outline text-xs" title="充值积分">
+            <button onClick={() => setRechargeOpen(true)} className="btn-outline text-xs" title="充值积分">
               <Wallet size={14} /> <span className="text-amber-400 font-semibold">{credits}</span> 积分
             </button>
             <div className="text-xs text-slate-500 ml-2">{acct?.email || '未登录'}</div>
@@ -201,6 +205,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         <main className="flex-1 overflow-auto p-5">{children}</main>
       </div>
       <ReleaseNotice appVersion={version} />
+      <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
     </div>
   );
 }

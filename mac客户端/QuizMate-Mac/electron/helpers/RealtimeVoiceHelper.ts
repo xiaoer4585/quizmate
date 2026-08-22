@@ -521,8 +521,12 @@ function scheduleSocketReconnect() {
     };
     reconnectWs.onclose = () => {
       if (ws !== reconnectWs) return;
-      isListening = false;
-      if (keepSession) scheduleSocketReconnect();
+      if (keepSession) {
+        isListening = true;
+        scheduleSocketReconnect();
+      } else {
+        isListening = false;
+      }
     };
   }, delay);
 }
@@ -696,8 +700,12 @@ async function startListening(audioMode = 'demo') {
     initialWs.onclose = (e) => {
       if (ws !== initialWs) return;
       console.log('[ASR] WebSocket closed:', e.code, e.reason);
-      if (keepSession) scheduleSocketReconnect();
-      isListening = false;
+      if (keepSession) {
+        isListening = true;
+        scheduleSocketReconnect();
+      } else {
+        isListening = false;
+      }
     };
 
   } catch (e) {

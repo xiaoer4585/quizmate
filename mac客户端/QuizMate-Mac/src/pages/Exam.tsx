@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Play, Square, RefreshCw, ExternalLink, Info, Eye, EyeOff,
-  Volume2, Loader2,
+  Volume2, Loader2, ShieldAlert,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import {
@@ -20,6 +20,7 @@ type ProcessingMode = 'overlay' | 'voice';
 export default function Exam() {
   // 通过 preload 暴露的 electronAPI 兼容层调用后端（与原考试插件接口一致）
   const api = (window as any).electronAPI;
+  const systemApi = (window as any).api?.system;
   const { theme, setTheme } = useTheme();
 
   // 用户/积分/版本
@@ -40,6 +41,27 @@ export default function Exam() {
   const [shortcutBindings, setShortcutBindings] = useState<Record<string, string>>(defaultShortcutBindings);
   const [ttsTesting, setTtsTesting] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [permissions, setPermissions] = useState<{ screen: string }>({ screen: 'unknown' });
+
+  const refreshPermissions = useCallback(async () => {
+    try {
+      const next = await systemApi?.getPermissions?.();
+      const normalized = { screen: String(next?.screen || 'unknown') };
+      setPermissions(normalized);
+      return normalized;
+    } catch {
+      return permissions;
+    }
+  }, [permissions, systemApi]);
+
+  const requestScreenPermission = useCallback(async () => {
+    await systemApi?.requestScreen?.().catch(() => false);
+    const latest = await refreshPermissions();
+    if (latest.screen !== 'granted') {
+      await systemApi?.openPermissionSettings?.('screen').catch(() => {});
+      window.setTimeout(() => { void refreshPermissions(); }, 1000);
+    }
+  }, [refreshPermissions, systemApi]);
 
   // 加载初始配置数据
   const loadData = useCallback(async () => {
@@ -70,6 +92,7 @@ export default function Exam() {
 
   useEffect(() => {
     loadData();
+    refreshPermissions();
     // 监听后端事件
     const unsubs: Array<(() => void) | undefined> = [];
     // 积分变动
@@ -88,6 +111,12 @@ export default function Exam() {
       unsubs.forEach((u) => u && u());
     };
   }, [api, loadData]);
+
+  useEffect(() => {
+    const onFocus = () => { void refreshPermissions(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  }, [refreshPermissions]);
 
   const guideAccount = userInfo?.email || userInfo?.username || 'current';
   const guideStorageKey = `quizmate.feature-guide.exam.${guideAccount}`;
@@ -113,6 +142,11 @@ export default function Exam() {
 
   // 启动笔试悬浮窗
   const handleStartExam = async () => {
+    const latestPermissions = await refreshPermissions();
+    if (latestPermissions.screen !== 'granted') {
+      await requestScreenPermission();
+      return;
+    }
     // 语音播报模式无需悬浮框，直接标记为已启动
     if (processingMode === 'voice') {
       setOverlayActive(true);
@@ -171,7 +205,7 @@ export default function Exam() {
   // 检测更新
   const handleCheckUpdate = async () => {
     const result = await api.app.checkUpdate();
-    setUpdateInfo(result);
+    setUpdateInfo(result?.hasUpdate ? result : null);
   };
 
   // 打开官网
@@ -212,14 +246,24 @@ export default function Exam() {
             </button>
           </div>
         </div>
-        {updateInfo && (
-          <div className={`mt-3 p-2 rounded text-xs ${updateInfo.hasUpdate ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-800 text-slate-400'}`}>
-            {updateInfo.hasUpdate
-              ? `发现新版本 ${updateInfo.latest}（当前 ${updateInfo.current}）`
-              : `已是最新版本 ${updateInfo.current}`}
+        {updateInfo?.hasUpdate && (
+          <div className="mt-3 p-2 rounded text-xs bg-amber-500/10 text-amber-400">
+            发现新版本 {updateInfo.latest}（当前 {updateInfo.current}）
           </div>
         )}
       </div>
+
+      {permissions.screen !== 'granted' && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <div className="flex items-center gap-2 font-semibold">
+            <ShieldAlert size={18} className="text-amber-400" /> 笔试助手需要屏幕录制权限
+          </div>
+          <div className="mt-1 text-xs text-amber-100/80">授权后才能截图识别题目。已授权时，这段提示会自动消失。</div>
+          <button onClick={requestScreenPermission} className="mt-2 btn-outline text-xs border-amber-500/50 text-amber-200">
+            授权屏幕录制
+          </button>
+        </div>
+      )}
 
       {/* 工作模式选择 */}
       <div className="card" data-guide-target="exam-mode">

@@ -1,5 +1,5 @@
 // IPC 路由 - 注册所有渲染层调用的 handler，分发到各 Helper
-import { ipcMain, shell, app, BrowserWindow, dialog, session, clipboard, systemPreferences } from 'electron';
+import { ipcMain, shell, app, BrowserWindow, dialog, session, clipboard, systemPreferences, desktopCapturer } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { ConfigHelper } from './ConfigHelper';
@@ -10,6 +10,7 @@ import { ShortcutsHelper } from './ShortcutsHelper';
 import { TtsHelper } from './helpers/TtsHelper';
 import { InterviewHelper } from './helpers/InterviewHelper';
 import { UpdateChecker } from './UpdateChecker';
+import { createCreditOrder, queryCreditOrder } from './PaymentService';
 import type { ProcessingMode } from '../shared/shortcuts';
 import { v4 as uuid } from 'uuid';
 
@@ -224,7 +225,23 @@ export function registerIpcHandlers(
     }
     return false;
   });
-  ipcMain.handle('system:openRecharge', () => controls.openEmbeddedWindow('recharge'));
+  ipcMain.handle('system:openRecharge', () => {
+    getMainWindow()?.webContents.send('system:show-recharge-modal');
+    return true;
+  });
+
+  ipcMain.handle('payment:createOrder', async (_e, opts: { method: 'alipay' | 'wechat'; packageId: string }) => {
+    const cfg = ctx.configHelper.getAppConfig();
+    const token = ctx.configHelper.getAuthToken();
+    if (!token) throw new Error('请先登录积分账户。');
+    return createCreditOrder(cfg.apiBaseUrl, token, opts.packageId, opts.method);
+  });
+  ipcMain.handle('payment:queryOrder', async (_e, outTradeNo: string) => {
+    const cfg = ctx.configHelper.getAppConfig();
+    const token = ctx.configHelper.getAuthToken();
+    if (!token) throw new Error('请先登录积分账户。');
+    return queryCreditOrder(cfg.apiBaseUrl, token, outTradeNo);
+  });
 
   ipcMain.handle('system:openWeb', () => shell.openExternal(ctx.configHelper.getAppConfig().webBaseUrl));
   ipcMain.handle('system:openAdmin', () => shell.openExternal(ctx.configHelper.getAppConfig().adminWebUrl || 'https://www.quizmate.vip/admin-web/index.html'));
@@ -236,6 +253,15 @@ export function registerIpcHandlers(
   ipcMain.handle('system:requestMicrophone', async () => {
     if (process.platform !== 'darwin') return true;
     return systemPreferences.askForMediaAccess('microphone');
+  });
+  ipcMain.handle('system:requestScreen', async () => {
+    if (process.platform !== 'darwin') return true;
+    try {
+      await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } });
+      return systemPreferences.getMediaAccessStatus('screen') === 'granted';
+    } catch {
+      return false;
+    }
   });
   ipcMain.handle('system:openPermissionSettings', (_e, kind: 'screen' | 'microphone') => {
     const pane = kind === 'screen' ? 'Privacy_ScreenCapture' : 'Privacy_Microphone';

@@ -116,7 +116,14 @@ const api = {
     getAppVersion: () => invoke('system:version'),
     getPermissions: () => invoke('system:getPermissions'),
     requestMicrophone: () => invoke('system:requestMicrophone'),
+    requestScreen: () => invoke('system:requestScreen'),
     openPermissionSettings: (kind: 'screen' | 'microphone') => invoke('system:openPermissionSettings', kind),
+    onShowRechargeModal: (cb: () => void) => on('system:show-recharge-modal', cb),
+  },
+  payment: {
+    createOrder: (opts: { method: 'alipay' | 'wechat'; packageId: string }) =>
+      invoke('payment:createOrder', opts),
+    queryOrder: (outTradeNo: string) => invoke('payment:queryOrder', outTradeNo),
   },
   // 邀请代理
   invite: {

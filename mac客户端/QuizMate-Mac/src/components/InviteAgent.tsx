@@ -1,7 +1,7 @@
 // 邀请代理模块 - 从原考试助手迁移
 // 邀请新用户注册双方各得积分，被邀请人充值可获提成
 import { useEffect, useState } from 'react';
-import { Users, Copy, Check, Image as ImageIcon, Download, Share2, Loader2, Gift, Trophy } from 'lucide-react';
+import { Users, Copy, Check, Image as ImageIcon, Download, Share2, Loader2, Gift, Trophy, Sparkles } from 'lucide-react';
 import QRCode from 'qrcode';
 import { api } from '../lib/ipc';
 
@@ -25,31 +25,41 @@ export default function InviteAgent() {
     return () => { cancelled = true; };
   }, []);
 
+  const loadInviteData = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const result = await api.invite.generateCode();
+      if (result.success) {
+        setInviteData({ inviteCode: result.inviteCode, inviteLink: result.inviteLink, shareText: result.shareText });
+        const current = await api.invite.getOverview().catch(() => null);
+        if (current?.success) {
+          setOverview(current.overview);
+          if (typeof current.overview?.hasRecharged === 'boolean') setHasRecharged(current.overview.hasRecharged);
+        }
+      } else {
+        setError(result.error || '获取邀请码失败');
+      }
+    } catch (e: any) {
+      setError(e instanceof Error ? e.message : '获取邀请码失败');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    const openInvitePanel = () => {
+      setPanelOpen(true);
+      void loadInviteData();
+    };
+    window.addEventListener('quizmate:open-invite-panel', openInvitePanel);
+    return () => window.removeEventListener('quizmate:open-invite-panel', openInvitePanel);
+  }, []);
+
   const handleInvite = async () => {
     if (!panelOpen) {
-      if (hasRecharged === false) {
-        window.dispatchEvent(new CustomEvent('quizmate:open-recharge'));
-        return;
-      }
       setPanelOpen(true);
-      if (!inviteData) {
-        setLoading(true);
-        setError('');
-        try {
-          const result = await api.invite.generateCode();
-          if (result.success) {
-            setInviteData({ inviteCode: result.inviteCode, inviteLink: result.inviteLink, shareText: result.shareText });
-            const current = await api.invite.getOverview().catch(() => null);
-            if (current?.success) setOverview(current.overview);
-          } else {
-            setError(result.error || '获取邀请码失败');
-          }
-        } catch (e: any) {
-          setError(e instanceof Error ? e.message : '获取邀请码失败');
-        } finally {
-          setLoading(false);
-        }
-      }
+      if (!inviteData) await loadInviteData();
     } else {
       setPanelOpen(false);
     }
@@ -214,12 +224,37 @@ export default function InviteAgent() {
           </p>
         </div>
         <button onClick={handleInvite} className="btn bg-emerald-500 hover:bg-emerald-600 text-white text-xs">
-          {panelOpen ? '收起' : '邀请好友'}
+          {panelOpen ? '收起' : '立即邀请'}
         </button>
       </div>
 
       {panelOpen && (
         <div className="space-y-3 mt-4">
+          {hasRecharged === false && (
+            <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 p-4">
+              <div className="flex items-start gap-2">
+                <Sparkles size={16} className="text-amber-300 shrink-0 mt-0.5" />
+                <div className="text-xs text-amber-200/90 leading-relaxed flex-1">
+                  <p className="font-semibold text-amber-300 mb-1">先充值即可解锁邀请奖励</p>
+                  <p>邀请代理入口仅对已充值用户开放。完成任意一笔充值后立即解锁：</p>
+                  <ul className="list-disc pl-5 mt-1 space-y-0.5 text-amber-100/80">
+                    <li>双方各得 20 积分（每邀请一位）</li>
+                    <li>被邀请人充值，你拿 20% 提成</li>
+                    <li>邀满 10 位已充值好友，赠 笔面试上岸包</li>
+                    <li>邀满 20 位已充值好友，再赠 无忧包</li>
+                  </ul>
+                  <div className="mt-2.5 flex gap-2 flex-wrap">
+                    <button onClick={loadInviteData} disabled={loading} className="btn bg-emerald-500 hover:bg-emerald-600 text-white text-xs">
+                      <Users size={12} /> 立即邀请
+                    </button>
+                    <button onClick={() => window.dispatchEvent(new CustomEvent('quizmate:open-recharge'))} className="btn bg-amber-500 hover:bg-amber-600 text-slate-900 text-xs">
+                      立即充值
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
           {loading && (
             <div className="p-3 rounded-lg text-sm text-slate-400 bg-slate-900/50 flex items-center gap-2">
               <Loader2 size={14} className="animate-spin" /> 正在获取邀请码...
@@ -230,6 +265,26 @@ export default function InviteAgent() {
           )}
           {inviteData && (
             <>
+              {overview?.stats && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                    <div className="text-xs text-slate-500">累计邀请</div>
+                    <div className="text-lg font-semibold text-slate-100">{overview.stats.totalInvited ?? overview.stats.registered ?? 0}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                    <div className="text-xs text-slate-500">已注册</div>
+                    <div className="text-lg font-semibold text-slate-100">{overview.stats.registered ?? 0}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                    <div className="text-xs text-slate-500">已充值好友</div>
+                    <div className="text-lg font-semibold text-amber-300">{overview.stats.recharged ?? overview?.tieredBonus?.rechargedCount ?? 0}</div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-slate-900/50 border border-slate-800">
+                    <div className="text-xs text-slate-500">已发奖励</div>
+                    <div className="text-lg font-semibold text-emerald-300">{overview.stats.rewarded ?? 0}</div>
+                  </div>
+                </div>
+              )}
               {overview?.tieredBonus && (
                 <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
                   <div className="flex items-center gap-1.5 font-medium"><Trophy size={13} /> 邀请阶梯奖励</div>

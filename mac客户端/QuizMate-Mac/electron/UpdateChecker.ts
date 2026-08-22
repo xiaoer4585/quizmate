@@ -84,12 +84,8 @@ export class UpdateChecker {
     });
     autoUpdater.on('error', (err: Error) => {
       const msg = err?.message || String(err);
-      // 网络类错误静默忽略，不打扰用户
-      if (this.isNetworkError(msg)) {
-        this.set({ status: 'idle' });
-        return;
-      }
-      this.set({ status: 'error', message: msg });
+      console.warn('[UpdateChecker] check failed silently:', msg);
+      this.set({ status: 'idle', message: undefined });
     });
   }
 
@@ -114,11 +110,8 @@ export class UpdateChecker {
       await autoUpdater.checkForUpdates();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      if (this.isNetworkError(msg)) {
-        this.set({ status: 'idle' });
-      } else {
-        this.set({ status: 'error', message: msg });
-      }
+      console.warn('[UpdateChecker] checkForUpdates failed silently:', msg);
+      this.set({ status: 'idle', message: undefined });
     }
     return this.current;
   }

@@ -102,12 +102,29 @@ export default function Interview() {
   const guideAccount = profile?.account?.email || profile?.email || 'current';
   const guideStorageKey = `quizmate.feature-guide.interview.${guideAccount}`;
 
+  const refreshPermissions = async () => {
+    try {
+      const p = await systemApi?.getPermissions?.();
+      const normalized = { screen: String(p?.screen || 'unknown'), microphone: String(p?.microphone || 'unknown') };
+      setPermissions(normalized);
+      return normalized;
+    } catch {
+      return permissions;
+    }
+  };
+
   useEffect(() => {
-    systemApi?.getPermissions?.().then((p: any) => setPermissions({ screen: String(p?.screen || 'unknown'), microphone: String(p?.microphone || 'unknown') })).catch(() => {});
+    refreshPermissions();
     if (!profile) return;
     const forced = window.location.hash.includes('guide=1');
     if (forced || window.localStorage.getItem(guideStorageKey) !== 'done') setGuideOpen(true);
   }, [guideStorageKey, profile]);
+
+  useEffect(() => {
+    const onFocus = () => { void refreshPermissions(); };
+    window.addEventListener('focus', onFocus);
+    return () => window.removeEventListener('focus', onFocus);
+  });
 
   useEffect(() => {
     const openGuide = (event: Event) => {
@@ -120,8 +137,9 @@ export default function Interview() {
 
   const openInterviewPermission = async (kind: 'screen' | 'microphone') => {
     if (kind === 'microphone') await systemApi?.requestMicrophone?.().catch(() => {});
+    if (kind === 'screen') await systemApi?.requestScreen?.().catch(() => false);
     await systemApi?.openPermissionSettings?.(kind);
-    setTimeout(() => systemApi?.getPermissions?.().then((p: any) => setPermissions({ screen: String(p?.screen || 'unknown'), microphone: String(p?.microphone || 'unknown') })).catch(() => {}), 1000);
+    setTimeout(() => { void refreshPermissions(); }, 1000);
   };
 
   const finishGuide = () => {
@@ -201,6 +219,17 @@ export default function Interview() {
   const toggleInterviewSession = async () => {
     setError('');
     try {
+      if (!listening) {
+        const latest = await refreshPermissions();
+        if (latest.microphone !== 'granted') {
+          await openInterviewPermission('microphone');
+          return;
+        }
+        if (latest.screen !== 'granted') {
+          await openInterviewPermission('screen');
+          return;
+        }
+      }
       const result = await api.interview.toggleSession(context);
       setListening(!!result?.listening);
       setOverlayActive(!!result?.overlay);
@@ -430,7 +459,7 @@ export default function Interview() {
             </button>
           </div>
         </div>
-        <div className={`rounded-md px-3 py-2 text-xs font-medium ${context.audioMode === 'formal' ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border border-amber-500/40 bg-amber-500/10 text-amber-200'}`}>
+        <div className={`mb-4 rounded-md px-3 py-2 text-xs font-medium ${context.audioMode === 'formal' ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border border-amber-500/40 bg-amber-500/10 text-amber-200'}`}>
           {context.audioMode === 'formal'
             ? '正式面试模式：只识别扬声器/系统音频，作为面试官问题输入；忽略麦克风中的面试者回答。'
             : '演示模式：同时识别麦克风和扬声器/系统音频，两路声音都会作为问题识别输入。'}

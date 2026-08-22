@@ -256,7 +256,7 @@ export default function OverlayPage() {
     : status === 'completed'
       ? '答案已生成'
       : status === 'error'
-        ? '本次处理失败'
+        ? (errorMessage || '本次处理失败')
         : mainShots.length > 0
           ? '截图已就绪'
           : '等待截图'
@@ -347,7 +347,7 @@ export default function OverlayPage() {
 
         <footer className="h-7 flex items-center justify-between px-3 border-t border-white/10 text-[9px] opacity-60 shrink-0">
           <span>题目截图 {mainShots.length} · 补充截图 {extraShots.length}</span>
-          <span>{status === 'processing' ? `生成进度 ${Math.round(progress)}%` : status === 'completed' ? '本次解题已完成' : status === 'error' ? '可重新截图后重试' : '快捷键全局可用'}</span>
+          <span>{status === 'processing' ? `生成进度 ${Math.round(progress)}%` : status === 'completed' ? '本次解题已完成' : status === 'error' ? '截图已保留，可直接重试' : '快捷键全局可用'}</span>
         </footer>
       </div>
     </div>

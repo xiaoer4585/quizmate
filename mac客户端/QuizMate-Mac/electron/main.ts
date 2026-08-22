@@ -503,6 +503,11 @@ function closeWindow(which: 'main' | 'overlay') {
   win?.close();
 }
 
+function requestExplicitQuit(): void {
+  state.quitting = true;
+  app.quit();
+}
+
 // ===== 启动/关闭考试客户端（悬浮框生命周期管理，完全沿用原考试插件） =====
 async function launchExamClient(): Promise<{ success: boolean; error?: string }> {
   if (state.overlayLocked) {
@@ -564,8 +569,9 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       }
       break;
     case 'quit':
-      state.quitting = true;
-      app.quit();
+      // Disable global quit shortcuts during exam/interview sessions. Users can
+      // still quit intentionally from the tray menu, but accidental Command+Q /
+      // Command+Shift+Q should never end an active exam.
       break;
     case 'reset':
       if (interviewActive) {
@@ -719,16 +725,17 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
     return;
   }
 
-  // 搜题后清空历史截图队列
-  screenshotHelper.clearAll();
-  state.overlayWindow?.webContents.send('screenshots-cleared');
-
   // 进度通知 + 托盘忙碌图标
   notifyVoiceProgress('正在调用 AI 分析...');
   setTrayBusy(true);
 
   // 直接调用 analyze 获取完整结果
   const result = await processingHelper.analyze({ images: [b64], mode });
+
+  if (result.success) {
+    screenshotHelper.clearAll();
+    state.overlayWindow?.webContents.send('screenshots-cleared');
+  }
 
   if (procMode === 'voice') {
     // voice 模式：不依赖悬浮框事件，改用 TTS 播报
@@ -1079,10 +1086,7 @@ function createTrayManager(): void {
         authManager.getProfile().then(() => updateTrayState());
       });
     },
-    quit: () => {
-      state.quitting = true;
-      app.quit();
-    },
+    quit: requestExplicitQuit,
   }, iconPath);
   trayManager.create();
 }
@@ -1256,7 +1260,15 @@ if (!gotLock) {
     // 保持后台运行（托盘），不退出应用
   });
 
-  app.on('before-quit', () => {
+  app.on('before-quit', (event) => {
+    if (!state.quitting) {
+      event.preventDefault();
+      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
+        state.mainWindow.show();
+        state.mainWindow.focus();
+      }
+      return;
+    }
     state.quitting = true;
     shortcutsHelper?.unregisterAll();
     processingHelper?.cancelStreaming();
