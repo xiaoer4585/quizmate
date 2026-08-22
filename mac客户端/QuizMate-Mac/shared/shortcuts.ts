@@ -43,14 +43,14 @@ export interface ShortcutBinding {
 
 export const defaultShortcutBindings: Record<ShortcutAction, string> = {
   // 可配置
-  // Command+Q is reserved by macOS for Quit. Keep the familiar Q/E keys while
-  // requiring Option as a safety modifier so exam input cannot close the app.
-  screenshot: 'Command+Alt+Q',
-  search: 'Command+Alt+E',
-  toggle_visibility: 'Command+B',
-  copy_content: 'Command+Shift+C',
-  replay: 'Command+R',
-  interview_start: 'Command+Shift+I',
+  // Use Option-only shortcuts on macOS. Command combinations can be claimed
+  // by the system/application menu (notably Command+Q/W) before Electron.
+  screenshot: 'Alt+Q',
+  search: 'Alt+E',
+  toggle_visibility: 'Alt+B',
+  copy_content: 'Alt+C',
+  replay: 'Alt+R',
+  interview_start: 'Alt+I',
   interview_prev_question: 'Alt+Up',
   interview_next_question: 'Alt+Down',
   // 系统固定

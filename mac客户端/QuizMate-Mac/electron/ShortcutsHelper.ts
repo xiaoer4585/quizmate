@@ -68,10 +68,18 @@ export class ShortcutsHelper {
       // Alt+Q) for screenshots.  Command+Q is reserved by macOS and
       // Command+W closes the current window, so migrate every legacy value
       // before registering global shortcuts on upgrade.
-      const replacement = action === 'screenshot' && ['command+q', 'command+w', 'alt+q'].includes(normalized.toLowerCase())
+      const replacement = action === 'screenshot' && ['command+q', 'command+w', 'command+alt+q', 'alt+q'].includes(normalized.toLowerCase())
         ? defaultShortcutBindings.screenshot
-        : action === 'search' && ['command+e', 'alt+e'].includes(normalized.toLowerCase())
+        : action === 'search' && ['command+e', 'command+alt+e', 'alt+e'].includes(normalized.toLowerCase())
           ? defaultShortcutBindings.search
+          : action === 'toggle_visibility' && ['command+b', 'command+alt+b'].includes(normalized.toLowerCase())
+            ? defaultShortcutBindings.toggle_visibility
+            : action === 'copy_content' && ['command+c', 'command+shift+c', 'command+alt+c'].includes(normalized.toLowerCase())
+              ? defaultShortcutBindings.copy_content
+              : action === 'replay' && ['command+r', 'command+shift+r', 'command+alt+r'].includes(normalized.toLowerCase())
+                ? defaultShortcutBindings.replay
+                : action === 'interview_start' && ['command+i', 'command+shift+i', 'command+alt+i'].includes(normalized.toLowerCase())
+                  ? defaultShortcutBindings.interview_start
           : normalized
       this.bindings[action] = replacement
       migrated[action] = replacement
