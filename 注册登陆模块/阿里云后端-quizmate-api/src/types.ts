@@ -54,6 +54,7 @@ export interface AnalysisItem {
   summary: string;
   answer: string;
   explanation: string;
+  code?: string;
 }
 
 export interface AnalysisModelResult {

@@ -238,6 +238,8 @@
         width: min(440px, calc(100vw - 32px)); padding: 22px;
         border-radius: 12px; background: #fff; box-shadow: 0 24px 60px rgba(15, 23, 42, .25);
       }
+      .modal-card.wide { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+      .modal-card .code-output { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12px; line-height: 1.55; }
       .modal-card h3 { margin: 0 0 6px; font-size: 18px; }
       .modal-card .modal-meta { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
       .modal-card .modal-meta strong { color: var(--ink); }
@@ -510,7 +512,7 @@
         </div>
 
         <section class="view" data-view="accounts">
-          <div class="panel toolbar"><div><h2>积分用户</h2><p>查看邮箱账户、余额、累计充值和消耗。</p></div><button type="button" data-refresh="accounts">刷新用户</button></div>
+          <div class="panel toolbar"><div><h2>积分用户</h2><p>查看邮箱账户、余额、累计充值和消耗。支持批量调整积分：每行一个邮箱，提交后自动跳过不存在的账户和余额不足的账户。</p></div><div class="row-actions"><button class="secondary" type="button" id="openBatchCreditModalBtn">批量调整积分</button><button type="button" data-refresh="accounts">刷新用户</button></div></div>
           <div class="table-wrap"><table><thead data-head="accounts"></thead><tbody data-body="accounts"></tbody></table></div>
           <div class="pagination" data-pagination="accounts"></div>
         </section>
@@ -1028,6 +1030,48 @@
       </div>
     </div>
 
+    <div id="batchCreditModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="batchCreditModalTitle">
+      <div class="modal-card wide">
+        <h3 id="batchCreditModalTitle">批量调整积分</h3>
+        <p class="modal-meta">在下方每行输入一个用户邮箱，对所有命中账户统一增加或减少指定积分。账户不存在或减少时余额不足的邮箱会被跳过。</p>
+        <div class="form-grid two">
+          <div class="field">
+            <label>调整类型</label>
+            <div class="segmented" role="group" aria-label="批量调整类型">
+              <button class="active add" type="button" data-batch-credit-op="add">增加</button>
+              <button class="subtract" type="button" data-batch-credit-op="subtract">减少</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="batchCreditAmount">积分数量（正整数）</label>
+            <input id="batchCreditAmount" type="number" min="1" step="1" placeholder="例如 100" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="batchCreditEmails">用户邮箱（每行一个，最多 500 行）</label>
+          <textarea id="batchCreditEmails" rows="10" placeholder="user1@example.com&#10;user2@example.com&#10;user3@example.com"></textarea>
+          <div class="row-actions" style="margin-top:6px;justify-content:space-between">
+            <span id="batchCreditEmailCount" style="color:var(--muted);font-size:12px">已识别 0 个邮箱</span>
+            <button class="small secondary" type="button" id="batchCreditClearBtn">清空</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="batchCreditReason">备注（可选，最多 200 字）</label>
+          <input id="batchCreditReason" maxlength="200" placeholder="如：客服批量补偿、活动赠送" />
+        </div>
+        <div class="field" hidden id="batchCreditResultWrap">
+          <label>执行结果</label>
+          <div id="batchCreditResultSummary" class="modal-meta"></div>
+          <textarea id="batchCreditResult" class="code-output" readonly rows="6"></textarea>
+        </div>
+        <p id="batchCreditStatus" class="modal-status" aria-live="polite"></p>
+        <div class="modal-actions">
+          <button id="batchCreditCancel" class="secondary" type="button">取消</button>
+          <button id="batchCreditConfirm" type="button">确认批量调整</button>
+        </div>
+      </div>
+    </div>
+
     <script>
       const API_DEFAULT = "https://api.quizmate.vip/study-auth-api";
       const CPAN_API_DEFAULT = "https://api.quizmate.vip/cpan-api";
@@ -1069,6 +1113,7 @@
         accountEmail: localStorage.getItem("study_admin_email") || "",
         tables: Object.fromEntries(Object.keys(tableActions).map((key) => [key, { page: 1, pageSize: 20, total: 0, totalPages: 1, items: [] }])),
         creditModal: { open: false, accountId: "", email: "", credits: 0, operation: "add" },
+        batchCreditModal: { open: false, operation: "add" },
         referralSubtab: "summary",
         selectedCommissions: new Set()
       };
@@ -1403,6 +1448,15 @@
       document.querySelectorAll("[data-credit-op]").forEach((button) => button.addEventListener("click", () => switchCreditOp(button.dataset.creditOp)));
       $("#creditModal").addEventListener("click", (event) => { if (event.target === event.currentTarget) closeCreditModal(); });
       document.addEventListener("keydown", (event) => { if (event.key === "Escape" && $("#creditModal").classList.contains("active")) closeCreditModal(); });
+
+      $("#openBatchCreditModalBtn").addEventListener("click", openBatchCreditModal);
+      $("#batchCreditCancel").addEventListener("click", closeBatchCreditModal);
+      $("#batchCreditConfirm").addEventListener("click", () => run(confirmBatchCreditAdjust));
+      $("#batchCreditClearBtn").addEventListener("click", () => { $("#batchCreditEmails").value = ""; updateBatchCreditEmailCount(); $("#batchCreditEmails").focus(); });
+      $("#batchCreditEmails").addEventListener("input", updateBatchCreditEmailCount);
+      document.querySelectorAll("[data-batch-credit-op]").forEach((button) => button.addEventListener("click", () => switchBatchCreditOp(button.dataset.batchCreditOp)));
+      $("#batchCreditModal").addEventListener("click", (event) => { if (event.target === event.currentTarget) closeBatchCreditModal(); });
+      document.addEventListener("keydown", (event) => { if (event.key === "Escape" && $("#batchCreditModal").classList.contains("active")) closeBatchCreditModal(); });
 
       // 邀请和代理：子模块切换
       document.querySelectorAll("[data-referral-subtab]").forEach((button) => button.addEventListener("click", () => switchReferralSubtab(button.dataset.referralSubtab)));
@@ -2072,6 +2126,98 @@
         closeCreditModal();
         if (state.activeView === "accounts") await loadTable("accounts");
         if (state.activeView === "creditLogs") await loadTable("creditLogs");
+      }
+
+      function parseBatchCreditEmails(raw) {
+        const seen = new Set();
+        const result = [];
+        String(raw || "").split(/[\s,;，；]+/).forEach((token) => {
+          const email = String(token || "").trim().toLowerCase();
+          if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+          if (email.length > 254) return;
+          if (seen.has(email)) return;
+          seen.add(email);
+          result.push(email);
+        });
+        return result;
+      }
+
+      function updateBatchCreditEmailCount() {
+        const emails = parseBatchCreditEmails($("#batchCreditEmails").value);
+        $("#batchCreditEmailCount").textContent = `已识别 ${emails.length} 个邮箱`;
+      }
+
+      function openBatchCreditModal() {
+        state.batchCreditModal = { open: true, operation: "add" };
+        $("#batchCreditAmount").value = "";
+        $("#batchCreditReason").value = "";
+        $("#batchCreditStatus").textContent = "";
+        $("#batchCreditStatus").className = "modal-status";
+        $("#batchCreditResultWrap").hidden = true;
+        $("#batchCreditResult").value = "";
+        $("#batchCreditResultSummary").textContent = "";
+        switchBatchCreditOp("add");
+        $("#batchCreditEmails").value = "";
+        updateBatchCreditEmailCount();
+        $("#batchCreditModal").classList.add("active");
+        setTimeout(() => $("#batchCreditEmails").focus(), 30);
+      }
+
+      function closeBatchCreditModal() {
+        state.batchCreditModal.open = false;
+        $("#batchCreditModal").classList.remove("active");
+        $("#batchCreditStatus").textContent = "";
+      }
+
+      function switchBatchCreditOp(operation) {
+        state.batchCreditModal.operation = operation;
+        document.querySelectorAll("[data-batch-credit-op]").forEach((button) => {
+          const active = button.dataset.batchCreditOp === operation;
+          button.classList.toggle("active", active);
+        });
+      }
+
+      function setBatchCreditStatus(text, type = "") {
+        const node = $("#batchCreditStatus");
+        node.textContent = text || "";
+        node.className = `modal-status ${type}`.trim();
+      }
+
+      async function confirmBatchCreditAdjust() {
+        if (!state.batchCreditModal.open) return;
+        const amount = Math.floor(Number($("#batchCreditAmount").value || 0));
+        if (!Number.isFinite(amount) || amount <= 0) {
+          setBatchCreditStatus("请输入大于 0 的整数。", "error");
+          return;
+        }
+        const emails = parseBatchCreditEmails($("#batchCreditEmails").value);
+        if (!emails.length) {
+          setBatchCreditStatus("请至少输入一个有效邮箱。", "error");
+          return;
+        }
+        if (emails.length > 500) {
+          setBatchCreditStatus("单次最多批量调整 500 个邮箱。", "error");
+          return;
+        }
+        const operation = state.batchCreditModal.operation;
+        const reason = $("#batchCreditReason").value.trim();
+        const opLabel = operation === "add" ? "增加" : "减少";
+        if (!window.confirm(`将为 ${emails.length} 个邮箱${opLabel} ${amount} 积分，确认执行？`)) return;
+        setBatchCreditStatus("提交中...");
+        const data = await api("adminBatchAdjustCredits", {
+          emails, operation, credits: amount, reason
+        });
+        const summary = data.summary || { total: 0, success: 0, skipped: 0 };
+        setBatchCreditStatus(`完成：成功 ${summary.success}，跳过 ${summary.skipped}，共计 ${summary.total}。`, summary.skipped ? "error" : "success");
+        const lines = (data.results || []).map((row) => {
+          if (row.status === "ok") return `${row.email}\t成功\t新余额 ${row.credits}`;
+          return `${row.email}\t跳过\t${row.reason || ""}`;
+        });
+        $("#batchCreditResult").value = lines.join("\n");
+        $("#batchCreditResultSummary").textContent = `成功 ${summary.success} / 跳过 ${summary.skipped}`;
+        $("#batchCreditResultWrap").hidden = false;
+        setStatus(`批量${opLabel}积分完成：成功 ${summary.success}，跳过 ${summary.skipped}。`, summary.skipped ? "success" : "success");
+        if (state.activeView === "accounts") await loadTable("accounts");
       }
 
       async function loadAiConfig() {
