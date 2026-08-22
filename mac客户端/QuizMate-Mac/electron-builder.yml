@@ -16,6 +16,10 @@ asarUnpack:
 mac:
   target:
     - dmg
+  # macOS short versions are limited to the date portion; keep the same-day
+  # build suffix in CFBundleVersion while the client UI exposes the full date version.
+  bundleShortVersion: 2026.8.22
+  bundleVersion: 2026.8.22.5
   icon: resources/icon.png
   category: public.app-category.productivity
   hardenedRuntime: false
