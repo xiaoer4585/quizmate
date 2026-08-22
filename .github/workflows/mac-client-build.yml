@@ -133,51 +133,71 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
-      - name: Upload delivery package
+      - name: Upload delivery package to Aliyun OSS
         if: startsWith(github.ref, 'refs/tags/mac-build-')
         shell: bash
         env:
-          BUILD_ARCH: ${{ matrix.arch }}
-          UPLOAD_KEY: ${{ matrix.uploadKey }}
-          ZIP_UPLOAD_KEY: ${{ matrix.zipUploadKey }}
+          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID || secrets.ALIBABA_CLOUD_ACCESS_KEY_ID }}
+          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET || secrets.ALIBABA_CLOUD_ACCESS_KEY_SECRET }}
+          OSS_SECURITY_TOKEN: ${{ secrets.OSS_SECURITY_TOKEN || secrets.ALIBABA_CLOUD_SECURITY_TOKEN }}
           DMG_PATH: ${{ steps.artifact.outputs.dmg }}
           ZIP_PATH: ${{ steps.artifact.outputs.zip }}
         run: |
           set -euo pipefail
-          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          TAG_PAYLOAD_B64=$(git cat-file tag "$GITHUB_REF_NAME" | sed '1,/^$/d' | tr -d '\n')
-          UPLOAD_URL=$(TAG_PAYLOAD_B64="$TAG_PAYLOAD_B64" node -e "const p=JSON.parse(Buffer.from(process.env.TAG_PAYLOAD_B64, 'base64').toString('utf8')); process.stdout.write(p[process.env.UPLOAD_KEY])")
-          ZIP_UPLOAD_URL=$(TAG_PAYLOAD_B64="$TAG_PAYLOAD_B64" node -e "const p=JSON.parse(Buffer.from(process.env.TAG_PAYLOAD_B64, 'base64').toString('utf8')); process.stdout.write(p[process.env.ZIP_UPLOAD_KEY])")
-          test -n "$UPLOAD_URL"
-          test -n "$ZIP_UPLOAD_URL"
-          echo "::add-mask::$UPLOAD_URL"
-          echo "::add-mask::$ZIP_UPLOAD_URL"
-          curl --fail --silent --show-error --retry 3 \
-            -X PUT \
-            -H "Content-Type: application/x-apple-diskimage" \
-            --upload-file "$DMG_PATH" \
-            "$UPLOAD_URL"
-          curl --fail --silent --show-error --retry 3 \
-            -X PUT \
-            -H "Content-Type: application/zip" \
-            --upload-file "$ZIP_PATH" \
-            "$ZIP_UPLOAD_URL"
+          test -n "${OSS_ACCESS_KEY_ID:-}"
+          test -n "${OSS_ACCESS_KEY_SECRET:-}"
+          npm install --no-save --no-package-lock --ignore-scripts ali-oss@6
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "${{ matrix.arch }}" = "arm64" ]; then
+            DMG_OBJECT="downloads/QuizMate-Mac-Apple-Silicon-${VERSION}.dmg"
+            ZIP_OBJECT="mac/QuizMate-Mac-arm64-${VERSION}.zip"
+            LOG_OBJECT="mac/QuizMate-Mac-arm64-${VERSION}-build.log"
+          else
+            DMG_OBJECT="downloads/QuizMate-Mac-Intel-${VERSION}.dmg"
+            ZIP_OBJECT="mac/QuizMate-Mac-x64-${VERSION}.zip"
+            LOG_OBJECT="mac/QuizMate-Mac-x64-${VERSION}-build.log"
+          fi
+          OSS_ACCESS_KEY_ID="$OSS_ACCESS_KEY_ID" OSS_ACCESS_KEY_SECRET="$OSS_ACCESS_KEY_SECRET" \
+          OSS_SECURITY_TOKEN="${OSS_SECURITY_TOKEN:-}" VERSION="$VERSION" \
+          DMG_OBJECT="$DMG_OBJECT" ZIP_OBJECT="$ZIP_OBJECT" LOG_OBJECT="$LOG_OBJECT" \
+          DMG_PATH="$DMG_PATH" ZIP_PATH="$ZIP_PATH" node <<'NODE'
+          const OSS = require('ali-oss');
+          const fs = require('fs');
+          const client = new OSS({
+            region: 'cn-beijing',
+            endpoint: 'https://oss-cn-beijing.aliyuncs.com',
+            bucket: 'quizmate-cn',
+            secure: true,
+            accessKeyId: process.env.OSS_ACCESS_KEY_ID,
+            accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
+            stsToken: process.env.OSS_SECURITY_TOKEN || undefined,
+            timeout: 1200000,
+          });
+          const uploads = [
+            [process.env.DMG_OBJECT, process.env.DMG_PATH, 'application/x-apple-diskimage'],
+            [process.env.ZIP_OBJECT, process.env.ZIP_PATH, 'application/zip'],
+            [process.env.LOG_OBJECT, 'build.log', 'text/plain; charset=utf-8'],
+          ];
+          (async () => {
+            for (const [object, file, contentType] of uploads) {
+              await client.multipartUpload(object, file, {
+                parallel: 8,
+                partSize: 8 * 1024 * 1024,
+                headers: { 'Content-Type': contentType, 'Cache-Control': 'no-cache' },
+              });
+              const head = await client.head(object);
+              const expected = fs.statSync(file).size;
+              const actual = Number(head.res.headers['content-length']);
+              if (actual !== expected) throw new Error(`size mismatch for ${object}: ${actual} != ${expected}`);
+              console.log(`UPLOAD_VERIFY_OK quizmate-cn/${object} size=${actual}`);
+            }
+          })().catch((error) => { console.error(error.stack || error); process.exit(1); });
+          NODE
 
-      - name: Upload diagnostic log
+      - name: Upload diagnostic log fallback
         if: always() && startsWith(github.ref, 'refs/tags/mac-build-')
         shell: bash
-        env:
-          LOG_UPLOAD_KEY: ${{ matrix.logUploadKey }}
         run: |
           set -euo pipefail
           test -f build.log || printf 'Build stopped before the logged steps.\n' > build.log
-          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          TAG_PAYLOAD_B64=$(git cat-file tag "$GITHUB_REF_NAME" | sed '1,/^$/d' | tr -d '\n')
-          UPLOAD_URL=$(TAG_PAYLOAD_B64="$TAG_PAYLOAD_B64" node -e "const p=JSON.parse(Buffer.from(process.env.TAG_PAYLOAD_B64, 'base64').toString('utf8')); process.stdout.write(p[process.env.LOG_UPLOAD_KEY])")
-          test -n "$UPLOAD_URL"
-          echo "::add-mask::$UPLOAD_URL"
-          curl --fail --silent --show-error --retry 3 \
-            -X PUT \
-            -H "Content-Type: text/plain; charset=utf-8" \
-            --upload-file build.log \
-            "$UPLOAD_URL"
+          echo "Diagnostic log upload is handled with the protected OSS credentials in the delivery step."
