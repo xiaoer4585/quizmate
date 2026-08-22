@@ -22,7 +22,24 @@
 
 ## Blocked Manual / Platform Checks
 
+- First attempted GitHub Actions run `32562804716` on `wangxiaoer4585/quizmate` failed before jobs started. The user clarified the official repository is `xiaoer4585/quizmate`, so this run is not the release source.
 - Apple Silicon DMG install, first-run screen/microphone prompts, screenshot shortcut, real AI answer flow, in-client recharge QR scan, and invite stats refresh require a physical Apple Silicon Mac and production account.
 - Intel DMG install, first-run screen/microphone prompts, screenshot shortcut, real AI answer flow, in-client recharge QR scan, and invite stats refresh require an Intel Mac and production account.
-- macOS signing/notarization/DMG mount validation must be verified by the GitHub Actions macOS runner and/or physical Mac.
+- Physical Apple Silicon / Intel install and real payment QR scanning still require device/account validation. GitHub Actions DMG verify, executable architecture, and ad-hoc codesign verification passed.
 
+## Release Status
+
+- Commit prepared for release: `3b7d84e2e4c877d1d7dfb8c1b4ada4e32f93113a`.
+- Tag pushed to official GitHub repo `xiaoer4585/quizmate`: `mac-build-20268222-1787387871082`.
+- GitHub Actions run `32562933195` completed successfully on `xiaoer4585/quizmate`: https://github.com/xiaoer4585/quizmate/actions/runs/32562933195
+- Published to `quizmate-cn` only:
+  - `downloads/QuizMate-Mac-Apple-Silicon-2026.8.22.2.dmg` size `126907488`
+  - `downloads/QuizMate-Mac-Intel-2026.8.22.2.dmg` size `130567223`
+  - `mac/QuizMate-Mac-arm64-2026.8.22.2.zip` size `126885046`
+  - `mac/QuizMate-Mac-x64-2026.8.22.2.zip` size `128991162`
+  - `mac/latest-mac.yml`
+  - `download.html`
+- Public HTTP verification passed:
+  - `https://www.quizmate.cn/download.html` returned 200 and contains `2026.8.22.2`, `升级版本开发中...敬请期待`, and `标准（适用学习通）`.
+  - `https://quizmate.cn/mac/latest-mac.yml` returned 200 and contains `version: 2026.8.22.2`.
+  - Both DMGs and both ZIPs returned 200 with expected content lengths.
