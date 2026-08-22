@@ -428,6 +428,63 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
       client.release();
     }
   });
+  actions.set("adminListModelCallFailures", async (input) => {
+    await authenticateAdmin(deps, input);
+    const { pageSize, requestedPage } = paging(input);
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    const addEqual = (column: string, value: unknown) => {
+      const text = String(value ?? "").trim();
+      if (!text) return;
+      params.push(text);
+      conditions.push(`${column} = $${params.length}`);
+    };
+    const addDateRange = (column: string, start: unknown, end: unknown) => {
+      const startDate = String(start ?? "").trim();
+      const endDate = String(end ?? "").trim();
+      if (startDate) { params.push(`${startDate}T00:00:00+08:00`); conditions.push(`${column} >= $${params.length}`); }
+      if (endDate) { params.push(`${endDate}T23:59:59+08:00`); conditions.push(`${column} <= $${params.length}`); }
+    };
+    addEqual("model_type", input.modelType);
+    addEqual("error_code", input.errorCode);
+    addEqual("request_mode", input.requestMode);
+    addDateRange("created_at", input.startDate, input.endDate);
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const total = Number((await deps.db.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM model_call_failures ${where}`, params
+    )).rows[0]?.count ?? 0);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, totalPages);
+    params.push(pageSize, (page - 1) * pageSize);
+    const result = await deps.db.query<Record<string, unknown>>(
+      `SELECT * FROM model_call_failures ${where} ORDER BY created_at DESC
+       LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+    const items = result.rows.map((row) => ({
+      failureId: Number(row.failure_id),
+      modelType: String(row.model_type ?? ""),
+      modelName: String(row.model_name ?? ""),
+      errorCode: String(row.error_code ?? ""),
+      errorMessage: String(row.error_message ?? ""),
+      httpStatus: row.http_status == null ? null : Number(row.http_status),
+      requestMode: String(row.request_mode ?? ""),
+      accountId: String(row.account_id ?? ""),
+      accountEmail: String(row.account_email ?? ""),
+      requestId: String(row.request_id ?? ""),
+      clientIp: String(row.client_ip ?? ""),
+      createdAt: date(row.created_at)
+    }));
+    // 同时返回可用错误码与请求模式列表（仅字符串数组，用于后台筛选下拉）
+    const codes = (await deps.db.query<{ error_code: string }>(
+      `SELECT error_code FROM model_call_failures GROUP BY error_code ORDER BY count(*) DESC LIMIT 30`
+    )).rows.map((r) => String(r.error_code));
+    const modes = (await deps.db.query<{ request_mode: string }>(
+      `SELECT COALESCE(NULLIF(request_mode, ''), 'unknown') AS request_mode FROM model_call_failures
+       GROUP BY request_mode ORDER BY count(*) DESC LIMIT 20`
+    )).rows.map((r) => String(r.request_mode));
+    return { items, page, pageSize, total, totalPages, errorCodes: codes, requestModes: modes };
+  });
   actions.set("adminResetAdminCredentials", async (input) => {
     await authenticateAdmin(deps, input);
     const newEmail = normalizeEmail(input.newEmail);

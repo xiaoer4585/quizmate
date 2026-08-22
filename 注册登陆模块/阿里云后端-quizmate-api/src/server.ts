@@ -4,7 +4,7 @@ import { loadConfig } from "./config.js";
 import { createPool } from "./db.js";
 import { createNotificationSender, createVerificationCodeSender } from "./services/smtp.js";
 import { REGISTER_BONUS_CREDITS } from "./domain/credits.js";
-import { createAnalysisModel, type ModelCallRecorder } from "./services/model.js";
+import { createAnalysisModel, type ModelCallFailureRecorder, type ModelCallRecorder } from "./services/model.js";
 import { createTtsService } from "./services/tts.js";
 import { createPaymentDependencies } from "./payments/config.js";
 import { RuntimeSettingsStore } from "./services/runtime-settings.js";
@@ -39,6 +39,40 @@ const recordModelCall: ModelCallRecorder = (info) => {
   ).catch(() => undefined);
 };
 
+// 模型调用失败明细（后台"AI 失败"页面使用，按错误码/类型/时间筛选）
+const recordModelCallFailure: ModelCallFailureRecorder = (info) => {
+  pool.query(
+    `INSERT INTO model_call_failures(
+       model_type, model_name, error_code, error_message,
+       http_status, request_mode, account_id, account_email, request_id, client_ip, created_at
+     ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, now())`,
+    [
+      info.modelType,
+      info.modelName,
+      info.errorCode,
+      info.errorMessage,
+      info.httpStatus ?? null,
+      info.requestMode ?? null,
+      info.accountId ?? null,
+      info.accountEmail ?? null,
+      info.requestId ?? null,
+      info.clientIp ?? null
+    ]
+  ).catch(() => undefined);
+};
+
+// 模型调用失败时回传给 recorder 的上下文（mode / 账号 / requestId / IP）
+// 由 analyze / universal 等 action 在执行 runAnalysisModel 前设置，recorder 在 catch 路径中读取
+import type { ModelFailureContext } from "./services/model.js";
+
+let currentFailureContext: ModelFailureContext | undefined;
+export function setModelFailureContext(ctx: ModelFailureContext | undefined): void {
+  currentFailureContext = ctx;
+}
+function getModelFailureContext(): ModelFailureContext | undefined {
+  return currentFailureContext;
+}
+
 const app = await buildApp(config, {
   db: pool,
   actions: createActionRegistry({
@@ -54,7 +88,9 @@ const app = await buildApp(config, {
       () => settings.get("model_config"),
       () => settings.get("image_model_config"),
       () => settings.get("voice_model_config"),
-      recordModelCall
+      recordModelCall,
+      recordModelCallFailure,
+      getModelFailureContext
     ),
     runTtsSynth: createTtsService(config, () => settings.get("tts_config")),
     payment: createPaymentDependencies(config),

@@ -342,6 +342,7 @@
           <button type="button" data-view-tab="domainInquiries"><i data-lucide="globe"></i>域名询价</button>
           <button type="button" data-view-tab="knowledge"><i data-lucide="files"></i>用户知识库</button>
           <button type="button" data-view-tab="aiConfig"><i data-lucide="bot"></i>AI 配置</button>
+          <button type="button" data-view-tab="aiFailures"><i data-lucide="triangle-alert"></i>AI 调用失败</button>
           <button type="button" data-view-tab="cuotiConfig"><i data-lucide="book-open"></i>错题集配置</button>
           <button type="button" data-view-tab="operations"><i data-lucide="sliders-horizontal"></i>运营配置</button>
           <button type="button" data-view-tab="referral"><i data-lucide="users-round"></i>邀请和代理</button>
@@ -790,6 +791,48 @@
           <div class="pagination" data-pagination="knowledge"></div>
         </section>
 
+        <section class="view" data-view="aiFailures">
+          <div class="panel">
+            <div class="toolbar">
+              <div>
+                <h2>AI 调用失败记录</h2>
+                <p>模型调用失败明细（上游 5xx、超时、无效 JSON 等）。可按模型类型 / 错误码 / 请求模式 / 时间区间筛选；表格默认每页 20 条。</p>
+              </div>
+              <button type="button" data-refresh="aiFailures">刷新</button>
+            </div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field">
+                <label for="aiFailureModelType">模型类型</label>
+                <select id="aiFailureModelType">
+                  <option value="">全部</option>
+                  <option value="text">文本模型</option>
+                  <option value="image">图片模型</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="aiFailureErrorCode">错误码</label>
+                <select id="aiFailureErrorCode">
+                  <option value="">全部</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="aiFailureRequestMode">请求模式</label>
+                <select id="aiFailureRequestMode">
+                  <option value="">全部</option>
+                </select>
+              </div>
+              <div class="field"><label for="aiFailureStartDate">开始日期</label><input id="aiFailureStartDate" type="date" /></div>
+              <div class="field"><label for="aiFailureEndDate">结束日期</label><input id="aiFailureEndDate" type="date" /></div>
+              <div class="actions" style="align-self:end">
+                <button id="searchAiFailuresBtn" type="button">查询</button>
+                <button id="clearAiFailuresFilterBtn" class="secondary" type="button">清空条件</button>
+              </div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="aiFailures"></thead><tbody data-body="aiFailures"></tbody></table></div>
+          <div class="pagination" data-pagination="aiFailures"></div>
+        </section>
+
         <section class="view" data-view="aiConfig">
           <div class="panel">
             <div class="toolbar"><div><h2>AI 配置</h2><p>API 参数和提示词分区维护；API Key 留空表示保留当前线上值。</p></div><button id="reloadAiBtn" class="secondary" type="button">读取当前配置</button></div>
@@ -1102,7 +1145,8 @@
         referrals: "adminListReferrals",
         commissions: "adminListCommissions",
         withdrawals: "adminListWithdrawals",
-        riskFlags: "adminListRiskFlags"
+        riskFlags: "adminListRiskFlags",
+        aiFailures: "adminListModelCallFailures"
       };
       const state = {
         activeView: "dashboard",
@@ -1173,7 +1217,9 @@
         cpanTodayVisits: $("#cpanTodayVisits"), cpanTotalVisits: $("#cpanTotalVisits"),
         cpanPeriodDownloads: $("#cpanPeriodDownloads"), cpanDownloadRange: $("#cpanDownloadRange"),
         cpanTodayDownloads: $("#cpanTodayDownloads"), cpanTotalDownloads: $("#cpanTotalDownloads"),
-        cpanOrdersBody: $("#cpanOrdersBody"), cpanUsersBody: $("#cpanUsersBody")
+        cpanOrdersBody: $("#cpanOrdersBody"), cpanUsersBody: $("#cpanUsersBody"),
+        aiFailureModelType: $("#aiFailureModelType"), aiFailureErrorCode: $("#aiFailureErrorCode"), aiFailureRequestMode: $("#aiFailureRequestMode"),
+        aiFailureStartDate: $("#aiFailureStartDate"), aiFailureEndDate: $("#aiFailureEndDate")
       };
 
       const columns = {
@@ -1190,7 +1236,8 @@
         referrals: [["email", "被邀请人邮箱"], ["status", "状态"], ["registeredAt", "注册时间"], ["usedAt", "使用时间"], ["totalCharged", "充值总额"], ["totalCommission", "提成总额"]],
         commissions: [["__select", "选择"], ["email", "被邀请人邮箱"], ["orderNo", "订单号"], ["chargeAmount", "充值金额"], ["commissionRate", "提成比例"], ["commissionAmount", "提成金额"], ["status", "状态"], ["createdAt", "时间"]],
         withdrawals: [["email", "邮箱"], ["amount", "金额"], ["alipayAccount", "支付宝账号"], ["alipayName", "支付宝实名"], ["status", "状态"], ["payOrderNo", "打款订单号"], ["paidAt", "打款时间"], ["createdAt", "申请时间"], ["__actions", "操作"]],
-        riskFlags: [["email", "邮箱"], ["type", "类型"], ["detail", "详情"], ["createdAt", "标记时间"]]
+        riskFlags: [["email", "邮箱"], ["type", "类型"], ["detail", "详情"], ["createdAt", "标记时间"]],
+        aiFailures: [["createdAt", "时间"], ["modelType", "模型类型"], ["modelName", "模型"], ["errorCode", "错误码"], ["errorMessage", "错误信息"], ["httpStatus", "HTTP"], ["requestMode", "模式"], ["accountEmail", "账户"], ["requestId", "请求 ID"], ["clientIp", "IP"]]
       };
 
       const storedApiEndpoint = localStorage.getItem("study_api_endpoint") || "";
@@ -1490,6 +1537,16 @@
       $("#clearWithdrawalsFilterBtn").addEventListener("click", () => {
         $("#withdrawalStatus").value = "";
         state.tables.withdrawals.page = 1; run(() => loadTable("withdrawals"));
+      });
+      // AI 失败明细筛选
+      $("#searchAiFailuresBtn").addEventListener("click", () => { state.tables.aiFailures.page = 1; run(() => loadTable("aiFailures")); });
+      $("#clearAiFailuresFilterBtn").addEventListener("click", () => {
+        els.aiFailureModelType.value = "";
+        els.aiFailureErrorCode.value = "";
+        els.aiFailureRequestMode.value = "";
+        els.aiFailureStartDate.value = "";
+        els.aiFailureEndDate.value = "";
+        state.tables.aiFailures.page = 1; run(() => loadTable("aiFailures"));
       });
       // 提成记录复选框
       document.addEventListener("change", handleCommissionCheckboxChange);
@@ -2026,9 +2083,30 @@
         return { email: els.accountEmail.value.trim() };
       }
 
+      function aiFailureFilters() {
+        return {
+          modelType: els.aiFailureModelType.value.trim(),
+          errorCode: els.aiFailureErrorCode.value.trim(),
+          requestMode: els.aiFailureRequestMode.value.trim(),
+          startDate: els.aiFailureStartDate.value,
+          endDate: els.aiFailureEndDate.value
+        };
+      }
+
+      function populateAiFailureFilters(errorCodes, requestModes) {
+        const codeSelect = els.aiFailureErrorCode;
+        const currentCode = codeSelect.value;
+        codeSelect.innerHTML = '<option value=\"\">全部</option>' + (errorCodes || []).map((code) => '<option value=\"' + escapeHtml(code) + '\">' + escapeHtml(code) + '</option>').join('');
+        if (currentCode && (errorCodes || []).includes(currentCode)) codeSelect.value = currentCode;
+        const modeSelect = els.aiFailureRequestMode;
+        const currentMode = modeSelect.value;
+        modeSelect.innerHTML = '<option value=\"\">全部</option>' + (requestModes || []).map((mode) => '<option value=\"' + escapeHtml(mode) + '\">' + escapeHtml(mode) + '</option>').join('');
+        if (currentMode && (requestModes || []).includes(currentMode)) modeSelect.value = currentMode;
+      }
+
       async function loadTable(type) {
         const table = state.tables[type];
-        const extra = type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "creditLogs" ? creditLogFilters() : type === "accounts" ? accountFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : type === "redemptionCodes" ? redemptionCodeFilters() : type === "shopOrders" ? shopOrderFilters() : {};
+        const extra = type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "creditLogs" ? creditLogFilters() : type === "accounts" ? accountFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : type === "redemptionCodes" ? redemptionCodeFilters() : type === "shopOrders" ? shopOrderFilters() : type === "aiFailures" ? aiFailureFilters() : {};
         const payload = { page: table.page, pageSize: table.pageSize, ...extra };
         const data = await api(tableActions[type], payload);
         table.items = data.items || [];
@@ -2038,6 +2116,7 @@
         table.totalPages = Number(data.totalPages || Math.max(1, Math.ceil(table.total / table.pageSize)));
         renderTable(type, table.items);
         renderPagination(type);
+        if (type === "aiFailures") populateAiFailureFilters(data.errorCodes, data.requestModes);
         setStatus(`已读取 ${table.total} 条记录，当前第 ${table.page}/${table.totalPages} 页。`, "success");
       }
 
@@ -2751,11 +2830,15 @@
       function formatCell(value, key) {
         if (value === undefined || value === null || value === "") return "-";
         if (/At$/.test(key)) { const time = new Date(value).getTime(); if (Number.isFinite(time)) return new Date(value).toLocaleString("zh-CN"); }
+        if (key === "createdAt" && value) { const time = new Date(value).getTime(); if (Number.isFinite(time)) return new Date(value).toLocaleString("zh-CN"); }
         if (key === "status") return `<span class="badge">${escapeHtml(REFERRAL_STATUS_MAP[value] || value)}</span>`;
         if (key === "orderType") return `<span class="badge">${escapeHtml(value)}</span>`;
         if (key === "size") return formatBytes(value);
         if (key === "chargeAmount" || key === "amount" || key === "totalCharged" || key === "totalCommission" || key === "commissionAmount") return `¥${escapeHtml(String(value))}`;
         if (key === "commissionRate") return `${escapeHtml(String(value))}%`;
+        if (key === "modelType") return `<span class="badge">${escapeHtml(value === "image" ? "图片模型" : value === "text" ? "文本模型" : value)}</span>`;
+        if (key === "errorCode") return `<span class="badge badge-danger">${escapeHtml(value)}</span>`;
+        if (key === "errorMessage") return `<span title="${escapeHtml(value)}">${escapeHtml(value.length > 80 ? value.slice(0, 80) + "…" : value)}</span>`;
         return escapeHtml(value);
       }
 
@@ -2763,6 +2846,14 @@
       function formatDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value).replaceAll("-", "/") : "-"; }
       function formatNumber(value) { return Number(value || 0).toLocaleString("zh-CN"); }
       function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
+      // AI 失败记录常见错误码到可读标签的映射（badge-danger 文本）
+      const AI_FAILURE_CODE_MAP = {
+        MODEL_UPSTREAM_ERROR: "上游错误",
+        MODEL_TIMEOUT: "模型超时",
+        INVALID_MODEL_RESULT: "结果无效",
+        MODEL_NOT_CONFIGURED: "未配置模型"
+      };
+      window.AI_FAILURE_CODE_MAP = AI_FAILURE_CODE_MAP; // 用于探活脚本校验页面标记
     </script>
   </body>
 </html>
