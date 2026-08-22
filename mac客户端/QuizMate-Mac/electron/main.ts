@@ -6,7 +6,7 @@
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
 //   - 托盘忙碌图标 + voice 模式进度通知
 // Mac 客户端只保留笔试助手与面试助手；求职流程由免费浏览器插件提供。
-import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, session, systemPreferences } from 'electron';
+import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, session, systemPreferences, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { pathToFileURL } from 'url';
@@ -1248,6 +1248,10 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    // Do not let macOS' default application menu consume Command+Q and quit
+    // the client while the user is working. The app remains tray-resident;
+    // quitting is available only through an explicit lifecycle action.
+    Menu.setApplicationMenu(null);
     await configureMacPermissions();
     await initializeApp().catch((e) => {
       console.error('[Main] Init failed:', e);

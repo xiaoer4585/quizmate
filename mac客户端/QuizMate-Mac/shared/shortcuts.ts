@@ -54,7 +54,9 @@ export const defaultShortcutBindings: Record<ShortcutAction, string> = {
   interview_prev_question: 'Alt+Up',
   interview_next_question: 'Alt+Down',
   // 系统固定
-  quit: 'Command+Shift+Q',
+  // macOS already owns Command+Q and the client must not expose a quit shortcut.
+  // Quit remains available from the system/app lifecycle only.
+  quit: '',
   reset: 'Command+Shift+T',
   move_up: 'Command+Up',
   move_down: 'Command+Down',
@@ -146,7 +148,6 @@ export const shortcutMetadata: ShortcutBinding[] = [
   { action: 'zoom_out', accelerator: defaultShortcutBindings.zoom_out, label: '缩小界面', configurable: false, category: 'system' },
   { action: 'zoom_reset', accelerator: defaultShortcutBindings.zoom_reset, label: '重置缩放', configurable: false, category: 'system' },
   { action: 'zoom_in', accelerator: defaultShortcutBindings.zoom_in, label: '放大界面', configurable: false, category: 'system' },
-  { action: 'quit', accelerator: defaultShortcutBindings.quit, label: '退出软件', configurable: false, category: 'system' },
   { action: 'reset', accelerator: defaultShortcutBindings.reset, label: '一键重置', configurable: false, category: 'system' },
   { action: 'toggle_raw_output', accelerator: defaultShortcutBindings.toggle_raw_output, label: '查看原始输出', configurable: false, category: 'system' },
   { action: 'delete_latest_screenshot', accelerator: defaultShortcutBindings.delete_latest_screenshot, label: '删除最新截图', configurable: false, category: 'system' },
