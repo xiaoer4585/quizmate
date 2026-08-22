@@ -1,5 +1,6 @@
-// 20260807 官网全量部署：代码文件 + assets 图片到 OSS quizmate-vip
-// 官网首页重构 + FAQ合并到guide + 去掉购买与咨询 + 浮动群聊二维码
+// 官网全量部署：代码文件 + assets 图片，仅发布到 quizmate-cn 正式站。
+// www.quizmate.cn / quizmate.cn 是正式官网；quizmate.vip 仅保留根域名跳转和既有后台入口。
+// 注意：本脚本不上传 quizmate-vip，避免误覆盖旧域名的跳转、后台或历史对象。
 const fs = require('fs');
 const path = require('path');
 const OSS = require('../../注册登陆模块/阿里云统一入口-study-auth-api/node_modules/ali-oss');
@@ -22,19 +23,14 @@ function loadCredentials() {
   return {
     accessKeyId: profile.access_key_id,
     accessKeySecret: profile.access_key_secret,
+    stsToken: profile.sts_token || undefined,
   };
 }
 
 const credentials = loadCredentials();
-const client = new OSS({
-  endpoint: 'https://www.quizmate.vip',
-  cname: true,
-  bucket: 'quizmate-vip',
-  secure: true,
-  accessKeyId: credentials.accessKeyId,
-  accessKeySecret: credentials.accessKeySecret,
-  timeout: 120_000,
-});
+const clients = [
+  { name: 'quizmate-cn', client: new OSS({ region: 'cn-beijing', endpoint: 'https://oss-cn-beijing.aliyuncs.com', bucket: 'quizmate-cn', secure: true, accessKeyId: credentials.accessKeyId, accessKeySecret: credentials.accessKeySecret, stsToken: credentials.stsToken, timeout: 120_000 }) },
+];
 
 // 顶层代码/文本文件（objectName, relativeFile, contentType）
 const codeFiles = [
@@ -123,7 +119,7 @@ function collectPublicFiles() {
   return result;
 }
 
-async function put(objectName, relativeFile, contentType) {
+async function put(client, bucketName, objectName, relativeFile, contentType) {
   const file = path.join(siteRoot, relativeFile);
   if (!fs.existsSync(file)) throw new Error(`File not found: ${file}`);
   const result = await client.put(objectName, file, {
@@ -133,7 +129,7 @@ async function put(objectName, relativeFile, contentType) {
     },
   });
   if (result.res.status !== 200) throw new Error(`Upload failed for ${objectName}: status ${result.res.status}`);
-  process.stdout.write(`PUT_OK ${objectName} ${fs.statSync(file).size} bytes\n`);
+  process.stdout.write(`PUT_OK [${bucketName}] ${objectName} ${fs.statSync(file).size} bytes\n`);
 }
 
 async function main() {
@@ -141,34 +137,44 @@ async function main() {
   const publicFiles = collectPublicFiles();
   const unique = new Map([...codeFiles, ...publicFiles, ...assets].map(entry => [entry[0], entry]));
   const all = [...unique.values()];
-  process.stdout.write(`DEPLOY_START total=${all.length} (code=${codeFiles.length}, assets=${assets.length})\n`);
+  process.stdout.write(`DEPLOY_START total=${all.length} (code=${codeFiles.length}, assets=${assets.length}) buckets=${clients.map((c) => c.name).join(',')}\n`);
 
-  let ok = 0;
-  let fail = 0;
-  for (const [obj, rel, ct] of all) {
-    try {
-      await put(obj, rel, ct);
-      ok++;
-    } catch (e) {
-      fail++;
-      process.stderr.write(`PUT_FAIL ${obj} ${e.message}\n`);
+  let totalOk = 0;
+  let totalFail = 0;
+  // 每个 bucket 独立上传 + 独立验证
+  for (const { name: bucketName, client } of clients) {
+    process.stdout.write(`\n=== BUCKET ${bucketName} ===\n`);
+    let ok = 0;
+    let fail = 0;
+    for (const [obj, rel, ct] of all) {
+      try {
+        await put(client, bucketName, obj, rel, ct);
+        ok++;
+      } catch (e) {
+        fail++;
+        process.stderr.write(`PUT_FAIL [${bucketName}] ${obj} ${e.message}\n`);
+      }
     }
+
+    // 抽样验证关键文件
+    process.stdout.write(`--- VERIFY [${bucketName}] ---\n`);
+    for (const obj of ['index.html', 'styles.css', 'guide.html', 'download.html', 'recharge.html']) {
+      try {
+        const head = await client.head(obj);
+        const len = head.res.headers['content-length'] || '?';
+        process.stdout.write(`VERIFY [${bucketName}] ${obj}: ${len} bytes\n`);
+      } catch (e) {
+        process.stderr.write(`VERIFY_FAIL [${bucketName}] ${obj} ${e.message}\n`);
+      }
+    }
+
+    process.stdout.write(`BUCKET_COMPLETE [${bucketName}] ok=${ok} fail=${fail}\n`);
+    totalOk += ok;
+    totalFail += fail;
   }
 
-  // 抽样验证关键文件
-  process.stdout.write('--- VERIFY ---\n');
-  for (const obj of ['index.html', 'styles.css', 'guide.html', 'download.html', 'recharge.html']) {
-    try {
-      const head = await client.head(obj);
-      const len = head.res.headers['content-length'] || '?';
-      process.stdout.write(`VERIFY ${obj}: ${len} bytes\n`);
-    } catch (e) {
-      process.stderr.write(`VERIFY_FAIL ${obj} ${e.message}\n`);
-    }
-  }
-
-  process.stdout.write(`DEPLOY_COMPLETE ok=${ok} fail=${fail}\n`);
-  if (fail > 0) process.exitCode = 1;
+  process.stdout.write(`\nDEPLOY_COMPLETE ok=${totalOk} fail=${totalFail}\n`);
+  if (totalFail > 0) process.exitCode = 1;
 }
 
 main().catch((error) => {

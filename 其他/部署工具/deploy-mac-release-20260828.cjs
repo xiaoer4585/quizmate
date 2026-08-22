@@ -97,10 +97,6 @@ async function publishManifest(storage, manifest) {
 
 async function main() {
   const primary = client('quizmate-cn');
-  const compatibility = client('quizmate-vip');
-
-  for (const object of OBJECTS) await syncObject(primary, compatibility, object);
-
   const armObject = `mac/QuizMate-Mac-arm64-${VERSION}.zip`;
   const x64Object = `mac/QuizMate-Mac-x64-${VERSION}.zip`;
   const [arm, x64] = await Promise.all([
@@ -124,7 +120,6 @@ async function main() {
   ].join('\n');
 
   await publishManifest(primary, manifest);
-  await publishManifest(compatibility, manifest);
   console.log(manifest);
 }
 
