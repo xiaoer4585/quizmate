@@ -162,7 +162,7 @@ jobs:
           test -n "${OSS_ACCESS_KEY_ID:-}"
           test -n "${OSS_ACCESS_KEY_SECRET:-}"
           npm install --no-save --no-package-lock --ignore-scripts ali-oss@6
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION=$(node -p "require('./resources/config.json').version")
           if [ "${{ matrix.arch }}" = "arm64" ]; then
             DMG_OBJECT="downloads/QuizMate-Mac-Apple-Silicon-${VERSION}.dmg"
             ZIP_OBJECT="mac/QuizMate-Mac-arm64-${VERSION}.zip"
@@ -236,7 +236,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          VERSION=$(node -p "require('./mac客户端/QuizMate-Mac/package.json').version")
+          VERSION=$(node -p "require('./mac客户端/QuizMate-Mac/resources/config.json').version")
           APPLE_DIR=$(find release-artifacts -maxdepth 1 -type d -name 'QuizMate-Mac-Apple-Silicon-*' -print -quit)
           INTEL_DIR=$(find release-artifacts -maxdepth 1 -type d -name 'QuizMate-Mac-Intel-*' -print -quit)
           test -d "$APPLE_DIR"
