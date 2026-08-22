@@ -130,8 +130,10 @@ function escapeRawControlChars(json: string): string {
 
 function fallbackCodeResult(content: string): AnalysisModelResult {
   const code = content.replace(/^```[^\r\n]*\r?\n?/, "").replace(/\r?\n?```$/, "").trim().slice(0, 30_000);
-  return { items: [{ summary: "题目1", answer: `参考代码\n${code}`, explanation: "", code }] };
+  return { items: [{ summary: "题目1", answer: `参考代码\n${code}`, explanation: "" }] };
 }
+
+void fallbackCodeResult;
 
 export function parseModelResult(content: string, options: { allowInterviewText?: boolean } = {}): AnalysisModelResult {
   const trimmed = content.trim();
@@ -189,6 +191,30 @@ type ModelSettingLoader = () => Promise<Record<string, unknown>>;
 
 // 成功调用模型后回调，用于按天统计文本/图片模型调用次数（后台曲线图）
 export type ModelCallRecorder = (info: { modelType: "text" | "image"; modelName: string }) => void;
+
+// 模型调用失败时回调，用于后台"AI 失败"页面分析（按错误码/时间/类型筛选）
+export type ModelCallFailureInfo = {
+  modelType: "text" | "image";
+  modelName: string;
+  errorCode: string;
+  errorMessage: string;
+  httpStatus?: number;
+  requestMode?: string;
+  accountId?: string;
+  accountEmail?: string;
+  requestId?: string;
+  clientIp?: string;
+};
+export type ModelCallFailureRecorder = (info: ModelCallFailureInfo) => void;
+
+// 模型调用失败上下文（mode / 账号 / requestId / IP）
+export type ModelFailureContext = {
+  requestMode?: string;
+  accountId?: string;
+  accountEmail?: string;
+  requestId?: string;
+  clientIp?: string;
+};
 
 interface ResolvedModel {
   baseUrl: string;
@@ -360,8 +386,27 @@ export function createAnalysisModel(
   textLoader?: ModelSettingLoader,
   imageLoader?: ModelSettingLoader,
   voiceLoader?: ModelSettingLoader,
-  recorder?: ModelCallRecorder
+  recorder?: ModelCallRecorder,
+  failureRecorder?: ModelCallFailureRecorder,
+  failureContext?: () => ModelFailureContext | undefined
 ) {
+  const recordFailureFor = (modelType: "text" | "image", modelName: string, error: PublicError, httpStatus?: number) => {
+    if (!failureRecorder) return;
+    const ctx = failureContext?.();
+    const info: ModelCallFailureInfo = {
+      modelType,
+      modelName,
+      errorCode: error.code || "MODEL_ERROR",
+      errorMessage: (error.message || "").slice(0, 500)
+    };
+    if (typeof httpStatus === "number") info.httpStatus = httpStatus;
+    if (ctx?.requestMode) info.requestMode = ctx.requestMode;
+    if (ctx?.accountId) info.accountId = ctx.accountId;
+    if (ctx?.accountEmail) info.accountEmail = ctx.accountEmail;
+    if (ctx?.requestId) info.requestId = ctx.requestId;
+    if (ctx?.clientIp) info.clientIp = ctx.clientIp;
+    failureRecorder(info);
+  };
   return async (request: AnalysisModelRequest): Promise<AnalysisModelResult> => {
     const isVoiceMode = request.mode === "voice";
     const isInterviewMode = request.mode === "interview";
@@ -448,14 +493,22 @@ export function createAnalysisModel(
       const content = await callChatModel(resolved, userContent, maxTokens, { disableThinking: true });
       result = parseModelResult(content, { allowInterviewText: isInterviewMode });
     } catch (error) {
-      if (!(error instanceof PublicError) || error.code !== "INVALID_MODEL_RESULT") throw error;
+      if (!(error instanceof PublicError) || error.code !== "INVALID_MODEL_RESULT") {
+        if (error instanceof PublicError) recordFailureFor(modelType, resolved.model, error);
+        throw error;
+      }
       console.warn("[model] invalid model result, retrying once with strict JSON instruction");
       const retryText = `${text}\n\n${STRICT_JSON_RETRY_HINT}`;
       const retryUserContent = hasImage
         ? buildImageContent(resolved.apiFormat, retryText, request.screenshot)
         : retryText;
-      const retryContent = await callChatModel(resolved, retryUserContent, maxTokens, { disableThinking: true });
-      result = parseModelResult(retryContent, { allowInterviewText: isInterviewMode });
+      try {
+        const retryContent = await callChatModel(resolved, retryUserContent, maxTokens, { disableThinking: true });
+        result = parseModelResult(retryContent, { allowInterviewText: isInterviewMode });
+      } catch (retryError) {
+        if (retryError instanceof PublicError) recordFailureFor(modelType, resolved.model, retryError);
+        throw retryError;
+      }
     }
     // 仅在成功调用后记录，用于后台模型调用曲线图
     if (recorder) recorder({ modelType, modelName: resolved.model });

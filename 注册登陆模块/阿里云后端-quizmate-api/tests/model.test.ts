@@ -41,8 +41,8 @@ describe("model result parser", () => {
 
   it("falls back to a code answer when a vision model omits the JSON wrapper", () => {
     const result = parseModelResult("```go\nfunc reverseList(head *ListNode) *ListNode { return head }\n```");
-    expect(result.items[0].code).toContain("reverseList");
     expect(result.items[0].answer).toContain("reverseList");
+    expect(result.items[0].explanation).toBe("");
   });
 
   it("rejects malformed or empty model output", () => {
@@ -215,9 +215,15 @@ describe("model result parser", () => {
       return new Response("upstream boom", { status: 500 });
     });
 
+    const failures: Array<Record<string, unknown>> = [];
     const runModel = createAnalysisModel(
       {} as AppConfig,
-      async () => ({ baseUrl: "https://text.example", apiKey: "text-key", model: "ark-code-latest" })
+      async () => ({ baseUrl: "https://text.example", apiKey: "text-key", model: "ark-code-latest" }),
+      undefined,
+      undefined,
+      undefined,
+      (info) => failures.push(info as unknown as Record<string, unknown>),
+      () => ({ requestMode: "exam", accountId: "acct-1", requestId: "req-1", clientIp: "1.2.3.4" })
     );
 
     await expect(runModel({
@@ -229,5 +235,54 @@ describe("model result parser", () => {
     })).rejects.toMatchObject({ code: "MODEL_UPSTREAM_ERROR" });
 
     expect(call).toBe(1);
+    // 上游 5xx 应当作为失败埋点上报，且携带 mode/账号/requestId/IP
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      modelType: "text",
+      modelName: "ark-code-latest",
+      errorCode: "MODEL_UPSTREAM_ERROR",
+      requestMode: "exam",
+      accountId: "acct-1",
+      requestId: "req-1",
+      clientIp: "1.2.3.4"
+    });
+  });
+
+  it("records a failure for invalid result after retry also fails", async () => {
+    let call = 0;
+    vi.stubGlobal("fetch", async () => {
+      call += 1;
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"items":[{"answer":"我认为"Redis"很快"}]}' } }]
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+
+    const failures: Array<Record<string, unknown>> = [];
+    const runModel = createAnalysisModel(
+      {} as AppConfig,
+      async () => ({ baseUrl: "https://text.example", apiKey: "text-key", model: "ark-code-latest" }),
+      undefined,
+      undefined,
+      undefined,
+      (info) => failures.push(info as unknown as Record<string, unknown>),
+      () => ({ requestMode: "exam" })
+    );
+
+    await expect(runModel({
+      prompt: "题目内容",
+      pageContext: null,
+      screenshot: "",
+      source: "manual",
+      mode: "exam"
+    })).rejects.toMatchObject({ code: "INVALID_MODEL_RESULT" });
+
+    expect(call).toBe(2);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      modelType: "text",
+      modelName: "ark-code-latest",
+      errorCode: "INVALID_MODEL_RESULT",
+      requestMode: "exam"
+    });
   });
 });
