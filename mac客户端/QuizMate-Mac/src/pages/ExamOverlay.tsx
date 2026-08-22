@@ -3,7 +3,7 @@ import QueueView from '../components/exam/QueueView'
 import SolutionsView from '../components/exam/SolutionsView'
 import RawOutputView from '../components/exam/RawOutputView'
 import { useTheme } from '../contexts/ThemeContext'
-import { Camera, CheckCircle2, CircleAlert, Copy, Loader2, Search, Sparkles, type LucideIcon } from 'lucide-react'
+import { Camera, CheckCircle2, CircleAlert, Loader2, Sparkles } from 'lucide-react'
 
 // 笔试悬浮窗透明背景样式（防止 body 的 bg-slate-950 导致黑屏）
 function ExamOverlayStyles() {
@@ -12,42 +12,6 @@ function ExamOverlayStyles() {
       html, body, #root { background: transparent !important; margin: 0; padding: 0; height: 100%; overflow: hidden; }
       * { box-sizing: border-box; }
     `}</style>
-  )
-}
-
-// 头部操作按钮：填空/输入题场景下，考试输入框或中文输入法可能拦截全局快捷键
-// （⌘⌥Q / ⌘⌥E 按下无反应），这里提供不依赖键盘的鼠标点击兜底。
-// 悬停时临时解除悬浮窗鼠标穿透以便接收点击，移开后立即恢复穿透；
-// 窗口移动/缩放/显隐/截图流程在主进程侧也会复位穿透，避免悬浮窗遮挡考试页面。
-function OverlayActionButton({
-  icon: Icon,
-  label,
-  shortcut,
-  onClick,
-}: {
-  icon: LucideIcon
-  label: string
-  shortcut?: string
-  onClick: () => void
-}) {
-  const electronApi = (window as any).electronAPI
-  return (
-    <button
-      type="button"
-      title={shortcut ? `${label}（快捷键 ${shortcut}）` : label}
-      className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10 hover:bg-cyan-500/25 hover:text-cyan-300 transition-colors cursor-pointer text-[9px] font-medium opacity-80 hover:opacity-100"
-      style={{ pointerEvents: 'auto' }}
-      onMouseEnter={() => electronApi?.window?.setIgnoreMouseEvents?.(false)}
-      onMouseLeave={() => electronApi?.window?.setIgnoreMouseEvents?.(true)}
-      onClick={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onClick()
-      }}
-    >
-      <Icon size={9} />
-      <span>{label}</span>
-    </button>
   )
 }
 
@@ -61,7 +25,6 @@ interface Screenshot {
 
 export default function OverlayPage() {
   const api = (window as any).electronAPI
-  const appApi = (window as any).api
   const { theme } = useTheme()
   const [view, setView] = useState<View>('queue')
   const [status, setStatus] = useState<Status>('idle')
@@ -154,6 +117,13 @@ export default function OverlayPage() {
     unsubs.push(api?.on('screenshot-error', (data: any) => {
       setErrorMessage(data.code ? `${data.error || '截图失败'}（${data.code}）` : (data.error || '截图失败'))
       setStatus('error')
+    }))
+
+    unsubs.push(api?.on('shortcut-registration-error', (data: any) => {
+      if (data?.action === 'screenshot') {
+        setErrorMessage(`截图快捷键注册失败：${data.accelerator || '当前快捷键'}，请到设置中更换`)
+        setStatus('error')
+      }
     }))
 
     unsubs.push(api?.on('initial-start', () => {
@@ -319,14 +289,6 @@ export default function OverlayPage() {
         ? CircleAlert
         : Camera
 
-  // Build action buttons for header - mouse fallback when hotkeys are swallowed
-  // by the exam input box / IME (fill-in-blank & input question scenarios)
-  const headerActions: Array<{ icon: LucideIcon; label: string; shortcut?: string; onClick: () => void }> = [
-    { icon: Camera, label: '截图', shortcut: shortcutBindings.screenshot, onClick: () => { void appApi?.exam?.screenshot?.() } },
-    { icon: Search, label: '搜题', shortcut: shortcutBindings.search, onClick: () => { void appApi?.exam?.search?.() } },
-    { icon: Copy, label: '复制', shortcut: shortcutBindings.copy_content, onClick: () => { void handleCopyContent() } },
-  ]
-
   return (
     <div className="w-full h-full p-1.5" style={{ background: 'transparent', pointerEvents: 'none' }}>
       <ExamOverlayStyles />
@@ -352,17 +314,6 @@ export default function OverlayPage() {
           <div className={`flex items-center gap-1.5 text-[10px] font-medium ${status === 'error' ? 'text-red-400' : status === 'completed' ? 'text-emerald-400' : status === 'processing' ? 'text-cyan-400' : 'opacity-60'}`}>
             <StatusIcon size={12} className={status === 'processing' ? 'animate-spin' : ''} />
             <span className="max-w-44 truncate">{statusLabel}</span>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {headerActions.map((action) => (
-              <OverlayActionButton
-                key={action.label}
-                icon={action.icon}
-                label={action.label}
-                shortcut={action.shortcut}
-                onClick={action.onClick}
-              />
-            ))}
           </div>
         </header>
 

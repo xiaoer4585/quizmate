@@ -70,6 +70,7 @@ const api = {
     restartListening: (context?: unknown) => invoke('interview:restart', context),
     stopListening: () => invoke('interview:stop'),
     toggleListening: () => invoke('interview:toggle'),
+    toggleSession: (context?: unknown) => invoke('interview:toggle', context),
     activateShortcuts: () => invoke('interview:activateShortcuts'),
     deactivateShortcuts: () => invoke('interview:deactivateShortcuts'),
     setContext: (context: unknown) => invoke('interview:setContext', context),
@@ -117,6 +118,7 @@ const api = {
   // 邀请代理
   invite: {
     generateCode: () => invoke('invite:generate-code'),
+    getOverview: () => invoke('invite:get-overview'),
     savePoster: (dataUrl: string) => invoke('invite:save-poster', dataUrl),
     sharePoster: (dataUrl: string) => invoke('invite:share-poster', dataUrl),
   },

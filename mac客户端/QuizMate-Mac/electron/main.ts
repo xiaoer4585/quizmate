@@ -596,11 +596,7 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       }
       break;
     case 'interview_start':
-      if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) {
-        createInterviewOverlayWindow();
-      }
-      if (interviewHelper?.isListening()) interviewHelper.stop();
-      else await interviewHelper?.start();
+      await toggleInterviewSession();
       break;
     case 'interview_prev_question':
       state.interviewOverlayWindow?.webContents.send('interview:navigate', { direction: 'prev' });
@@ -1021,6 +1017,26 @@ function closeInterviewOverlay() {
   state.interviewOverlayVisible = false;
 }
 
+/** One control for the interview workflow: overlay and realtime dictation share one lifecycle. */
+async function toggleInterviewSession(context?: unknown): Promise<{ listening: boolean; overlay: boolean }> {
+  if (interviewHelper?.isListening()) {
+    interviewHelper.stop();
+    hideInterviewOverlay();
+    return { listening: false, overlay: false };
+  }
+  if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) createInterviewOverlayWindow();
+  else showInterviewOverlay();
+  try {
+    await interviewHelper?.start(context as any);
+    const listening = !!interviewHelper?.isListening();
+    if (!listening) hideInterviewOverlay();
+    return { listening, overlay: listening && state.interviewOverlayVisible };
+  } catch {
+    hideInterviewOverlay();
+    return { listening: false, overlay: false };
+  }
+}
+
 // ===== overlay 适配器：将面试悬浮窗适配为 InterviewHelper 所需的 OverlayManager 接口 =====
 const overlayAdapter = {
   render(payload: { type: 'exam' | 'interview'; title?: string; content: string; streaming?: boolean }) {
@@ -1144,6 +1160,12 @@ async function initializeApp(): Promise<void> {
   shortcutsHelper = new ShortcutsHelper(configHelper);
   shortcutsHelper.init();
   shortcutsHelper.setHandler(handleShortcutAction);
+  shortcutsHelper.setRegistrationErrorHandler((data) => {
+    console.error('[Main] global shortcut registration failed:', data);
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('shortcut-registration-error', data);
+    });
+  });
   ctx.shortcuts = shortcutsHelper;
   // 启动时立即注册全局快捷键，确保 Command+B 可随时启动悬浮框
   shortcutsHelper.registerGlobalShortcuts();
@@ -1198,6 +1220,7 @@ async function initializeApp(): Promise<void> {
     cancelShortcutTest,
     shortcutsHelper,
     openEmbeddedWindow,
+    toggleInterviewSession,
   });
 
   // ===== 笔试悬浮窗状态查询 =====

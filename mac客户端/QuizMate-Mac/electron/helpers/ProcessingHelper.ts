@@ -127,6 +127,22 @@ export class LightweightProcessingHelper {
   private mainWindow: BrowserWindow | null = null
   private currentController: AbortController | null = null
 
+  public async getReferralOverview(): Promise<{ success: boolean; overview?: any; error?: string }> {
+    const token = this.configHelper.getAuthToken()
+    if (!token) return { success: false, error: '未登录，请先登录账号。' }
+    try {
+      const data = await postAction<Record<string, unknown>>(
+        this.configHelper.getAppConfig().apiBaseUrl,
+        'getReferralOverview',
+        { accountToken: token },
+        { timeoutMs: 15_000 },
+      )
+      return { success: true, overview: data }
+    } catch (e: any) {
+      return { success: false, error: e instanceof Error ? e.message : '获取邀请总览失败' }
+    }
+  }
+
   constructor(configHelper: ConfigHelper) {
     this.configHelper = configHelper
   }

@@ -50,6 +50,7 @@ export interface OverlayControls {
   cancelShortcutTest: () => void;
   shortcutsHelper: ShortcutsHelper;
   openEmbeddedWindow: (kind: 'recharge' | 'register') => void;
+  toggleInterviewSession: (context?: unknown) => Promise<{ listening: boolean; overlay: boolean }>;
 }
 
 export function registerIpcHandlers(
@@ -156,7 +157,7 @@ export function registerIpcHandlers(
   ipcMain.handle('interview:start', (_e, context?) => ctx.interview!.start(context));
   ipcMain.handle('interview:restart', (_e, context?) => ctx.interview!.restart(context));
   ipcMain.handle('interview:stop', () => ctx.interview!.stop());
-  ipcMain.handle('interview:toggle', () => ctx.interview!.toggleListening?.());
+  ipcMain.handle('interview:toggle', (_e, context?) => controls.toggleInterviewSession(context));
   ipcMain.handle('interview:activateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode('interview'); return true; });
   ipcMain.handle('interview:deactivateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode()); return true; });
   ipcMain.handle('interview:setContext', (_e, context) => ctx.interview!.setContext(context));
@@ -236,6 +237,10 @@ export function registerIpcHandlers(
   ipcMain.handle('invite:generate-code', async () => {
     if (!ctx.processing) return { success: false, error: '处理模块未初始化' };
     return await (ctx.processing as any).generateInviteCode?.() ?? { success: false, error: '不支持' };
+  });
+  ipcMain.handle('invite:get-overview', async () => {
+    if (!ctx.processing) return { success: false, error: '处理模块未初始化' };
+    return await (ctx.processing as any).getReferralOverview?.() ?? { success: false, error: '不支持' };
   });
   // 保存海报/面经图片到本地（弹出系统保存对话框）
   ipcMain.handle('invite:save-poster', async (_e, dataUrl: string) => {

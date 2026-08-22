@@ -29,6 +29,17 @@ export default function MainLayout({ children }: { children: ReactNode }) {
 
   useEffect(() => { api.system.getAppVersion().then(setVersion).catch(() => {}); }, []);
 
+  // 运营入口：未充值邀请用户或积分不足时统一打开充值页。
+  useEffect(() => {
+    const openRecharge = () => { void api.system.openRecharge(); };
+    window.addEventListener('quizmate:open-recharge', openRecharge);
+    const offCredits = (window as any).electronAPI?.on?.('out-of-credits', openRecharge);
+    return () => {
+      window.removeEventListener('quizmate:open-recharge', openRecharge);
+      offCredits?.();
+    };
+  }, []);
+
   const acct = profile?.account;
   const credits = profile?.creditBalance ?? acct?.credits ?? 0;
 

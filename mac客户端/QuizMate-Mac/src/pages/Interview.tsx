@@ -188,14 +188,17 @@ export default function Interview() {
     return () => { off?.(); };
   }, []);
 
-  // 启动/关闭面试悬浮窗
-  const toggleOverlay = async () => {
-    if (overlayActive) {
-      await api.interview.closeOverlay();
+  // 一个按钮统一控制面试悬浮窗和实时听写，快捷键走同一 IPC。
+  const toggleInterviewSession = async () => {
+    setError('');
+    try {
+      const result = await api.interview.toggleSession(context);
+      setListening(!!result?.listening);
+      setOverlayActive(!!result?.overlay);
+    } catch (e: any) {
+      setError(e?.message || '启动面试失败');
+      setListening(false);
       setOverlayActive(false);
-    } else {
-      await api.interview.createOverlay();
-      setOverlayActive(true);
     }
   };
 
@@ -369,8 +372,8 @@ export default function Interview() {
             积分余额 <span className="text-amber-400 font-bold">{credits}</span>
             <span className="text-slate-500 ml-2">（每次 AI 作答消耗 20 积分）</span>
           </div>
-          <button onClick={toggleOverlay} className={`btn-outline text-xs ${overlayActive ? 'text-emerald-400 border-emerald-500/50' : ''}`} title="启动/关闭面试悬浮窗">
-            <Monitor size={14} /> {overlayActive ? '悬浮窗已开' : '启动悬浮窗'}
+          <button onClick={toggleInterviewSession} className={`btn-outline text-xs ${listening || overlayActive ? 'text-emerald-400 border-emerald-500/50' : ''}`} title="开始/结束面试：同时控制听写和悬浮窗">
+            <Monitor size={14} /> {listening ? '结束面试' : '开始面试'}
           </button>
         </div>
       </div>
@@ -496,15 +499,9 @@ export default function Interview() {
       {/* 控制台 */}
       <div className="card space-y-3">
         <div className="flex items-center gap-3">
-          {!listening ? (
-            <button data-guide-target="interview-listen" onClick={startListening} className="btn bg-rose-500 hover:bg-rose-600 text-white">
-              <Mic size={16} /> 开始听写
-            </button>
-          ) : (
-            <button data-guide-target="interview-listen" onClick={stopListening} className="btn-outline border-rose-500/50 text-rose-400">
-              <MicOff size={16} /> 停止听写
-            </button>
-          )}
+          <button data-guide-target="interview-listen" onClick={toggleInterviewSession} className={listening ? 'btn-outline border-rose-500/50 text-rose-400' : 'btn bg-rose-500 hover:bg-rose-600 text-white'}>
+            {listening ? <MicOff size={16} /> : <Mic size={16} />} {listening ? '结束面试' : '开始面试'}
+          </button>
           {listening && (
             <div className="flex items-center gap-2 text-sm text-rose-400">
               <span className="relative flex h-2.5 w-2.5">
@@ -620,7 +617,7 @@ export default function Interview() {
           { title: '编辑并保存面试上下文', description: '点击编辑，填写应聘岗位、面试公司、答案风格和岗位描述，然后点击保存。AI 会结合这些信息生成回答。', target: '[data-guide-target="interview-context"]' },
           { title: '粘贴并保存简历', description: '点击新建或编辑，直接粘贴简历文本并保存。自我介绍和项目问题会优先使用简历中的真实经历。', target: '[data-guide-target="interview-resume"]' },
           { title: '启动参考答案悬浮窗', description: '点击“启动悬浮窗”，问题流显示在左侧，当前有效问题的参考答案显示在右侧。', target: '[data-guide-target="interview-overlay"]' },
-          { title: '开始听写', description: `点击“开始听写”，或按 ${shortcutBindings.interview_start || '开始/结束听写快捷键'}。识别到有效问题后会立即调用 AI，非问题内容会标记为跳过。`, target: '[data-guide-target="interview-listen"]' },
+          { title: '开始面试', description: `点击“开始面试”，或按 ${shortcutBindings.interview_start || '开始/结束面试快捷键'}。它会同时打开参考答案悬浮窗并启动听写；再次点击或按快捷键即可同时结束。`, target: '[data-guide-target="interview-listen"]' },
           { title: '切换问题和查看答案', description: `使用 ${shortcutBindings.interview_prev_question || '上一题快捷键'} 和 ${shortcutBindings.interview_next_question || '下一题快捷键'} 在问题流中切换；右侧始终显示当前选中问题的参考答案。`, target: '[data-guide-target="interview-results"]' },
         ] as FeatureGuideStep[]}
         onClose={finishGuide}

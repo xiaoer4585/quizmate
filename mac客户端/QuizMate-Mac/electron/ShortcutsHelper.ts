@@ -6,6 +6,7 @@ import { ConfigHelper } from './ConfigHelper'
 type ActionHandler = (action: ShortcutAction) => void
 
 const voiceModeActions: Set<string> = new Set<string>([
+  'screenshot',
   'search',
   'toggle_visibility',
   'replay',
@@ -46,6 +47,7 @@ export class ShortcutsHelper {
   private testMode: boolean = false
   private testCallback: ((accelerator: string) => void) | null = null
   private activeMode: 'overlay' | 'voice' | 'interview' = 'overlay'
+  private registrationErrorHandler: ((data: { action: string; accelerator: string; mode: string }) => void) | null = null
 
   constructor(configHelper: ConfigHelper) {
     this.configHelper = configHelper
@@ -91,6 +93,10 @@ export class ShortcutsHelper {
 
   public setHandler(handler: ActionHandler): void {
     this.handler = handler
+  }
+
+  public setRegistrationErrorHandler(handler: (data: { action: string; accelerator: string; mode: string }) => void): void {
+    this.registrationErrorHandler = handler
   }
 
   public getBindings(): Record<string, string> {
@@ -160,6 +166,7 @@ export class ShortcutsHelper {
           this.registered.add(accelerator)
         } else {
           console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
+          this.registrationErrorHandler?.({ action, accelerator, mode: this.activeMode })
         }
       } catch (e) {
         console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
@@ -190,6 +197,7 @@ export class ShortcutsHelper {
           this.registered.add(accelerator)
         } else {
           console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
+          this.registrationErrorHandler?.({ action, accelerator, mode })
         }
       } catch (e) {
         console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
