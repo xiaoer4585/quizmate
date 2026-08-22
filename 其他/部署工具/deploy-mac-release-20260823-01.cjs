@@ -10,7 +10,8 @@ const OSS = (() => {
   }
 })();
 
-const VERSION = '2026.8.23.2';
+const VERSION = '2026.8.23.3';
+const UPDATER_VERSION = '2026.8.23003';
 const CHANGE_ID = 'CHG-20260823-02';
 const ROOT = path.resolve(__dirname, '../..');
 const SITE = path.join(ROOT, '官网模块/正式官网-quizmate.vip');
@@ -86,7 +87,7 @@ async function main() {
   const x64 = await digestObject(`mac/QuizMate-Mac-x64-${VERSION}.zip`);
   const releaseDate = new Date().toISOString();
   const manifest = [
-    `version: ${VERSION}`,
+    `version: ${UPDATER_VERSION}`,
     'files:',
     `  - url: QuizMate-Mac-arm64-${VERSION}.zip`,
     `    sha512: ${arm.sha512}`,

@@ -25,7 +25,10 @@ export class UpdateChecker {
   private timer: NodeJS.Timeout | null = null;
   private availableVersion: string | null = null;
 
-  constructor(private getCurrentVersion = () => app.getVersion()) {
+  constructor(
+    private getCurrentVersion = () => app.getVersion(),
+    private getUpdaterVersion = () => app.getVersion(),
+  ) {
     this.current = { status: 'idle', currentVersion: this.getCurrentVersion() };
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = false;
@@ -34,17 +37,18 @@ export class UpdateChecker {
 
     autoUpdater.on('checking-for-update', () => this.set({ status: 'checking' }));
     autoUpdater.on('update-available', (info: UpdateInfo) => {
-      if (!isNewerVersion(info.version, this.getCurrentVersion())) {
+      if (!isNewerVersion(info.version, this.getUpdaterVersion())) {
         this.availableVersion = null;
         this.set({ status: 'not-available', version: undefined, downloadUrl: undefined, message: undefined });
         return;
       }
       this.availableVersion = info.version;
+      const displayVersion = this.toBusinessVersion(info.version);
       this.set({
         status: 'available',
-        version: info.version,
+        version: displayVersion,
         releaseNotes: info.releaseNotes,
-        downloadUrl: this.getDownloadUrl(info.version),
+        downloadUrl: this.getDownloadUrl(displayVersion),
         message: '请下载对应芯片版本并覆盖安装',
       });
     });
@@ -56,10 +60,11 @@ export class UpdateChecker {
       this.set({ status: 'downloading', percent: p.percent, transferred: p.transferred, total: p.total });
     });
     autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+      const displayVersion = this.toBusinessVersion(info.version);
       this.set({
         status: 'available',
-        version: info.version,
-        downloadUrl: this.getDownloadUrl(info.version),
+        version: displayVersion,
+        downloadUrl: this.getDownloadUrl(displayVersion),
         message: '请下载对应芯片版本并覆盖安装',
       });
     });
@@ -94,12 +99,13 @@ export class UpdateChecker {
 
   async downloadUpdate(): Promise<void> {
     if (!app.isPackaged) return;
-    const version = this.availableVersion ?? this.current.version;
-    if (!version || !isNewerVersion(version, this.getCurrentVersion())) {
+    const updaterVersion = this.availableVersion;
+    if (!updaterVersion || !isNewerVersion(updaterVersion, this.getUpdaterVersion())) {
       this.set({ status: 'not-available', version: undefined, downloadUrl: undefined, message: undefined });
       return;
     }
     try {
+      const version = this.toBusinessVersion(updaterVersion);
       const downloadUrl = this.getDownloadUrl(version);
       await shell.openExternal(downloadUrl);
       this.set({ status: 'available', version, downloadUrl, message: '安装包已在浏览器中打开，下载后请覆盖安装' });
@@ -137,6 +143,17 @@ export class UpdateChecker {
       ? `QuizMate-Mac-Apple-Silicon-${safeVersion}.dmg`
       : `QuizMate-Mac-Intel-${safeVersion}.dmg`;
     return `https://quizmate.cn/downloads/${filename}`;
+  }
+
+  private toBusinessVersion(version: string): string {
+    const parts = version.split('.');
+    const encodedDay = Number(parts[2]);
+    if (parts.length === 3 && Number.isInteger(encodedDay) && encodedDay >= 1000) {
+      const day = Math.floor(encodedDay / 1000);
+      const revision = encodedDay % 1000;
+      return `${parts[0]}.${parts[1]}.${day}.${revision}`;
+    }
+    return version;
   }
 
   private isNetworkError(msg: string): boolean {

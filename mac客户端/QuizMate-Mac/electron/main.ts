@@ -1173,7 +1173,10 @@ async function initializeApp(): Promise<void> {
   interviewHelper = new InterviewHelper(configHelper, authManager, overlayAdapter as unknown as OverlayManager, ttsHelper, byteDanceTtsHelper, realtimeVoiceHelper);
   ctx.interview = interviewHelper;
 
-  updateChecker = new UpdateChecker(() => configHelper.getAppConfig().version || app.getVersion());
+  updateChecker = new UpdateChecker(
+    () => configHelper.getAppConfig().version || app.getVersion(),
+    () => app.getVersion(),
+  );
   ctx.updateChecker = updateChecker;
 
   // 定期同步 processingHelper 的窗口引用，避免事件丢失
