@@ -1,7 +1,7 @@
 {
   "name": "quizmate",
   "productName": "QuizMate",
-  "version": "2026.8.21",
+  "version": "2026.8.25",
   "description": "QuizMate Windows 客户端 - 笔试与面试实时辅助",
   "main": "out/main/index.js",
   "author": {
@@ -15,7 +15,7 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "package:win": "electron-vite build && electron-builder --win --x64",
+    "package:win": "electron-vite build && electron-builder --win --ia32",
     "verify:win-package": "node scripts/verify-packaged-app.cjs release/win-unpacked",
     "package:store": "electron-vite build && electron-builder --win appx --x64",
     "typecheck:node": "tsc --noEmit -p tsconfig.node.json",

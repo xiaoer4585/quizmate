@@ -1,6 +1,7 @@
-// 生成 icon.ico 文件 - Q字图标
+// 生成 icon.ico 与 AppX 图标资源 - Q 字图标
 const fs = require('fs');
 const path = require('path');
+const { PNG } = require('pngjs');
 
 // 生成256x256的BMP数据（ICO格式包含BMP）
 const size = 256;
@@ -101,3 +102,79 @@ for (let y = size - 1; y >= 0; y--) {
 const outputPath = path.join(__dirname, 'icon.ico');
 fs.writeFileSync(outputPath, buffer);
 console.log('icon.ico generated:', outputPath, 'size:', buffer.length);
+
+function sampleIconPixel(x, y, size) {
+  const margin = Math.max(4, Math.round(size * 0.1875));
+  const rectMax = size - margin - 1;
+  const cx = size / 2;
+  const cy = size / 2;
+  const dx = Math.max(margin - x, 0, x - rectMax);
+  const dy = Math.max(margin - y, 0, y - rectMax);
+  const cornerRadius = Math.max(6, Math.round(size * 0.1875));
+  const alpha = Math.sqrt(dx * dx + dy * dy) > cornerRadius ? 0 : 255;
+
+  const dx2 = x - cx;
+  const dy2 = y - cy;
+  const radius = Math.sqrt(dx2 * dx2 + dy2 * dy2);
+  const outerR = size * 0.293;
+  const innerR = size * 0.215;
+  const inQRing = radius >= innerR && radius <= outerR;
+  const tailStartX = cx + size * 0.165;
+  const tailStartY = cy + size * 0.145;
+  const tailEndX = cx + size * 0.352;
+  const tailEndY = cy + size * 0.332;
+  const tailDx = tailEndX - tailStartX;
+  const tailDy = tailEndY - tailStartY;
+  const tailLenSq = tailDx * tailDx + tailDy * tailDy;
+  const tailT = Math.max(0, Math.min(1, ((x - tailStartX) * tailDx + (y - tailStartY) * tailDy) / tailLenSq));
+  const nearestX = tailStartX + tailT * tailDx;
+  const nearestY = tailStartY + tailT * tailDy;
+  const tailDistance = Math.sqrt((x - nearestX) ** 2 + (y - nearestY) ** 2);
+  const inTail = tailDistance <= size * 0.05;
+  const inHole = radius < size * 0.176;
+  const isWhite = (inQRing || inTail) && !inHole;
+
+  if (isWhite) return { r: 255, g: 255, b: 255, a: alpha };
+  return { r: 34, g: 104, b: 223, a: alpha };
+}
+
+function writePng(filePath, width, height, draw) {
+  const png = new PNG({ width, height });
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const pixel = draw(x, y, width, height);
+      const i = (width * y + x) << 2;
+      png.data[i] = pixel.r;
+      png.data[i + 1] = pixel.g;
+      png.data[i + 2] = pixel.b;
+      png.data[i + 3] = pixel.a;
+    }
+  }
+  fs.writeFileSync(filePath, PNG.sync.write(png));
+  console.log('png generated:', filePath, `${width}x${height}`);
+}
+
+function writeSquareLogo(filePath, size) {
+  writePng(filePath, size, size, (x, y) => sampleIconPixel(x, y, size));
+}
+
+function writeWideLogo(filePath, width, height) {
+  const iconSize = Math.round(height * 0.72);
+  const iconX = Math.round(height * 0.18);
+  const iconY = Math.round((height - iconSize) / 2);
+  writePng(filePath, width, height, (x, y) => {
+    if (x >= iconX && x < iconX + iconSize && y >= iconY && y < iconY + iconSize) {
+      return sampleIconPixel(x - iconX, y - iconY, iconSize);
+    }
+    return { r: 34, g: 104, b: 223, a: 255 };
+  });
+}
+
+const appxDir = path.join(__dirname, 'appx');
+fs.mkdirSync(appxDir, { recursive: true });
+writeSquareLogo(path.join(appxDir, 'StoreLogo.png'), 50);
+writeSquareLogo(path.join(appxDir, 'Square44x44Logo.png'), 44);
+writeSquareLogo(path.join(appxDir, 'Square150x150Logo.png'), 150);
+writeWideLogo(path.join(appxDir, 'Wide310x150Logo.png'), 310, 150);
+writeSquareLogo(path.join(appxDir, 'LargeTile.png'), 310);
+writeSquareLogo(path.join(appxDir, 'SmallTile.png'), 71);

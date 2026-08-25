@@ -81,6 +81,9 @@ export function isLikelyInterviewQuestion(text: string, audioMode: 'demo' | 'for
   const interviewTopic = /(?:看法|理解|原因|规划|期望|优势|缺点|挑战|困难|收获|职责|经验|项目|场景|原理|流程|步骤|方案)$/
   if (interviewTopic.test(value.replace(/[，。！？、,.!?；;：:\s]/g, ''))) return true
 
-  // Formal mode only receives speaker audio, so substantive interviewer utterances can be handled more permissively.
-  return audioMode === 'formal' && value.replace(/[，。！？、,.!?；;：:\s]/g, '').length >= 8
+  // CHG-20260822-05：
+  // - 演示模式（demo）几乎所有非 filler 文本都作为问题输入（麦克风+扬声器都进入 AI 回答）
+  // - 正式面试模式（formal）只采集扬声器，做宽松兜底即可
+  if (audioMode === 'demo') return value.length >= 4
+  return value.replace(/[，。！？、,.!?；;：:\s]/g, '').length >= 8
 }

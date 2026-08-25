@@ -24,6 +24,7 @@ appx:
   publisherDisplayName: quizmate国内领先笔试面试助手平台
   applicationId: QuizMate
   displayName: QuizMate 求职助手
+  backgroundColor: '#2268df'
   artifactName: QuizMate-Store-${version}-${arch}.${ext}
 nsis:
   oneClick: false
@@ -39,5 +40,7 @@ nsis:
   include: resources/installer.nsh
 publish:
   provider: generic
-  # Keep the updater on the TLS-verified compatibility endpoint used by existing clients.
-  url: https://update.quizmate.vip/suite/
+  # The update base URL is injected at packaging time from QUIZMATE_UPDATE_BASE_URL.
+  # Deploy scripts must keep this aligned with the OSS bucket that hosts /suite/.
+  # Default: official https://quizmate.cn/suite/ (the production Windows bucket).
+  url: ${env.QUIZMATE_UPDATE_BASE_URL}/suite/

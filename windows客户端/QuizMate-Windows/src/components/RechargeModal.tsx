@@ -1,9 +1,9 @@
 // 充值弹窗 - 通过账户后端创建订单并完成积分结算
 import { useEffect, useState } from 'react';
-import { X, Wallet, Zap, Check, ArrowLeft, RotateCw, AlertCircle } from 'lucide-react';
-import { useProfile } from '../lib/ipc';
+import { X, Wallet, Zap, Check, ArrowLeft, RotateCw, AlertCircle, Users, Gift, ArrowRight } from 'lucide-react';
+import { api, useProfile } from '../lib/ipc';
 
-const api = (window as any).api;
+const ipcApi = (typeof window !== 'undefined' ? (window as any).api : null);
 
 interface Package {
   id: string;
@@ -24,7 +24,7 @@ const PACKAGES: Package[] = [
 ];
 
 type PayMethod = 'alipay' | 'wechat';
-type Step = 'select' | 'pay' | 'qrcode' | 'error';
+type Step = 'select' | 'pay' | 'qrcode' | 'success' | 'error';
 
 interface Props {
   open: boolean;
@@ -33,7 +33,10 @@ interface Props {
 
 export default function RechargeModal({ open, onClose }: Props) {
   const { data: profile, refetch } = useProfile();
-  const [selected, setSelected] = useState<Package | null>(null);
+  // CHG-20260822-05：默认选中推荐包（笔面试实战包），立即显示「确认支付」按钮
+  const [selected, setSelected] = useState<Package | null>(
+    PACKAGES.find(p => p.recommended) || PACKAGES[0] || null
+  );
   const [step, setStep] = useState<Step>('select');
   const [payMethod, setPayMethod] = useState<PayMethod | null>(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -42,6 +45,8 @@ export default function RechargeModal({ open, onClose }: Props) {
   const [outTradeNo, setOutTradeNo] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  // 充值成功后展示「立即邀请」入口（仅当后端返回 hasRecharged=true 时启用）
+  const [paidEntry, setPaidEntry] = useState<{ inviteCode: string; inviteLink: string } | null>(null);
 
   const acct = profile?.account;
   const credits = profile?.creditBalance ?? acct?.credits ?? 0;
@@ -56,6 +61,7 @@ export default function RechargeModal({ open, onClose }: Props) {
     setOutTradeNo('');
     setError('');
     setLoading(false);
+    setPaidEntry(null);
     onClose();
   };
 
@@ -90,6 +96,23 @@ export default function RechargeModal({ open, onClose }: Props) {
     }
   };
 
+  // 查单成功后拉一次邀请总览：若后端判定该账户「已充值」，则在弹窗关闭前展示邀请入口
+  const fetchInviteEntryIfEligible = async () => {
+    try {
+      const ov = await api.invite.getOverview();
+      if (ov?.success && ov.overview?.hasRecharged && ov.overview?.inviteCode) {
+        setPaidEntry({
+          inviteCode: ov.overview.inviteCode,
+          inviteLink: ov.overview.inviteLink || '',
+        });
+        return true;
+      }
+    } catch {
+      // ignore - 不影响正常支付完成流程
+    }
+    return false;
+  };
+
   useEffect(() => {
     if (step !== 'qrcode' || !outTradeNo) return;
     let stopped = false;
@@ -99,7 +122,14 @@ export default function RechargeModal({ open, onClose }: Props) {
         if (stopped || result?.order?.status !== 'paid') return;
         window.clearInterval(timer);
         await refetch();
-        resetAndClose();
+        const eligible = await fetchInviteEntryIfEligible();
+        if (!eligible) {
+          // 未充值或拉取失败：直接关闭弹窗
+          resetAndClose();
+        } else {
+          // 切到「success」步骤让用户看到邀请入口；用户可点击「立即邀请」或「完成」
+          setStep('success');
+        }
       } catch {
         // 短暂查单失败时保留二维码，下一个周期继续补偿查询。
       }
@@ -110,6 +140,11 @@ export default function RechargeModal({ open, onClose }: Props) {
   if (!open) return null;
 
   const handleBack = () => {
+    if (step === 'success') {
+      // 支付已完成，没有可回退的步骤；直接关闭
+      resetAndClose();
+      return;
+    }
     if (step === 'qrcode' || step === 'error') {
       setStep('pay');
       setPayMethod(null);
@@ -132,10 +167,28 @@ export default function RechargeModal({ open, onClose }: Props) {
         return;
       }
       await refetch();
-      resetAndClose();
+      const eligible = await fetchInviteEntryIfEligible();
+      if (!eligible) {
+        resetAndClose();
+      } else {
+        setStep('success');
+      }
     } finally {
       setRefreshing(false);
     }
+  };
+
+  const handleInviteNow = async () => {
+    // 复制邀请码 + 关闭弹窗 + 通知 MainLayout 切换到邀请代理面板
+    try {
+      if (paidEntry?.inviteCode) {
+        await navigator.clipboard.writeText(paidEntry.inviteCode).catch(() => {});
+      }
+    } catch {
+      // ignore
+    }
+    window.dispatchEvent(new CustomEvent('quizmate:open-invite-panel'));
+    resetAndClose();
   };
 
   return (
@@ -297,6 +350,36 @@ export default function RechargeModal({ open, onClose }: Props) {
             <button onClick={handleBack} className="btn-outline text-sm">
               返回重新选择
             </button>
+          </div>
+        )}
+
+        {/* 步骤四：充值成功，邀请入口 */}
+        {step === 'success' && paidEntry && (
+          <div className="py-5 flex flex-col items-center text-center">
+            <div className="w-12 h-12 rounded-full bg-emerald-500/15 flex items-center justify-center mb-3">
+              <Check size={24} className="text-emerald-400" />
+            </div>
+            <h3 className="text-base font-semibold text-slate-100 mb-1">支付成功，积分已到账</h3>
+            <p className="text-xs text-slate-400 mb-5">每邀请 1 位好友注册，双方各得 20 积分；被邀请人充值你拿 5% 返现，邀满 10 位已充值好友赠 笔面试上岸包，邀满 20 位再赠 无忧包。</p>
+
+            <div className="w-full max-w-sm rounded-xl border border-amber-500/40 bg-gradient-to-br from-amber-500/10 to-orange-500/5 p-4 mb-4">
+              <div className="flex items-center justify-center gap-1.5 text-xs text-amber-300 mb-2">
+                <Gift size={14} /> 你的邀请码
+              </div>
+              <div className="text-2xl font-mono font-bold text-amber-300 tracking-widest mb-2 select-all">
+                {paidEntry.inviteCode}
+              </div>
+              <div className="text-[11px] text-slate-400 break-all">
+                {paidEntry.inviteLink}
+              </div>
+            </div>
+
+            <div className="flex gap-2 w-full max-w-sm">
+              <button onClick={handleInviteNow} className="btn-primary flex-1">
+                <Users size={14} /> 立即邀请 <ArrowRight size={14} />
+              </button>
+              <button onClick={resetAndClose} className="btn-outline flex-1">完成</button>
+            </div>
           </div>
         )}
 

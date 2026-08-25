@@ -3,7 +3,7 @@ import QueueView from '../components/exam/QueueView'
 import SolutionsView from '../components/exam/SolutionsView'
 import RawOutputView from '../components/exam/RawOutputView'
 import { useTheme } from '../contexts/ThemeContext'
-import { Camera, CheckCircle2, CircleAlert, Copy, Loader2, Search, Sparkles, type LucideIcon } from 'lucide-react'
+import { Camera, CheckCircle2, CircleAlert, Loader2, Sparkles } from 'lucide-react'
 
 // 笔试悬浮窗透明背景样式（防止 body 的 bg-slate-950 导致黑屏）
 function ExamOverlayStyles() {
@@ -15,41 +15,11 @@ function ExamOverlayStyles() {
   )
 }
 
-// 头部操作按钮：填空/输入题场景下，考试输入框或中文输入法可能拦截全局快捷键
-// （Alt+Q / Alt+E 按下无反应），这里提供不依赖键盘的鼠标点击兜底。
-// 悬停时临时解除悬浮窗鼠标穿透以便接收点击，移开后立即恢复穿透；
-// 窗口移动/缩放/显隐/截图流程在主进程侧也会复位穿透，避免悬浮窗遮挡考试页面。
-function OverlayActionButton({
-  icon: Icon,
-  label,
-  shortcut,
-  onClick,
-}: {
-  icon: LucideIcon
-  label: string
-  shortcut?: string
-  onClick: () => void
-}) {
-  const electronApi = (window as any).electronAPI
-  return (
-    <button
-      type="button"
-      title={shortcut ? `${label}（快捷键 ${shortcut}）` : label}
-      className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10 hover:bg-cyan-500/25 hover:text-cyan-300 transition-colors cursor-pointer text-[9px] font-medium opacity-80 hover:opacity-100"
-      style={{ pointerEvents: 'auto' }}
-      onMouseEnter={() => electronApi?.window?.setIgnoreMouseEvents?.(false)}
-      onMouseLeave={() => electronApi?.window?.setIgnoreMouseEvents?.(true)}
-      onClick={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        onClick()
-      }}
-    >
-      <Icon size={9} />
-      <span>{label}</span>
-    </button>
-  )
-}
+// 悬浮窗纯鼠标穿透说明:
+// 2026.8.25 起移除头部"截图/搜题/复制"鼠标兜底按钮(hover 临时解除穿透的机制存在
+// 卡在"可点击"状态、遮挡考试页面的风险)。快捷键被考试输入框/输入法拦截时,
+// 可使用托盘菜单的"全屏截图/搜题"兜底入口。
+// 窗口级 setIgnoreMouseEvents(true, {forward:true}) 由主进程设置并全程保持。
 
 type View = 'queue' | 'solutions' | 'raw-output'
 type Status = 'idle' | 'processing' | 'completed' | 'error'
@@ -59,9 +29,16 @@ interface Screenshot {
   isExtra?: boolean
 }
 
+function formatErrorMessage(data: any, fallback: string): string {
+  const message = String(data?.error || fallback).trim()
+  const code = String(data?.code || '').trim()
+  const stage = String(data?.stage || '').trim()
+  const suffix = [code && `错误码 ${code}`, stage && `阶段 ${stage}`].filter(Boolean).join(' · ')
+  return suffix ? `${message}\n${suffix}` : message
+}
+
 export default function OverlayPage() {
   const api = (window as any).electronAPI
-  const appApi = (window as any).api
   const { theme } = useTheme()
   const [view, setView] = useState<View>('queue')
   const [status, setStatus] = useState<Status>('idle')
@@ -144,7 +121,7 @@ export default function OverlayPage() {
     }))
 
     unsubs.push(api?.on('screenshot-error', (data: any) => {
-      setErrorMessage(data.error || '截图失败')
+      setErrorMessage(formatErrorMessage(data, '截图失败'))
       setStatus('error')
     }))
 
@@ -197,29 +174,27 @@ export default function OverlayPage() {
 
     unsubs.push(api?.on('solution-stream-error', (data: any) => {
       setStatus('error')
-      setErrorMessage(data.error || '处理失败')
-      // Refund credits on error
-      api?.credits.refund(1).catch(() => {})
+      setErrorMessage(formatErrorMessage(data, '处理失败'))
     }))
 
     unsubs.push(api?.on('solution-error', (data: any) => {
       setStatus('error')
-      setErrorMessage(data.error || '处理失败')
+      setErrorMessage(formatErrorMessage(data, '处理失败'))
     }))
 
-    unsubs.push(api?.on('processing-unauthorized', () => {
+    unsubs.push(api?.on('processing-unauthorized', (data: any) => {
       setStatus('error')
-      setErrorMessage('登录已过期，请重新登录')
+      setErrorMessage(formatErrorMessage(data, '登录已过期，请重新登录'))
     }))
 
-    unsubs.push(api?.on('processing-no-screenshots', () => {
+    unsubs.push(api?.on('processing-no-screenshots', (data: any) => {
       setView('queue')
-      setErrorMessage('请先截图')
+      setErrorMessage(formatErrorMessage(data, '请先截图'))
     }))
 
-    unsubs.push(api?.on('out-of-credits', () => {
+    unsubs.push(api?.on('out-of-credits', (data: any) => {
       setStatus('error')
-      setErrorMessage('积分不足，请充值')
+      setErrorMessage(formatErrorMessage(data, '积分不足，请充值'))
     }))
 
     unsubs.push(api?.on('background-opacity-changed', (opacity: number) => {
@@ -309,14 +284,6 @@ export default function OverlayPage() {
         ? CircleAlert
         : Camera
 
-  // Build action buttons for header - mouse fallback when hotkeys are swallowed
-  // by the exam input box / IME (fill-in-blank & input question scenarios)
-  const headerActions: Array<{ icon: LucideIcon; label: string; shortcut?: string; onClick: () => void }> = [
-    { icon: Camera, label: '截图', shortcut: shortcutBindings.screenshot, onClick: () => { void appApi?.exam?.screenshot?.() } },
-    { icon: Search, label: '搜题', shortcut: shortcutBindings.search, onClick: () => { void appApi?.exam?.search?.() } },
-    { icon: Copy, label: '复制', shortcut: shortcutBindings.copy_content, onClick: () => { void handleCopyContent() } },
-  ]
-
   return (
     <div className="w-full h-full p-1.5" style={{ background: 'transparent', pointerEvents: 'none' }}>
       <ExamOverlayStyles />
@@ -342,17 +309,6 @@ export default function OverlayPage() {
           <div className={`flex items-center gap-1.5 text-[10px] font-medium ${status === 'error' ? 'text-red-400' : status === 'completed' ? 'text-emerald-400' : status === 'processing' ? 'text-cyan-400' : 'opacity-60'}`}>
             <StatusIcon size={12} className={status === 'processing' ? 'animate-spin' : ''} />
             <span className="max-w-44 truncate">{statusLabel}</span>
-          </div>
-          <div className="flex items-center gap-1 shrink-0">
-            {headerActions.map((action) => (
-              <OverlayActionButton
-                key={action.label}
-                icon={action.icon}
-                label={action.label}
-                shortcut={action.shortcut}
-                onClick={action.onClick}
-              />
-            ))}
           </div>
         </header>
 

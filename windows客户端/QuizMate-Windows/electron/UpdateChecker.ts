@@ -3,6 +3,9 @@
 // electron-updater 读取 Windows latest.yml 并下载匹配的 NSIS 安装包。
 import { app, BrowserWindow } from 'electron';
 import { createRequire } from 'module';
+import * as https from 'https';
+import * as http from 'http';
+import { URL } from 'url';
 const require = createRequire(import.meta.url);
 const electronUpdater = require('electron-updater');
 const { autoUpdater } = electronUpdater;
@@ -95,6 +98,22 @@ export class UpdateChecker {
       // 已下载完成，无需重复检测
       return this.current;
     }
+    // 预短路：先 GET yml 远端 version，若与本地一致则直接 not-available，
+    // 防止「刚装完又提示下载同一版本」的问题。
+    const localVersion = app.getVersion();
+    try {
+      const remoteVersion = await this.fetchRemoteVersion();
+      if (remoteVersion && this.compareVersions(remoteVersion, localVersion) <= 0) {
+        this.set({ status: 'not-available', version: remoteVersion });
+        return this.current;
+      }
+    } catch (e) {
+      // 预读失败时不要阻塞主流程，让 electron-updater 自己再试一次。
+      const msg = e instanceof Error ? e.message : String(e);
+      if (!this.isNetworkError(msg)) {
+        console.warn('[UpdateChecker] remote version precheck failed:', msg);
+      }
+    }
     try {
       await autoUpdater.checkForUpdates();
     } catch (e) {
@@ -106,6 +125,104 @@ export class UpdateChecker {
       }
     }
     return this.current;
+  }
+
+  /**
+   * 直接 GET suite/latest.yml（与 electron-updater 同源），从文本里抠出 version 字段。
+   * 该函数不依赖 electron-updater，因此即便 app-update.yml 指向的是旧域名，
+   * 也能用它来对比远端最新版本，避免误触发自更新。
+   */
+  private async fetchRemoteVersion(): Promise<string | null> {
+    const url = this.resolveLatestYmlUrl();
+    const text = await this.httpGetText(url, 8000);
+    if (!text) return null;
+    const match = text.match(/^\s*version:\s*(\S+)\s*$/m);
+    return match ? match[1] : null;
+  }
+
+  /**
+   * 计算 update base url：优先用 app-update.yml 里声明的 url（与 electron-updater 一致），
+   * 兜底用 autoUpdater 自身的 feedURL。两条都取不到时回退到官方域名。
+   */
+  private resolveLatestYmlUrl(): string {
+    let base = '';
+    try {
+      const declared = (autoUpdater as unknown as { feedURL?: string }).feedURL;
+      if (declared) base = declared.replace(/\/+$/, '');
+    } catch {
+      // ignore
+    }
+    if (!base) {
+      try {
+        const setter = autoUpdater as unknown as { setFeedURL?: (u: string) => void; getFeedURL?: () => string };
+        if (typeof setter.getFeedURL === 'function') base = setter.getFeedURL().replace(/\/+$/, '');
+      } catch {
+        // ignore
+      }
+    }
+    if (!base) base = 'https://quizmate.cn/suite';
+    return `${base}/latest.yml`;
+  }
+
+  private httpGetText(rawUrl: string, timeoutMs: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      let url: URL;
+      try {
+        url = new URL(rawUrl);
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      const lib: typeof http | typeof https = url.protocol === 'http:' ? http : https;
+      const req = lib.get(
+        url,
+        {
+          timeout: timeoutMs,
+          headers: {
+            'User-Agent': `QuizMate-Updater/${app.getVersion()}`,
+            Accept: 'text/yaml, text/plain, */*',
+          },
+        },
+        (res: import('http').IncomingMessage) => {
+          const status = res.statusCode || 0;
+          if (status >= 300 && status < 400 && res.headers.location) {
+            // 跟随一次重定向
+            res.resume();
+            this.httpGetText(new URL(res.headers.location, url).toString(), timeoutMs).then(resolve, reject);
+            return;
+          }
+          if (status !== 200) {
+            res.resume();
+            reject(new Error(`HTTP ${status} ${rawUrl}`));
+            return;
+          }
+          const chunks: Buffer[] = [];
+          res.on('data', (chunk: Buffer) => chunks.push(chunk));
+          res.on('end', () => resolve(Buffer.concat(chunks as Uint8Array[]).toString('utf8')));
+          res.on('error', reject);
+        }
+      );
+      req.on('timeout', () => {
+        req.destroy(new Error(`timeout after ${timeoutMs}ms: ${rawUrl}`));
+      });
+      req.on('error', reject);
+    });
+  }
+
+  /**
+   * 简单 semver-ish 比较：返回负数表示 a<b，0 表示相等，正数表示 a>b。
+   * 仅支持形如 2026.8.23 的纯数字分段。
+   */
+  private compareVersions(a: string, b: string): number {
+    const pa = a.split('.').map((n) => parseInt(n, 10));
+    const pb = b.split('.').map((n) => parseInt(n, 10));
+    const len = Math.max(pa.length, pb.length);
+    for (let i = 0; i < len; i++) {
+      const na = Number.isFinite(pa[i]) ? pa[i] : 0;
+      const nb = Number.isFinite(pb[i]) ? pb[i] : 0;
+      if (na !== nb) return na - nb;
+    }
+    return 0;
   }
 
   /** 下载更新包（平台对应的安装包由 electron-updater 自动选择） */
