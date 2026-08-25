@@ -13,6 +13,7 @@ on:
 
 permissions:
   contents: read
+  actions: write
 
 jobs:
   build:
@@ -110,6 +111,18 @@ jobs:
           echo "exe=$EXE" >> "$GITHUB_OUTPUT"
           echo "blockmap=$BLOCKMAP" >> "$GITHUB_OUTPUT"
 
+      - name: Clean old Windows build artifacts (free storage quota)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.name | startswith("QuizMate-Windows-ia32")) | .id' \
+            | while read -r id; do
+                [ -n "$id" ] && gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true
+              done
+          echo "old Windows artifacts cleaned"
+
       - name: Upload Actions artifact
         uses: actions/upload-artifact@v4
         with:
@@ -122,7 +135,7 @@ jobs:
             windows客户端/QuizMate-Windows/sha256.txt
             windows客户端/QuizMate-Windows/build.log
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 3
 
       - name: Upload diagnostic log on failure
         if: failure()
