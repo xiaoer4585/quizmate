@@ -5,6 +5,11 @@ name: Build QuizMate Windows
 # 兼容 Win10 及以上系统（Electron 31 起不支持 Win7/8）。
 on:
   workflow_dispatch:
+  push:
+    branches:
+      - windows-build-*
+    tags:
+      - windows-build-*
 
 permissions:
   contents: read
