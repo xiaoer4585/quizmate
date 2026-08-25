@@ -12,8 +12,7 @@ on:
       - windows-build-*
 
 permissions:
-  contents: read
-  actions: write
+  contents: write
 
 jobs:
   build:
@@ -111,37 +110,27 @@ jobs:
           echo "exe=$EXE" >> "$GITHUB_OUTPUT"
           echo "blockmap=$BLOCKMAP" >> "$GITHUB_OUTPUT"
 
-      - name: Clean old Windows build artifacts (free storage quota)
+      - name: Create draft GitHub Release with installer
+        # 用 Release 资产承载产物：不占 Actions 存储配额、不会过期（Actions artifact 配额有限且回收慢）
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
         run: |
-          gh api "repos/${{ github.repository }}/actions/artifacts?per_page=100" \
-            --jq '.artifacts[] | select(.name | startswith("QuizMate-Windows-ia32")) | .id' \
-            | while read -r id; do
-                [ -n "$id" ] && gh api -X DELETE "repos/${{ github.repository }}/actions/artifacts/$id" || true
-              done
-          echo "old Windows artifacts cleaned"
-
-      - name: Upload Actions artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: QuizMate-Windows-ia32-${{ github.run_number }}
-          path: |
-            windows客户端/QuizMate-Windows/release/QuizMate-Windows-*.exe
-            windows客户端/QuizMate-Windows/release/QuizMate-Windows-*.exe.blockmap
-            windows客户端/QuizMate-Windows/release/latest.yml
-            windows客户端/QuizMate-Windows/release/win-unpacked/resources/app-update.yml
-            windows客户端/QuizMate-Windows/sha256.txt
-            windows客户端/QuizMate-Windows/build.log
-          if-no-files-found: error
-          retention-days: 3
-
-      - name: Upload diagnostic log on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: QuizMate-Windows-ia32-${{ github.run_number }}-failed-log
-          path: windows客户端/QuizMate-Windows/build.log
-          if-no-files-found: ignore
-          retention-days: 14
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          case "$TAG" in
+            windows-build-*) ;;
+            *) TAG="windows-build-manual-${{ github.run_number }}" ;;
+          esac
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --draft \
+            --title "QuizMate Windows ia32 ${TAG}" \
+            --notes "ia32 通用安装包（单个安装包兼容 x64 与 32 位 Windows，兼容 Win10+）。SHA-256 见 sha256.txt。产物用于本地验证后走 releases/ 目录 + 部署脚本发布。" \
+            "${{ steps.artifact.outputs.exe }}" \
+            "${{ steps.artifact.outputs.blockmap }}" \
+            release/latest.yml \
+            release/win-unpacked/resources/app-update.yml \
+            sha256.txt \
+            build.log
+          echo "draft release created: $TAG"
