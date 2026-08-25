@@ -1,8 +1,8 @@
-const CREDIT_API_ENDPOINT = "https://api.quizmate.vip/study-auth-api";
+const CREDIT_API_ENDPOINT = window.QUIZMATE_CREDIT_API_ENDPOINT || "https://api.quizmate.vip/study-auth-api";
 const CREDIT_STORAGE_KEY = "quizmate_credit_account";
 const ACTIVE_ORDER_STORAGE_KEY = "quizmate_active_credit_order";
 const CODE_COOLDOWN_PREFIX = "quizmate_code_cooldown";
-const EARLY_BIRD_DEADLINE = new Date("2026-08-31T23:59:59+08:00").getTime();
+const EARLY_BIRD_DEADLINE = new Date("2026-09-30T23:59:59+08:00").getTime();
 // 轮询间隔与失败上限：前端轮询每 3 秒一次，连续 5 次失败转为异常态并停止轮询
 const POLL_INTERVAL_MS = 3000;
 const POLL_MAX_FAIL = 5;
@@ -540,8 +540,8 @@ function stopCountdown() {
 function startEarlyBirdCountdown() {
   stopEarlyBirdCountdown();
   const render = () => {
-    const nodes = document.querySelectorAll("[data-aug-promo-countdown]");
-    const deadlineNodes = document.querySelectorAll("[data-aug-promo-deadline]");
+    const nodes = document.querySelectorAll("[data-early-bird-countdown]");
+    const deadlineNodes = document.querySelectorAll("[data-early-bird-deadline]");
     if (!nodes.length && !deadlineNodes.length) {
       stopEarlyBirdCountdown();
       return;
@@ -568,7 +568,7 @@ function startEarlyBirdCountdown() {
       node.classList.toggle("is-expired", expired);
     });
     deadlineNodes.forEach((node) => {
-      node.textContent = expired ? "优惠已结束" : "2026-08-31 23:59";
+      node.textContent = expired ? "优惠已结束" : "2026-09-30 23:59";
     });
 
     if (expired) {
@@ -1014,6 +1014,11 @@ async function loadReferralOverview() {
   section.innerHTML = `<div class="referral-overview-loading">加载中...</div>`;
   try {
     const data = await creditApi("getReferralOverview", { accountToken: accountState.token });
+    if (accountState?.account && Number.isFinite(Number(data.creditBalance))) {
+      accountState.account.credits = Number(data.creditBalance);
+      saveCreditState(accountState);
+      updateAccountView();
+    }
     referralState.overview = data;
     renderReferralOverview(data);
   } catch (error) {
@@ -1029,13 +1034,48 @@ function renderReferralOverview(data) {
   const shareText = `我发现一个很神奇的不切屏、不截屏、后台无法捕获的答题悬浮球助手，效果非常惊艳。注册时填邀请码 ${inviteCode} 可额外获得积分，快来看看吧！${inviteLink}`;
   const stats = data.stats || {};
   const commission = data.commission || {};
-  const pendingAmount = Number(commission.pending || 0);
+  const pendingAmount = Number(commission.pendingAmount ?? commission.pending ?? 0);
+  const clearedAmount = Number(commission.clearedAmount ?? commission.cleared ?? commission.settled ?? 0);
+  const totalAmount = Number(commission.totalAmount ?? (pendingAmount + clearedAmount));
   const canWithdraw = pendingAmount >= 50;
+  // 阶梯奖励数据（来自后端 buildTierProgress）
+  const tiered = data.tieredBonus || { rechargedCount: 0, tiers: [], currentTier: null, nextTier: null };
+  const tiers = Array.isArray(tiered.tiers) ? tiered.tiers : [];
+  const rechargedCount = Number(tiered.rechargedCount || 0);
+  const tierCardsHtml = tiers.length
+    ? tiers.map((tier) => {
+        const achieved = Boolean(tier.achieved);
+        const pkgName = tier.tierPackageId === 'pro' ? '笔面试上岸包' : tier.tierPackageId === 'unlimited' ? '无忧包' : '神秘礼包';
+        return `
+          <div class="referral-tier-card ${achieved ? 'is-achieved' : ''}">
+            <div class="referral-tier-card-count">${formatNumber(tier.invitedRechargedCount)}<span class="referral-tier-card-unit">位</span></div>
+            <div class="referral-tier-card-badge">${escapeHtml(tier.badge || '')}</div>
+            <div class="referral-tier-card-desc">${escapeHtml(tier.description || '')}</div>
+            <div class="referral-tier-card-pkg">赠 ${escapeHtml(pkgName)}</div>
+            <div class="referral-tier-card-status">${achieved ? '✓ 已达成' : '未达成'}</div>
+          </div>
+        `;
+      }).join('')
+    : '';
+  const nextTierHtml = tiered.nextTier
+    ? `再邀请 <strong>${formatNumber(tiered.nextTier.invitedRechargedCount - rechargedCount)}</strong> 位好友成功充值，赠送 <strong>${tiered.nextTier.tierPackageId === 'unlimited' ? '无忧包' : '笔面试上岸包'}</strong>`
+    : '已达成所有阶梯奖励，感谢你的分享！';
   section.innerHTML = `
     <div class="referral-promo-box">
       <div class="referral-promo-hero">
         <h3>邀请好友，双方各得 20 积分</h3>
         <p>不截屏 · 不切屏 · 后台无法捕获，注册即得积分</p>
+        <p class="referral-promo-tier-summary">邀满 <b>10 位</b>已充值好友，赠 <b>笔面试上岸包</b>；邀满 <b>20 位</b>再赠 <b>无忧包</b>，陪伴你成功上岸。</p>
+        <p class="referral-promo-tier-summary">邀请好友充值，邀请人拿 <b>5%</b> 提成，提成按好友实际充值金额累计。</p>
+      </div>
+      <div class="referral-tier-board" data-referral-tier-board>
+        <div class="referral-tier-board-header">
+          <div>
+            <div class="referral-tier-board-title">重磅更新 · 阶梯邀请奖励</div>
+            <div class="referral-tier-board-subtitle">累计已邀请 <strong>${formatNumber(rechargedCount)}</strong> 位好友成功充值 · ${nextTierHtml}</div>
+          </div>
+        </div>
+        <div class="referral-tier-card-grid">${tierCardsHtml}</div>
       </div>
       <div class="referral-share-box">
         <label>分享文案</label>
@@ -1066,12 +1106,13 @@ function renderReferralOverview(data) {
       <div class="referral-stat"><span>已使用</span><strong>${formatNumber(stats.activated || stats.used || 0)}</strong></div>
     </div>
     <div class="referral-stats">
+      <div class="referral-stat"><span>提成总额</span><strong>¥${formatNumber(totalAmount)}</strong></div>
       <div class="referral-stat"><span>待结算佣金</span><strong>¥${formatNumber(pendingAmount)}</strong></div>
-      <div class="referral-stat"><span>已结算佣金</span><strong>¥${formatNumber(commission.cleared || commission.settled || 0)}</strong></div>
+      <div class="referral-stat"><span>已结算佣金</span><strong>¥${formatNumber(clearedAmount)}</strong></div>
       <div class="referral-stat"><span>提现中</span><strong>¥${formatNumber(commission.pendingWithdrawal || commission.withdrawing || 0)}</strong></div>
     </div>
     <div class="referral-actions">
-      <button class="button button-primary" type="button" data-referral-goto-withdrawal ${canWithdraw ? '' : 'disabled'}>${canWithdraw ? '前往提现' : `佣金满50可提现（当前¥${formatNumber(pendingAmount)}）`}</button>
+      <button class="button button-primary" type="button" data-referral-goto-withdrawal ${canWithdraw ? '' : 'disabled'}>${canWithdraw ? '前往提现' : `暂未达到提现条件（当前 ¥${formatNumber(pendingAmount)}）`}</button>
     </div>
     <div class="referral-detail-entry">
       <button class="button button-manual" type="button" data-referral-goto-referrals>查看邀请明细 →</button>
@@ -1362,7 +1403,7 @@ async function generateReferralPoster(inviteCode, inviteLink) {
     await loadQRCodeLibrary();
     const canvas = document.createElement("canvas");
     canvas.width = 750;
-    canvas.height = 1200;
+    canvas.height = 1340;
     const ctx = canvas.getContext("2d");
     await drawPoster(ctx, inviteCode, inviteLink);
     // 转为 Blob
@@ -1382,7 +1423,7 @@ async function generateReferralPoster(inviteCode, inviteLink) {
 
 // 绘制海报到 Canvas
 async function drawPoster(ctx, inviteCode, inviteLink) {
-  const W = 750, H = 1200;
+  const W = 750, H = 1340;
 
   // 1. 背景渐变
   const bgGrad = ctx.createLinearGradient(0, 0, 0, H);
@@ -1400,86 +1441,97 @@ async function drawPoster(ctx, inviteCode, inviteLink) {
 
   // 3. Logo 区域
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 42px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
+  ctx.font = "bold 54px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("QuizMate", W / 2, 100);
-  ctx.font = "24px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
+  ctx.fillText("QuizMate", W / 2, 110);
+  ctx.font = "26px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
   ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.fillText("答题悬浮助手", W / 2, 138);
+  ctx.fillText("笔试 / 面试 答题悬浮助手", W / 2, 150);
 
   // 4. 分隔线
   ctx.strokeStyle = "rgba(255,255,255,0.2)";
   ctx.lineWidth = 1;
-  ctx.beginPath(); ctx.moveTo(100, 170); ctx.lineTo(W - 100, 170); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(100, 185); ctx.lineTo(W - 100, 185); ctx.stroke();
 
   // 5. 卖点标题
   ctx.fillStyle = "#ffd54f";
-  ctx.font = "bold 38px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillText("不切屏 · 不截屏", W / 2, 230);
+  ctx.font = "bold 36px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
+  ctx.fillText("笔试 / 面试 全场景作答", W / 2, 235);
   ctx.fillStyle = "#ffffff";
-  ctx.font = "bold 34px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillText("后台无法捕获", W / 2, 280);
+  ctx.font = "bold 32px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
+  ctx.fillText("不切屏 · 不截屏 · 后台无法捕获", W / 2, 285);
   ctx.font = "bold 26px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
   ctx.fillStyle = "#ffd54f";
-  ctx.fillText("注册即送 50 积分，填邀请码再得 20 积分", W / 2, 325);
+  ctx.fillText("注册即送 50 积分，填邀请码再得 20 积分", W / 2, 330);
 
-  // 6. 卖点列表
-  ctx.font = "24px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillStyle = "rgba(255,255,255,0.9)";
+  // 6. 卖点列表（覆盖笔试 + 面试 + 防检测）
+  ctx.font = "22px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
+  ctx.fillStyle = "rgba(255,255,255,0.92)";
   ctx.textAlign = "left";
   const features = [
-    "• 全程不截图、不切屏、不弹窗",
-    "• 后台录屏无法捕捉任何痕迹",
-    "• 直接读取页面，智能作答",
-    "• Windows / Mac / Android 全平台"
+    "✓ 笔试 / 面试 全场景，悬浮作答",
+    "✓ 笔试：截图秒出答案，悬浮窗隐身",
+    "✓ 面试：实时听写 + AI 参考答案",
+    "✓ 直接读取页面 / 摄像头 / 麦克风",
+    "✓ Windows / Mac / Android 全平台"
   ];
   features.forEach((text, i) => {
-    ctx.fillText(text, 80, 390 + i * 40);
+    ctx.fillText(text, 80, 395 + i * 42);
   });
 
-  // 7. 邀请码卡片背景
+  // 7. 阶梯奖励 banner（黄底深字：10=pro 笔面试上岸包 / 20=unlimited 无忧包）
+  const bannerY = 625;
+  const bannerH = 130;
+  ctx.fillStyle = "#facc15";
+  roundRect(ctx, 60, bannerY, W - 120, bannerH, 18);
+  ctx.fill();
+  ctx.fillStyle = "#7c2d12";
+  ctx.font = "bold 28px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
+  ctx.textAlign = "center";
+  ctx.fillText("【重磅更新】阶梯邀请奖励", W / 2, bannerY + 40);
+  ctx.font = "bold 26px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
+  ctx.fillText("邀满 10 位充值好友 赠 笔面试上岸包", W / 2, bannerY + 80);
+  ctx.font = "bold 26px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
+  ctx.fillText("邀满 20 位充值好友 再赠 无忧包", W / 2, bannerY + 118);
+
+  // 8. 邀请码卡片背景
+  const cardY = 795;
   ctx.fillStyle = "rgba(255,255,255,0.12)";
-  roundRect(ctx, 75, 520, W - 150, 120, 16);
+  roundRect(ctx, 75, cardY, W - 150, 120, 16);
   ctx.fill();
   ctx.strokeStyle = "rgba(255,255,255,0.3)";
   ctx.lineWidth = 2;
-  roundRect(ctx, 75, 520, W - 150, 120, 16);
+  roundRect(ctx, 75, cardY, W - 150, 120, 16);
   ctx.stroke();
 
   // 邀请码文字
   ctx.fillStyle = "rgba(255,255,255,0.7)";
   ctx.font = "22px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("我的邀请码", W / 2, 560);
+  ctx.fillText("我的邀请码", W / 2, cardY + 40);
   ctx.fillStyle = "#ffd54f";
   ctx.font = "bold 52px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillText(inviteCode, W / 2, 615);
+  ctx.fillText(inviteCode, W / 2, cardY + 95);
 
-  // 8. 二维码区域
+  // 9. 二维码区域
+  const qrY = cardY + 150;
   ctx.fillStyle = "#ffffff";
-  roundRect(ctx, 250, 680, 250, 250, 12);
+  roundRect(ctx, 250, qrY, 250, 250, 12);
   ctx.fill();
-
-  // 用 QRCode 库或 API 兜底生成二维码
-  await drawQRCodeToCanvas(ctx, 265, 695, 220, inviteLink);
+  await drawQRCodeToCanvas(ctx, 265, qrY + 15, 220, inviteLink);
 
   // 二维码下方提示
   ctx.fillStyle = "rgba(255,255,255,0.85)";
   ctx.font = "22px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
   ctx.textAlign = "center";
-  ctx.fillText("扫码注册，自动填入邀请码", W / 2, 965);
-
-  // 9. 底部引导文案
-  ctx.fillStyle = "rgba(255,255,255,0.85)";
-  ctx.font = "bold 22px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillText("不切屏 · 不截屏 · 后台无法捕获", W / 2, 1005);
+  ctx.fillText("扫码注册，自动填入邀请码", W / 2, qrY + 285);
 
   // 10. 底部
   ctx.fillStyle = "rgba(255,255,255,0.5)";
   ctx.font = "18px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillText("quizmate.cn", W / 2, 1060);
+  ctx.fillText("quizmate.cn", W / 2, qrY + 325);
   ctx.font = "16px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillText("长按二维码或复制链接注册", W / 2, 1090);
+  ctx.fillText("长按二维码或复制链接注册", W / 2, qrY + 355);
 }
 
 // 圆角矩形辅助函数
@@ -1535,7 +1587,7 @@ async function shareReferralPoster() {
     try {
       await navigator.share({
         title: "QuizMate 答题悬浮助手",
-        text: "注册即送50积分，填邀请码再得20积分！",
+        text: "注册即送50积分，填邀请码再得20积分，被邀请人充值你拿5%返现！",
         files: [file]
       });
       setReferralStatus("转发成功。", "success");

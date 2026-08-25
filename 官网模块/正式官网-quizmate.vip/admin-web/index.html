@@ -4,7 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>答题悬浮助手后台</title>
+    <link rel="stylesheet" href="xiaohongshu-review.css?v=20260825-preview1" />
     <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script defer src="xiaohongshu-review.js?v=20260825-preview1"></script>
     <style>
       [hidden] { display: none !important; }
       :root {
@@ -336,6 +338,7 @@
           <button hidden type="button" data-view-tab="licenses"><i data-lucide="key-round"></i>历史授权</button>
           <button hidden type="button" data-view-tab="devices"><i data-lucide="monitor-smartphone"></i>历史设备</button>
           <button type="button" data-view-tab="orders"><i data-lucide="receipt-text"></i>订单</button>
+          <button type="button" data-view-tab="xiaohongshuReviews"><i data-lucide="message-square-heart"></i>小红书分享审核</button>
           <button type="button" data-view-tab="redemptionCodes"><i data-lucide="ticket-check"></i>兑换码</button>
           <button type="button" data-view-tab="shop"><i data-lucide="store"></i>店铺管理</button>
           <button type="button" data-view-tab="paymentConfig"><i data-lucide="credit-card"></i>支付配置</button>
@@ -511,6 +514,32 @@
             </div>
           </div>
         </div>
+
+        <section class="view xhs-admin-review-view" data-view="xiaohongshuReviews" data-xhs-admin-review>
+          <div class="panel toolbar xhs-admin-titlebar">
+            <div><h2>小红书分享审核</h2><p>核对笔记链接、赞/收藏数据和个人中心截图。审核通过后按档位自动发放积分。</p></div>
+            <button type="button" data-xhs-admin-refresh><i data-lucide="refresh-cw"></i>刷新列表</button>
+          </div>
+          <div class="xhs-admin-metrics" data-xhs-admin-metrics></div>
+          <div class="panel xhs-admin-filters">
+            <div class="field"><label>审核状态</label><select data-xhs-filter-status><option value="all">全部状态</option><option value="pending">待审核</option><option value="approved">审核通过</option><option value="rejected">未通过</option></select></div>
+            <div class="field"><label>奖励档位</label><select data-xhs-filter-tier><option value="all">全部档位</option><option value="20">20赞/收藏</option><option value="70">70赞/收藏</option></select></div>
+            <div class="field xhs-admin-filter-search"><label>搜索</label><input type="search" placeholder="用户邮箱或笔记链接" data-xhs-filter-query /></div>
+          </div>
+          <div class="table-wrap xhs-admin-table-wrap">
+            <table class="xhs-admin-table">
+              <thead><tr><th>提交用户</th><th>笔记与数据</th><th>奖励档位</th><th>归属截图</th><th>风险提示</th><th>状态</th><th>提交时间</th><th>操作</th></tr></thead>
+              <tbody data-xhs-admin-list></tbody>
+            </table>
+          </div>
+          <div class="xhs-admin-review-modal" data-xhs-review-modal hidden>
+            <div class="xhs-admin-modal-backdrop" data-close-xhs-review></div>
+            <section class="xhs-admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="xhs-review-modal-title">
+              <header><div><span>兑换审核</span><h3 id="xhs-review-modal-title" data-xhs-review-title>审核详情</h3></div><button type="button" aria-label="关闭审核详情" title="关闭" data-close-xhs-review><i data-lucide="x"></i></button></header>
+              <div data-xhs-review-detail></div>
+            </section>
+          </div>
+        </section>
 
         <section class="view" data-view="accounts">
           <div class="panel toolbar"><div><h2>积分用户</h2><p>查看邮箱账户、余额、累计充值和消耗。支持按邮箱模糊查询与批量调整积分：每行一个邮箱，提交后自动跳过不存在的账户和余额不足的账户。</p></div><div class="row-actions"><button class="secondary" type="button" id="openBatchCreditModalBtn">批量调整积分</button><button type="button" data-refresh="accounts">刷新用户</button></div></div>
@@ -1609,6 +1638,7 @@
 
       async function loadView(view) {
         if (view === "dashboard") return loadDashboard();
+        if (view === "xiaohongshuReviews") return window.XhsAdminReview?.render();
         if (view === "creditLogs") return Promise.all([loadTable("creditLogs"), loadCreditWhitelist()]);
         if (view === "cpanDashboard") return loadCpanDashboard();
         if (view === "cpanOrders") return loadCpanOrders();
