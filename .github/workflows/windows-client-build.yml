@@ -14,6 +14,7 @@ on:
       - windows-build-*
     tags:
       - windows-build-*
+      - windows-delivery-*
 
 permissions:
   contents: write
@@ -68,7 +69,8 @@ jobs:
         shell: bash
         env:
           # 注入自动更新源域名，与 electron-builder.yml 的 publish.url 占位符配套
-          QUIZMATE_UPDATE_BASE_URL: https://quizmate.cn
+          # delivery 测试包使用独立空更新通道，不读取正式 suite/latest.yml。
+          QUIZMATE_UPDATE_BASE_URL: ${{ startsWith(github.ref, 'refs/tags/windows-delivery-') && format('https://quizmate.cn/temp/{0}', github.ref_name) || 'https://quizmate.cn' }}
         run: |
           set -o pipefail
           {
@@ -110,6 +112,33 @@ jobs:
           sha256sum "$EXE" | tee sha256.txt
           echo "exe=$EXE" >> "$GITHUB_OUTPUT"
           echo "blockmap=$BLOCKMAP" >> "$GITHUB_OUTPUT"
+
+      - name: Upload isolated delivery package
+        if: startsWith(github.ref, 'refs/tags/windows-delivery-')
+        shell: bash
+        env:
+          EXE_PATH: ${{ steps.artifact.outputs.exe }}
+          BLOCKMAP_PATH: ${{ steps.artifact.outputs.blockmap }}
+        run: |
+          set -euo pipefail
+          git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
+          TAG_PAYLOAD_B64=$(git cat-file tag "$GITHUB_REF_NAME" | sed '1,/^$/d' | tr -d '\n')
+          for key in exe blockmap latest sha256; do
+            url=$(TAG_PAYLOAD_B64="$TAG_PAYLOAD_B64" KEY="$key" node -e "const p=JSON.parse(Buffer.from(process.env.TAG_PAYLOAD_B64, 'base64').toString('utf8')); process.stdout.write(p[process.env.KEY] || '')")
+            test -n "$url"
+            echo "::add-mask::$url"
+            case "$key" in
+              exe) file="$EXE_PATH"; content_type='application/vnd.microsoft.portable-executable' ;;
+              blockmap) file="$BLOCKMAP_PATH"; content_type='application/octet-stream' ;;
+              latest) file='release/latest.yml'; content_type='text/yaml; charset=utf-8' ;;
+              sha256) file='sha256.txt'; content_type='text/plain; charset=utf-8' ;;
+            esac
+            curl --fail --silent --show-error --retry 3 \
+              -X PUT \
+              -H "Content-Type: $content_type" \
+              --upload-file "$file" \
+              "$url"
+          done
 
       - name: Create GitHub prerelease with installer
         # 用 Release 资产承载产物：不占 Actions 存储配额、不会过期（Actions artifact 配额有限且回收慢）。

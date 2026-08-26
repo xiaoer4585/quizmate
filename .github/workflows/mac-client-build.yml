@@ -13,6 +13,7 @@ on:
       - mac-build-*
     tags:
       - mac-build-*
+      - mac-delivery-*
 permissions:
   contents: write
 
@@ -88,6 +89,8 @@ jobs:
       - name: Build DMG
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          # delivery 测试包使用独立空更新通道，不读取正式 mac/latest-mac.yml。
+          QUIZMATE_UPDATE_BASE_URL: ${{ startsWith(github.ref, 'refs/tags/mac-delivery-') && format('https://quizmate.cn/temp/{0}', github.ref_name) || 'https://quizmate.cn' }}
         run: |
           set -o pipefail
           {
@@ -97,6 +100,8 @@ jobs:
 
       - name: Re-sign app for local distribution
         shell: bash
+        env:
+          QUIZMATE_UPDATE_BASE_URL: ${{ startsWith(github.ref, 'refs/tags/mac-delivery-') && format('https://quizmate.cn/temp/{0}', github.ref_name) || 'https://quizmate.cn' }}
         run: |
           set -euo pipefail
           exec > >(tee -a build.log) 2>&1

@@ -30,4 +30,5 @@ dmg:
   artifactName: QuizMate-Mac-${arch}-${version}.dmg
 publish:
   provider: generic
-  url: https://quizmate.cn/mac/
+  # CI 为 delivery 测试包注入独立空通道，避免读取正式更新清单。
+  url: ${env.QUIZMATE_UPDATE_BASE_URL}/mac/
