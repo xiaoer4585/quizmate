@@ -114,6 +114,14 @@ const api = {
     getAIConfigs: () => invoke('system:getAIConfigs'),
     getAppVersion: () => invoke('system:version'),
     onShowRechargeModal: (cb: () => void) => on('system:showRechargeModal', cb),
+    /** 主窗口当前是否对用户可见（可见且未最小化）。用于渲染层判断是否允许弹积分不足蒙版。 */
+    isMainWindowVisible: () => invoke('system:isMainWindowVisible'),
+    /** 主窗口可见性变化（true=可见 & 未最小化，false=最小化/隐藏）。 */
+    onMainWindowVisible: (cb: (visible: boolean) => void) =>
+      on('system:mainWindowVisible', (visible: unknown) => cb(!!visible)),
+    /** 监听主进程派发的「积分不足」事件（处理模块扣减失败或余额归零时触发）。 */
+    onOutOfCredits: (cb: (data: { reason?: string; balance?: number; cost?: number }) => void) =>
+      on('out-of-credits', (data: unknown) => cb((data as { reason?: string; balance?: number; cost?: number }) || { reason: 'credits' })),
   },
   // 支付
   payment: {
@@ -124,6 +132,7 @@ const api = {
   // 邀请代理
   invite: {
     generateCode: () => invoke('invite:generate-code'),
+    getOverview: () => invoke('invite:get-overview'),
     savePoster: (dataUrl: string) => invoke('invite:save-poster', dataUrl),
     sharePoster: (dataUrl: string) => invoke('invite:share-poster', dataUrl),
   },
@@ -188,7 +197,6 @@ const electronAPI = {
     setBounds: (bounds: { x: number; y: number; width: number; height: number }) => invoke('overlay:setBounds', bounds),
     getBounds: () => invoke('overlay:getBounds'),
     setOpacity: (opacity: number) => invoke('overlay:setOpacity', opacity),
-    setIgnoreMouseEvents: (ignore: boolean) => invoke('overlay:setIgnoreMouseEvents', ignore),
     setTheme: (theme: 'dark' | 'light') => invoke('overlay:setTheme', theme),
   },
   // App

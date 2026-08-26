@@ -4,7 +4,9 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>答题悬浮助手后台</title>
+    <link rel="stylesheet" href="xiaohongshu-review.css?v=20260825-preview1" />
     <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script defer src="xiaohongshu-review.js?v=20260825-preview1"></script>
     <style>
       [hidden] { display: none !important; }
       :root {
@@ -238,6 +240,8 @@
         width: min(440px, calc(100vw - 32px)); padding: 22px;
         border-radius: 12px; background: #fff; box-shadow: 0 24px 60px rgba(15, 23, 42, .25);
       }
+      .modal-card.wide { width: min(720px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow-y: auto; }
+      .modal-card .code-output { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 12px; line-height: 1.55; }
       .modal-card h3 { margin: 0 0 6px; font-size: 18px; }
       .modal-card .modal-meta { color: var(--muted); font-size: 13px; margin: 0 0 16px; }
       .modal-card .modal-meta strong { color: var(--ink); }
@@ -334,12 +338,14 @@
           <button hidden type="button" data-view-tab="licenses"><i data-lucide="key-round"></i>历史授权</button>
           <button hidden type="button" data-view-tab="devices"><i data-lucide="monitor-smartphone"></i>历史设备</button>
           <button type="button" data-view-tab="orders"><i data-lucide="receipt-text"></i>订单</button>
+          <button type="button" data-view-tab="xiaohongshuReviews"><i data-lucide="message-square-heart"></i>小红书分享审核</button>
           <button type="button" data-view-tab="redemptionCodes"><i data-lucide="ticket-check"></i>兑换码</button>
           <button type="button" data-view-tab="shop"><i data-lucide="store"></i>店铺管理</button>
           <button type="button" data-view-tab="paymentConfig"><i data-lucide="credit-card"></i>支付配置</button>
           <button type="button" data-view-tab="domainInquiries"><i data-lucide="globe"></i>域名询价</button>
           <button type="button" data-view-tab="knowledge"><i data-lucide="files"></i>用户知识库</button>
           <button type="button" data-view-tab="aiConfig"><i data-lucide="bot"></i>AI 配置</button>
+          <button type="button" data-view-tab="aiFailures"><i data-lucide="triangle-alert"></i>AI 调用失败</button>
           <button type="button" data-view-tab="cuotiConfig"><i data-lucide="book-open"></i>错题集配置</button>
           <button type="button" data-view-tab="operations"><i data-lucide="sliders-horizontal"></i>运营配置</button>
           <button type="button" data-view-tab="referral"><i data-lucide="users-round"></i>邀请和代理</button>
@@ -509,8 +515,40 @@
           </div>
         </div>
 
+        <section class="view xhs-admin-review-view" data-view="xiaohongshuReviews" data-xhs-admin-review>
+          <div class="panel toolbar xhs-admin-titlebar">
+            <div><h2>小红书分享审核</h2><p>核对笔记链接、赞/收藏数据和个人中心截图。审核通过后按档位自动发放积分。</p></div>
+            <button type="button" data-xhs-admin-refresh><i data-lucide="refresh-cw"></i>刷新列表</button>
+          </div>
+          <div class="xhs-admin-metrics" data-xhs-admin-metrics></div>
+          <div class="panel xhs-admin-filters">
+            <div class="field"><label>审核状态</label><select data-xhs-filter-status><option value="all">全部状态</option><option value="pending">待审核</option><option value="approved">审核通过</option><option value="rejected">未通过</option></select></div>
+            <div class="field"><label>奖励档位</label><select data-xhs-filter-tier><option value="all">全部档位</option><option value="20">20赞/收藏</option><option value="70">70赞/收藏</option></select></div>
+            <div class="field xhs-admin-filter-search"><label>搜索</label><input type="search" placeholder="用户邮箱或笔记链接" data-xhs-filter-query /></div>
+          </div>
+          <div class="table-wrap xhs-admin-table-wrap">
+            <table class="xhs-admin-table">
+              <thead><tr><th>提交用户</th><th>笔记与数据</th><th>奖励档位</th><th>归属截图</th><th>风险提示</th><th>状态</th><th>提交时间</th><th>操作</th></tr></thead>
+              <tbody data-xhs-admin-list></tbody>
+            </table>
+          </div>
+          <div class="xhs-admin-review-modal" data-xhs-review-modal hidden>
+            <div class="xhs-admin-modal-backdrop" data-close-xhs-review></div>
+            <section class="xhs-admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="xhs-review-modal-title">
+              <header><div><span>兑换审核</span><h3 id="xhs-review-modal-title" data-xhs-review-title>审核详情</h3></div><button type="button" aria-label="关闭审核详情" title="关闭" data-close-xhs-review><i data-lucide="x"></i></button></header>
+              <div data-xhs-review-detail></div>
+            </section>
+          </div>
+        </section>
+
         <section class="view" data-view="accounts">
-          <div class="panel toolbar"><div><h2>积分用户</h2><p>查看邮箱账户、余额、累计充值和消耗。</p></div><button type="button" data-refresh="accounts">刷新用户</button></div>
+          <div class="panel toolbar"><div><h2>积分用户</h2><p>查看邮箱账户、余额、累计充值和消耗。支持按邮箱模糊查询与批量调整积分：每行一个邮箱，提交后自动跳过不存在的账户和余额不足的账户。</p></div><div class="row-actions"><button class="secondary" type="button" id="openBatchCreditModalBtn">批量调整积分</button><button type="button" data-refresh="accounts">刷新用户</button></div></div>
+          <div class="panel">
+            <div class="form-grid">
+              <div class="field"><label for="accountEmailInput">邮箱筛选</label><input id="accountEmailInput" placeholder="模糊匹配，可留空" /></div>
+              <div class="actions" style="align-self:end"><button id="searchAccountsBtn" type="button">查询</button><button id="clearAccountsFilterBtn" class="secondary" type="button">清空条件</button></div>
+            </div>
+          </div>
           <div class="table-wrap"><table><thead data-head="accounts"></thead><tbody data-body="accounts"></tbody></table></div>
           <div class="pagination" data-pagination="accounts"></div>
         </section>
@@ -782,6 +820,48 @@
           <div class="pagination" data-pagination="knowledge"></div>
         </section>
 
+        <section class="view" data-view="aiFailures">
+          <div class="panel">
+            <div class="toolbar">
+              <div>
+                <h2>AI 调用失败记录</h2>
+                <p>模型调用失败明细（上游 5xx、超时、无效 JSON 等）。可按模型类型 / 错误码 / 请求模式 / 时间区间筛选；表格默认每页 20 条。</p>
+              </div>
+              <button type="button" data-refresh="aiFailures">刷新</button>
+            </div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field">
+                <label for="aiFailureModelType">模型类型</label>
+                <select id="aiFailureModelType">
+                  <option value="">全部</option>
+                  <option value="text">文本模型</option>
+                  <option value="image">图片模型</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="aiFailureErrorCode">错误码</label>
+                <select id="aiFailureErrorCode">
+                  <option value="">全部</option>
+                </select>
+              </div>
+              <div class="field">
+                <label for="aiFailureRequestMode">请求模式</label>
+                <select id="aiFailureRequestMode">
+                  <option value="">全部</option>
+                </select>
+              </div>
+              <div class="field"><label for="aiFailureStartDate">开始日期</label><input id="aiFailureStartDate" type="date" /></div>
+              <div class="field"><label for="aiFailureEndDate">结束日期</label><input id="aiFailureEndDate" type="date" /></div>
+              <div class="actions" style="align-self:end">
+                <button id="searchAiFailuresBtn" type="button">查询</button>
+                <button id="clearAiFailuresFilterBtn" class="secondary" type="button">清空条件</button>
+              </div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="aiFailures"></thead><tbody data-body="aiFailures"></tbody></table></div>
+          <div class="pagination" data-pagination="aiFailures"></div>
+        </section>
+
         <section class="view" data-view="aiConfig">
           <div class="panel">
             <div class="toolbar"><div><h2>AI 配置</h2><p>API 参数和提示词分区维护；API Key 留空表示保留当前线上值。</p></div><button id="reloadAiBtn" class="secondary" type="button">读取当前配置</button></div>
@@ -1028,6 +1108,48 @@
       </div>
     </div>
 
+    <div id="batchCreditModal" class="modal-overlay" role="dialog" aria-modal="true" aria-labelledby="batchCreditModalTitle">
+      <div class="modal-card wide">
+        <h3 id="batchCreditModalTitle">批量调整积分</h3>
+        <p class="modal-meta">在下方每行输入一个用户邮箱，对所有命中账户统一增加或减少指定积分。账户不存在或减少时余额不足的邮箱会被跳过。</p>
+        <div class="form-grid two">
+          <div class="field">
+            <label>调整类型</label>
+            <div class="segmented" role="group" aria-label="批量调整类型">
+              <button class="active add" type="button" data-batch-credit-op="add">增加</button>
+              <button class="subtract" type="button" data-batch-credit-op="subtract">减少</button>
+            </div>
+          </div>
+          <div class="field">
+            <label for="batchCreditAmount">积分数量（正整数）</label>
+            <input id="batchCreditAmount" type="number" min="1" step="1" placeholder="例如 100" />
+          </div>
+        </div>
+        <div class="field">
+          <label for="batchCreditEmails">用户邮箱（每行一个，最多 500 行）</label>
+          <textarea id="batchCreditEmails" rows="10" placeholder="user1@example.com&#10;user2@example.com&#10;user3@example.com"></textarea>
+          <div class="row-actions" style="margin-top:6px;justify-content:space-between">
+            <span id="batchCreditEmailCount" style="color:var(--muted);font-size:12px">已识别 0 个邮箱</span>
+            <button class="small secondary" type="button" id="batchCreditClearBtn">清空</button>
+          </div>
+        </div>
+        <div class="field">
+          <label for="batchCreditReason">备注（可选，最多 200 字）</label>
+          <input id="batchCreditReason" maxlength="200" placeholder="如：客服批量补偿、活动赠送" />
+        </div>
+        <div class="field" hidden id="batchCreditResultWrap">
+          <label>执行结果</label>
+          <div id="batchCreditResultSummary" class="modal-meta"></div>
+          <textarea id="batchCreditResult" class="code-output" readonly rows="6"></textarea>
+        </div>
+        <p id="batchCreditStatus" class="modal-status" aria-live="polite"></p>
+        <div class="modal-actions">
+          <button id="batchCreditCancel" class="secondary" type="button">取消</button>
+          <button id="batchCreditConfirm" type="button">确认批量调整</button>
+        </div>
+      </div>
+    </div>
+
     <script>
       const API_DEFAULT = "https://api.quizmate.vip/study-auth-api";
       const CPAN_API_DEFAULT = "https://api.quizmate.vip/cpan-api";
@@ -1037,6 +1159,16 @@
       };
       const LEGACY_API_ENDPOINTS = new Set([
         "https://cuolemo-d4g2lqdczd74e3ae5.service.tcloudbase.com/study-auth-api"
+      ]);
+      const CREDIT_ADMIN_ACTIONS = new Set([
+        "adminListCreditAccounts",
+        "adminListCreditLogs",
+        "adminAdjustCredits",
+        "adminBatchAdjustCredits",
+        "adminDeleteCreditLog",
+        "adminGetCreditWhitelist",
+        "adminAddCreditWhitelist",
+        "adminRemoveCreditWhitelist"
       ]);
       const CUSTOMER_SERVICE_URL = "https://kefu.quizmate.vip/";
       const tableActions = {
@@ -1052,7 +1184,8 @@
         referrals: "adminListReferrals",
         commissions: "adminListCommissions",
         withdrawals: "adminListWithdrawals",
-        riskFlags: "adminListRiskFlags"
+        riskFlags: "adminListRiskFlags",
+        aiFailures: "adminListModelCallFailures"
       };
       const state = {
         activeView: "dashboard",
@@ -1069,6 +1202,7 @@
         accountEmail: localStorage.getItem("study_admin_email") || "",
         tables: Object.fromEntries(Object.keys(tableActions).map((key) => [key, { page: 1, pageSize: 20, total: 0, totalPages: 1, items: [] }])),
         creditModal: { open: false, accountId: "", email: "", credits: 0, operation: "add" },
+        batchCreditModal: { open: false, operation: "add" },
         referralSubtab: "summary",
         selectedCommissions: new Set()
       };
@@ -1092,6 +1226,7 @@
         knowledgeLicenseCode: $("#knowledgeLicenseCode"), knowledgeDeviceId: $("#knowledgeDeviceId"), knowledgeFileName: $("#knowledgeFileName"),
         orderStatus: $("#orderStatus"), orderType: $("#orderType"), orderProvider: $("#orderProvider"),
         orderEmail: $("#orderEmail"), orderNo: $("#orderNo"), orderStartDate: $("#orderStartDate"), orderEndDate: $("#orderEndDate"),
+        accountEmail: $("#accountEmailInput"),
         creditLogEmail: $("#creditLogEmail"), creditLogHideWhitelist: $("#creditLogHideWhitelist"),
         epayEnabled: $("#epayEnabled"), epayApiUrl: $("#epayApiUrl"), epayPid: $("#epayPid"), epayKey: $("#epayKey"),
         epayNotifyUrl: $("#epayNotifyUrl"), epayReturnUrl: $("#epayReturnUrl"), epayMerchantPrivateKey: $("#epayMerchantPrivateKey"), epayPlatformPublicKey: $("#epayPlatformPublicKey"),
@@ -1121,7 +1256,9 @@
         cpanTodayVisits: $("#cpanTodayVisits"), cpanTotalVisits: $("#cpanTotalVisits"),
         cpanPeriodDownloads: $("#cpanPeriodDownloads"), cpanDownloadRange: $("#cpanDownloadRange"),
         cpanTodayDownloads: $("#cpanTodayDownloads"), cpanTotalDownloads: $("#cpanTotalDownloads"),
-        cpanOrdersBody: $("#cpanOrdersBody"), cpanUsersBody: $("#cpanUsersBody")
+        cpanOrdersBody: $("#cpanOrdersBody"), cpanUsersBody: $("#cpanUsersBody"),
+        aiFailureModelType: $("#aiFailureModelType"), aiFailureErrorCode: $("#aiFailureErrorCode"), aiFailureRequestMode: $("#aiFailureRequestMode"),
+        aiFailureStartDate: $("#aiFailureStartDate"), aiFailureEndDate: $("#aiFailureEndDate")
       };
 
       const columns = {
@@ -1138,14 +1275,30 @@
         referrals: [["email", "被邀请人邮箱"], ["status", "状态"], ["registeredAt", "注册时间"], ["usedAt", "使用时间"], ["totalCharged", "充值总额"], ["totalCommission", "提成总额"]],
         commissions: [["__select", "选择"], ["email", "被邀请人邮箱"], ["orderNo", "订单号"], ["chargeAmount", "充值金额"], ["commissionRate", "提成比例"], ["commissionAmount", "提成金额"], ["status", "状态"], ["createdAt", "时间"]],
         withdrawals: [["email", "邮箱"], ["amount", "金额"], ["alipayAccount", "支付宝账号"], ["alipayName", "支付宝实名"], ["status", "状态"], ["payOrderNo", "打款订单号"], ["paidAt", "打款时间"], ["createdAt", "申请时间"], ["__actions", "操作"]],
-        riskFlags: [["email", "邮箱"], ["type", "类型"], ["detail", "详情"], ["createdAt", "标记时间"]]
+        riskFlags: [["email", "邮箱"], ["type", "类型"], ["detail", "详情"], ["createdAt", "标记时间"]],
+        aiFailures: [["createdAt", "时间"], ["modelType", "模型类型"], ["modelName", "模型"], ["errorCode", "错误码"], ["errorMessage", "错误信息"], ["httpStatus", "HTTP"], ["requestMode", "模式"], ["accountEmail", "账户"], ["requestId", "请求 ID"], ["clientIp", "IP"]]
       };
 
-      const storedApiEndpoint = localStorage.getItem("study_api_endpoint") || "";
-      if (LEGACY_API_ENDPOINTS.has(storedApiEndpoint.replace(/\/+$/, ""))) {
-        localStorage.setItem("study_api_endpoint", API_DEFAULT);
+      function normalizeStudyApiEndpoint(endpoint) {
+        const text = String(endpoint || "").trim().replace(/\/+$/, "");
+        if (!text) return API_DEFAULT;
+        if (LEGACY_API_ENDPOINTS.has(text)) return API_DEFAULT;
+        try {
+          const url = new URL(text);
+          if (url.hostname.endsWith(".service.tcloudbase.com") && (!url.pathname || url.pathname === "/study-auth-api")) {
+            return API_DEFAULT;
+          }
+        } catch {
+          return text;
+        }
+        return text;
       }
-      els.apiEndpoint.value = localStorage.getItem("study_api_endpoint") || API_DEFAULT;
+
+      const storedApiEndpoint = normalizeStudyApiEndpoint(localStorage.getItem("study_api_endpoint"));
+      if (storedApiEndpoint !== (localStorage.getItem("study_api_endpoint") || "").trim().replace(/\/+$/, "")) {
+        localStorage.setItem("study_api_endpoint", storedApiEndpoint);
+      }
+      els.apiEndpoint.value = storedApiEndpoint;
       els.loginApiEndpoint.value = els.apiEndpoint.value;
       els.cpanApiEndpoint.value = localStorage.getItem("cpan_api_endpoint") || CPAN_API_DEFAULT;
       els.loginEmail.value = state.accountEmail;
@@ -1360,6 +1513,11 @@
         els.orderEmail.value = ""; els.orderNo.value = ""; els.orderStartDate.value = ""; els.orderEndDate.value = "";
         state.tables.orders.page = 1; run(() => loadTable("orders"));
       });
+      $("#searchAccountsBtn").addEventListener("click", () => { state.tables.accounts.page = 1; run(() => loadTable("accounts")); });
+      $("#clearAccountsFilterBtn").addEventListener("click", () => {
+        els.accountEmail.value = "";
+        state.tables.accounts.page = 1; run(() => loadTable("accounts"));
+      });
       // 兑换码：批量生成 + 复制 + 筛选
       $("#generateRedeemBtn").addEventListener("click", () => run(generateRedeemCodes));
       $("#copyRedeemBtn").addEventListener("click", () => run(copyRedeemCodes));
@@ -1404,6 +1562,15 @@
       $("#creditModal").addEventListener("click", (event) => { if (event.target === event.currentTarget) closeCreditModal(); });
       document.addEventListener("keydown", (event) => { if (event.key === "Escape" && $("#creditModal").classList.contains("active")) closeCreditModal(); });
 
+      $("#openBatchCreditModalBtn").addEventListener("click", openBatchCreditModal);
+      $("#batchCreditCancel").addEventListener("click", closeBatchCreditModal);
+      $("#batchCreditConfirm").addEventListener("click", () => run(confirmBatchCreditAdjust));
+      $("#batchCreditClearBtn").addEventListener("click", () => { $("#batchCreditEmails").value = ""; updateBatchCreditEmailCount(); $("#batchCreditEmails").focus(); });
+      $("#batchCreditEmails").addEventListener("input", updateBatchCreditEmailCount);
+      document.querySelectorAll("[data-batch-credit-op]").forEach((button) => button.addEventListener("click", () => switchBatchCreditOp(button.dataset.batchCreditOp)));
+      $("#batchCreditModal").addEventListener("click", (event) => { if (event.target === event.currentTarget) closeBatchCreditModal(); });
+      document.addEventListener("keydown", (event) => { if (event.key === "Escape" && $("#batchCreditModal").classList.contains("active")) closeBatchCreditModal(); });
+
       // 邀请和代理：子模块切换
       document.querySelectorAll("[data-referral-subtab]").forEach((button) => button.addEventListener("click", () => switchReferralSubtab(button.dataset.referralSubtab)));
       // 邀请关系筛选
@@ -1424,6 +1591,16 @@
       $("#clearWithdrawalsFilterBtn").addEventListener("click", () => {
         $("#withdrawalStatus").value = "";
         state.tables.withdrawals.page = 1; run(() => loadTable("withdrawals"));
+      });
+      // AI 失败明细筛选
+      $("#searchAiFailuresBtn").addEventListener("click", () => { state.tables.aiFailures.page = 1; run(() => loadTable("aiFailures")); });
+      $("#clearAiFailuresFilterBtn").addEventListener("click", () => {
+        els.aiFailureModelType.value = "";
+        els.aiFailureErrorCode.value = "";
+        els.aiFailureRequestMode.value = "";
+        els.aiFailureStartDate.value = "";
+        els.aiFailureEndDate.value = "";
+        state.tables.aiFailures.page = 1; run(() => loadTable("aiFailures"));
       });
       // 提成记录复选框
       document.addEventListener("change", handleCommissionCheckboxChange);
@@ -1486,6 +1663,7 @@
 
       async function loadView(view) {
         if (view === "dashboard") return loadDashboard();
+        if (view === "xiaohongshuReviews") return window.XhsAdminReview?.render();
         if (view === "creditLogs") return Promise.all([loadTable("creditLogs"), loadCreditWhitelist()]);
         if (view === "cpanDashboard") return loadCpanDashboard();
         if (view === "cpanOrders") return loadCpanOrders();
@@ -1956,9 +2134,34 @@
         return { email: els.creditLogEmail.value.trim(), excludeWhitelist: els.creditLogHideWhitelist.checked };
       }
 
+      function accountFilters() {
+        return { email: els.accountEmail.value.trim() };
+      }
+
+      function aiFailureFilters() {
+        return {
+          modelType: els.aiFailureModelType.value.trim(),
+          errorCode: els.aiFailureErrorCode.value.trim(),
+          requestMode: els.aiFailureRequestMode.value.trim(),
+          startDate: els.aiFailureStartDate.value,
+          endDate: els.aiFailureEndDate.value
+        };
+      }
+
+      function populateAiFailureFilters(errorCodes, requestModes) {
+        const codeSelect = els.aiFailureErrorCode;
+        const currentCode = codeSelect.value;
+        codeSelect.innerHTML = '<option value=\"\">全部</option>' + (errorCodes || []).map((code) => '<option value=\"' + escapeHtml(code) + '\">' + escapeHtml(code) + '</option>').join('');
+        if (currentCode && (errorCodes || []).includes(currentCode)) codeSelect.value = currentCode;
+        const modeSelect = els.aiFailureRequestMode;
+        const currentMode = modeSelect.value;
+        modeSelect.innerHTML = '<option value=\"\">全部</option>' + (requestModes || []).map((mode) => '<option value=\"' + escapeHtml(mode) + '\">' + escapeHtml(mode) + '</option>').join('');
+        if (currentMode && (requestModes || []).includes(currentMode)) modeSelect.value = currentMode;
+      }
+
       async function loadTable(type) {
         const table = state.tables[type];
-        const extra = type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "creditLogs" ? creditLogFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : type === "redemptionCodes" ? redemptionCodeFilters() : type === "shopOrders" ? shopOrderFilters() : {};
+        const extra = type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "creditLogs" ? creditLogFilters() : type === "accounts" ? accountFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : type === "redemptionCodes" ? redemptionCodeFilters() : type === "shopOrders" ? shopOrderFilters() : type === "aiFailures" ? aiFailureFilters() : {};
         const payload = { page: table.page, pageSize: table.pageSize, ...extra };
         const data = await api(tableActions[type], payload);
         table.items = data.items || [];
@@ -1968,6 +2171,7 @@
         table.totalPages = Number(data.totalPages || Math.max(1, Math.ceil(table.total / table.pageSize)));
         renderTable(type, table.items);
         renderPagination(type);
+        if (type === "aiFailures") populateAiFailureFilters(data.errorCodes, data.requestModes);
         setStatus(`已读取 ${table.total} 条记录，当前第 ${table.page}/${table.totalPages} 页。`, "success");
       }
 
@@ -2072,6 +2276,98 @@
         closeCreditModal();
         if (state.activeView === "accounts") await loadTable("accounts");
         if (state.activeView === "creditLogs") await loadTable("creditLogs");
+      }
+
+      function parseBatchCreditEmails(raw) {
+        const seen = new Set();
+        const result = [];
+        String(raw || "").split(/[\s,;，；]+/).forEach((token) => {
+          const email = String(token || "").trim().toLowerCase();
+          if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return;
+          if (email.length > 254) return;
+          if (seen.has(email)) return;
+          seen.add(email);
+          result.push(email);
+        });
+        return result;
+      }
+
+      function updateBatchCreditEmailCount() {
+        const emails = parseBatchCreditEmails($("#batchCreditEmails").value);
+        $("#batchCreditEmailCount").textContent = `已识别 ${emails.length} 个邮箱`;
+      }
+
+      function openBatchCreditModal() {
+        state.batchCreditModal = { open: true, operation: "add" };
+        $("#batchCreditAmount").value = "";
+        $("#batchCreditReason").value = "";
+        $("#batchCreditStatus").textContent = "";
+        $("#batchCreditStatus").className = "modal-status";
+        $("#batchCreditResultWrap").hidden = true;
+        $("#batchCreditResult").value = "";
+        $("#batchCreditResultSummary").textContent = "";
+        switchBatchCreditOp("add");
+        $("#batchCreditEmails").value = "";
+        updateBatchCreditEmailCount();
+        $("#batchCreditModal").classList.add("active");
+        setTimeout(() => $("#batchCreditEmails").focus(), 30);
+      }
+
+      function closeBatchCreditModal() {
+        state.batchCreditModal.open = false;
+        $("#batchCreditModal").classList.remove("active");
+        $("#batchCreditStatus").textContent = "";
+      }
+
+      function switchBatchCreditOp(operation) {
+        state.batchCreditModal.operation = operation;
+        document.querySelectorAll("[data-batch-credit-op]").forEach((button) => {
+          const active = button.dataset.batchCreditOp === operation;
+          button.classList.toggle("active", active);
+        });
+      }
+
+      function setBatchCreditStatus(text, type = "") {
+        const node = $("#batchCreditStatus");
+        node.textContent = text || "";
+        node.className = `modal-status ${type}`.trim();
+      }
+
+      async function confirmBatchCreditAdjust() {
+        if (!state.batchCreditModal.open) return;
+        const amount = Math.floor(Number($("#batchCreditAmount").value || 0));
+        if (!Number.isFinite(amount) || amount <= 0) {
+          setBatchCreditStatus("请输入大于 0 的整数。", "error");
+          return;
+        }
+        const emails = parseBatchCreditEmails($("#batchCreditEmails").value);
+        if (!emails.length) {
+          setBatchCreditStatus("请至少输入一个有效邮箱。", "error");
+          return;
+        }
+        if (emails.length > 500) {
+          setBatchCreditStatus("单次最多批量调整 500 个邮箱。", "error");
+          return;
+        }
+        const operation = state.batchCreditModal.operation;
+        const reason = $("#batchCreditReason").value.trim();
+        const opLabel = operation === "add" ? "增加" : "减少";
+        if (!window.confirm(`将为 ${emails.length} 个邮箱${opLabel} ${amount} 积分，确认执行？`)) return;
+        setBatchCreditStatus("提交中...");
+        const data = await api("adminBatchAdjustCredits", {
+          emails, operation, credits: amount, reason
+        });
+        const summary = data.summary || { total: 0, success: 0, skipped: 0 };
+        setBatchCreditStatus(`完成：成功 ${summary.success}，跳过 ${summary.skipped}，共计 ${summary.total}。`, summary.skipped ? "error" : "success");
+        const lines = (data.results || []).map((row) => {
+          if (row.status === "ok") return `${row.email}\t成功\t新余额 ${row.credits}`;
+          return `${row.email}\t跳过\t${row.reason || ""}`;
+        });
+        $("#batchCreditResult").value = lines.join("\n");
+        $("#batchCreditResultSummary").textContent = `成功 ${summary.success} / 跳过 ${summary.skipped}`;
+        $("#batchCreditResultWrap").hidden = false;
+        setStatus(`批量${opLabel}积分完成：成功 ${summary.success}，跳过 ${summary.skipped}。`, summary.skipped ? "success" : "success");
+        if (state.activeView === "accounts") await loadTable("accounts");
       }
 
       async function loadAiConfig() {
@@ -2409,14 +2705,29 @@
         run(() => loadTable(type));
       }
 
-      async function api(action, payload) {
-        saveLocal();
-        const response = await fetch(els.apiEndpoint.value.trim() || API_DEFAULT, {
+      async function postStudyApi(endpoint, action, payload) {
+        const response = await fetch(endpoint, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action, accountToken: state.accountToken, ...payload })
         });
         let data;
         try { data = await response.json(); } catch { throw new Error(`接口返回异常（HTTP ${response.status}）`); }
+        return { response, data };
+      }
+
+      async function api(action, payload) {
+        saveLocal();
+        const endpoint = normalizeStudyApiEndpoint(els.apiEndpoint.value);
+        els.apiEndpoint.value = endpoint;
+        localStorage.setItem("study_api_endpoint", endpoint);
+        let result = await postStudyApi(endpoint, action, payload);
+        if (CREDIT_ADMIN_ACTIONS.has(action) && result.data?.code === "UNKNOWN_ACTION" && endpoint !== API_DEFAULT) {
+          els.apiEndpoint.value = API_DEFAULT;
+          localStorage.setItem("study_api_endpoint", API_DEFAULT);
+          setStatus("检测到旧接口不支持积分后台，已切回正式接口并重试。");
+          result = await postStudyApi(API_DEFAULT, action, payload);
+        }
+        const { response, data } = result;
         if (!response.ok || !data.ok) throw new Error(data.error || "请求失败");
         return data.data || {};
       }
@@ -2425,7 +2736,7 @@
         const email = els.loginEmail.value.trim();
         const password = els.loginPassword.value.trim();
         if (!email || !password) throw new Error("请输入邮箱和密码。");
-        const endpoint = els.loginApiEndpoint.value.trim() || API_DEFAULT;
+        const endpoint = normalizeStudyApiEndpoint(els.loginApiEndpoint.value);
         els.apiEndpoint.value = endpoint;
         localStorage.setItem("study_api_endpoint", endpoint);
         setLoginStatus("正在登录...");
@@ -2589,11 +2900,15 @@
       function formatCell(value, key) {
         if (value === undefined || value === null || value === "") return "-";
         if (/At$/.test(key)) { const time = new Date(value).getTime(); if (Number.isFinite(time)) return new Date(value).toLocaleString("zh-CN"); }
+        if (key === "createdAt" && value) { const time = new Date(value).getTime(); if (Number.isFinite(time)) return new Date(value).toLocaleString("zh-CN"); }
         if (key === "status") return `<span class="badge">${escapeHtml(REFERRAL_STATUS_MAP[value] || value)}</span>`;
         if (key === "orderType") return `<span class="badge">${escapeHtml(value)}</span>`;
         if (key === "size") return formatBytes(value);
         if (key === "chargeAmount" || key === "amount" || key === "totalCharged" || key === "totalCommission" || key === "commissionAmount") return `¥${escapeHtml(String(value))}`;
         if (key === "commissionRate") return `${escapeHtml(String(value))}%`;
+        if (key === "modelType") return `<span class="badge">${escapeHtml(value === "image" ? "图片模型" : value === "text" ? "文本模型" : value)}</span>`;
+        if (key === "errorCode") return `<span class="badge badge-danger">${escapeHtml(value)}</span>`;
+        if (key === "errorMessage") return `<span title="${escapeHtml(value)}">${escapeHtml(value.length > 80 ? value.slice(0, 80) + "…" : value)}</span>`;
         return escapeHtml(value);
       }
 
@@ -2601,6 +2916,14 @@
       function formatDate(value) { return /^\d{4}-\d{2}-\d{2}$/.test(String(value || "")) ? String(value).replaceAll("-", "/") : "-"; }
       function formatNumber(value) { return Number(value || 0).toLocaleString("zh-CN"); }
       function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;"); }
+      // AI 失败记录常见错误码到可读标签的映射（badge-danger 文本）
+      const AI_FAILURE_CODE_MAP = {
+        MODEL_UPSTREAM_ERROR: "上游错误",
+        MODEL_TIMEOUT: "模型超时",
+        INVALID_MODEL_RESULT: "结果无效",
+        MODEL_NOT_CONFIGURED: "未配置模型"
+      };
+      window.AI_FAILURE_CODE_MAP = AI_FAILURE_CODE_MAP; // 用于探活脚本校验页面标记
     </script>
   </body>
 </html>

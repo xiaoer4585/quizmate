@@ -4,9 +4,9 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, PenLine, Mic,
   User, Wallet, Menu, X,
-  Download, Loader2, CheckCircle2, AlertCircle, BookOpen, Chrome, HelpCircle
+  Download, Loader2, CheckCircle2, AlertCircle, BookOpen, Chrome, HelpCircle, Sparkles
 } from 'lucide-react';
-import { api, useProfile, useUpdateStatus } from '../lib/ipc';
+import { api, useProfile, useUpdateStatus, useMainWindowVisible } from '../lib/ipc';
 import RechargeModal from './RechargeModal';
 import ReleaseNotice from './ReleaseNotice';
 
@@ -29,16 +29,41 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const [rechargeOpen, setRechargeOpen] = useState(false);
 
+  // 积分不足蒙版（仅当主窗口对用户可见时显示；最小化/隐藏时不打扰悬浮框用户）
+  const mainVisible = useMainWindowVisible();
+  const [outOfCredits, setOutOfCredits] = useState<{ reason?: string; balance?: number; cost?: number } | null>(null);
+
   useEffect(() => { api.system.getAppVersion().then(setVersion).catch(() => {}); }, []);
   // 监听托盘菜单触发的充值入口
   useEffect(() => {
     const off = api.system.onShowRechargeModal(() => setRechargeOpen(true));
     return () => { off?.(); };
   }, []);
+  // 监听主进程派发的「积分不足」事件 -> 触发主窗口蒙版 + 充值弹框
+  useEffect(() => {
+    const off = api.system.onOutOfCredits((payload: { reason?: string; balance?: number; cost?: number }) =>
+      setOutOfCredits(payload || { reason: 'credits' })
+    );
+    return () => { off?.(); };
+  }, []);
+  // InviteAgent 等组件在未充值时 dispatch 自定义事件，要求直接打开充值弹框
+  useEffect(() => {
+    const handler = () => setRechargeOpen(true);
+    window.addEventListener('quizmate:open-recharge', handler as EventListener);
+    return () => window.removeEventListener('quizmate:open-recharge', handler as EventListener);
+  }, []);
+
+  // 主窗口从不可见变为可见时若仍有未处理的积分不足事件，立刻弹框 + 蒙版
+  useEffect(() => {
+    if (mainVisible && outOfCredits) {
+      setRechargeOpen(true);
+    }
+  }, [mainVisible, outOfCredits]);
+
+  const closeOutOfCredits = () => setOutOfCredits(null);
 
   const acct = profile?.account;
   const credits = profile?.creditBalance ?? acct?.credits ?? 0;
-
   // ===== 版本更新提示 =====
   const updateKey = updateStatus ? `${updateStatus.status}:${updateStatus.version ?? updateStatus.message ?? ''}` : null;
   const canDismissUpdate = updateStatus?.status === 'available' || updateStatus?.status === 'error';
@@ -189,6 +214,22 @@ export default function MainLayout({ children }: { children: ReactNode }) {
             <button onClick={() => setRechargeOpen(true)} className="btn-outline text-xs" title="充值积分">
               <Wallet size={14} /> <span className="text-amber-400 font-semibold">{credits}</span> 积分
             </button>
+            <button
+              onClick={() => {
+                // 无论当前在哪个菜单，点击都先跳转到个人中心（路由 /profile），
+                // 再派发全局事件，由 InviteAgent 在个人中心页自动展开邀请代理面板
+                if (location.pathname !== '/profile') {
+                  navigate('/profile');
+                }
+                // 跳转是异步的，先派发事件；若 InviteAgent 尚未挂载，监听会在挂载时收到（见 InviteAgent.tsx 内 pendingAutoOpen 处理）
+                window.dispatchEvent(new CustomEvent('quizmate:open-invite-panel'));
+                sessionStorage.setItem('quizmate:invite-auto-open', '1');
+              }}
+              className="btn-outline text-xs"
+              title="邀请代理 · 双方各得 20 积分"
+            >
+              <Sparkles size={14} className="text-amber-300" /> 邀请
+            </button>
             <div className="text-xs text-slate-500 ml-2">{acct?.email || '未登录'}</div>
             {version && <div className="text-xs text-slate-600">v{version}</div>}
           </div>
@@ -198,6 +239,50 @@ export default function MainLayout({ children }: { children: ReactNode }) {
       </div>
       {/* 充值弹窗 */}
       <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
+
+      {/* 积分不足蒙版：仅在主窗口对用户可见时弹出，最小化/隐藏时不打扰悬浮框用户 */}
+      {outOfCredits && mainVisible && (
+        <div
+          className="fixed inset-0 z-[60] flex items-center justify-center bg-black/70 backdrop-blur-sm"
+          aria-modal="true"
+          role="dialog"
+        >
+          <div className="max-w-md w-[92%] rounded-2xl border border-amber-500/50 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 p-7 shadow-2xl">
+            <div className="flex items-center gap-2 mb-3">
+              <Sparkles size={18} className="text-amber-400" />
+              <span className="text-xs font-semibold text-amber-300">积分不足</span>
+            </div>
+            <h3 className="text-lg font-bold text-slate-100 mb-2 leading-snug">
+              请充值后使用，QuizMate 陪伴你成功上岸
+            </h3>
+            <p className="text-sm text-slate-400 mb-5 leading-relaxed">
+              当前积分余额 <b className="text-amber-400">{credits}</b>，已无法继续笔试搜题或面试实时辅助。
+              {typeof outOfCredits.cost === 'number' && (
+                <> 本次需要 <b className="text-slate-200">{outOfCredits.cost}</b> 积分。</>
+              )}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <button
+                onClick={() => { closeOutOfCredits(); setRechargeOpen(true); }}
+                className="btn-primary flex-1"
+              >
+                <Wallet size={14} /> 立即充值
+              </button>
+              <button
+                onClick={closeOutOfCredits}
+                className="btn-outline flex-1"
+                title="稍后再说（积分仍为 0，相关功能不可用）"
+              >
+                稍后再说
+              </button>
+            </div>
+            <p className="mt-3 text-[11px] text-slate-500 leading-relaxed">
+              提示：本次扣减失败、笔试 / 面试被中断时也会触发此提示。客户端最小化时不会弹出，避免打扰使用悬浮框的你。
+            </p>
+          </div>
+        </div>
+      )}
+
       <ReleaseNotice appVersion={version} />
     </div>
   );

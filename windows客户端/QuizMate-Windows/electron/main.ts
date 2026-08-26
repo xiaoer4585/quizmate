@@ -13,7 +13,7 @@ import { pathToFileURL } from 'url';
 import { ConfigHelper } from './ConfigHelper';
 import { AuthManager } from './AuthManager';
 import { TrayManager } from './TrayManager';
-import { registerIpcHandlers } from './ipcHandlers';
+import { registerIpcHandlers, wireMainWindowVisibility } from './ipcHandlers';
 import { ScreenshotHelper } from './helpers/ScreenshotHelper';
 import { LightweightProcessingHelper } from './helpers/ProcessingHelper';
 import { ShortcutsHelper } from './ShortcutsHelper';
@@ -21,7 +21,7 @@ import { TtsHelper } from './helpers/TtsHelper';
 import { ByteDanceTtsHelper } from './helpers/ByteDanceTtsHelper';
 import { SapiVoiceHelper } from './helpers/SapiVoiceHelper';
 import { RealtimeVoiceHelper } from './helpers/RealtimeVoiceHelper';
-import { applyAllProtections, applyAntiCapture, ProtectionResult } from './helpers/Win32Protection';
+import { applyAllProtections, applyAntiCapture, startProtectionWatchdog, ProtectionWatchdog, ProtectionResult } from './helpers/Win32Protection';
 import { InterviewHelper } from './helpers/InterviewHelper';
 import { OverlayManager } from './OverlayManager';
 import { UpdateChecker } from './UpdateChecker';
@@ -224,6 +224,9 @@ function createMainWindow() {
   state.mainWindow.on('focus', () => refreshCreditsFromServer());
   // 同步更新检测器的主窗口引用，用于推送更新状态
   updateChecker?.setMainWindow(state.mainWindow);
+  // 主窗口可见性变化 → 推送给所有渲染层（含悬浮框/嵌入充值页），
+  // 让渲染层判断是否允许弹「积分不足蒙版」。
+  wireMainWindowVisibility(() => state.mainWindow);
 
   state.mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     const allowed = configHelper.getAppConfig().allowedExternalHosts;
@@ -240,7 +243,11 @@ function createMainWindow() {
   if (!app.isPackaged) state.mainWindow.webContents.openDevTools({ mode: 'detach' });
 }
 
-// ===== 悬浮窗（透明、置顶、防捕获）完全沿用原考试插件 =====
+// ===== 悬浮窗（透明、置顶、防捕获） =====
+// 亲和性看门狗句柄（悬浮窗销毁/重建时复用）
+let overlayProtectionWatchdog: ProtectionWatchdog | null = null;
+let interviewProtectionWatchdog: ProtectionWatchdog | null = null;
+
 function createOverlayWindow() {
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     showOverlay();
@@ -287,7 +294,8 @@ function createOverlayWindow() {
   state.overlayWindow.setTitle(' ');
   state.overlayWindow.on('page-title-updated', (e) => e.preventDefault());
 
-  // ===== 防捕获 / 防检测保护（完全沿用原考试插件） =====
+  // ===== 防捕获 / 防检测保护 =====
+  // 应用后读回验证(applyAllProtections 内部), 并由看门狗周期性监测亲和性漂移、自动重新应用
   const applyProtection = () => {
     if (!state.overlayWindow || state.overlayWindow.isDestroyed()) return;
     try {
@@ -300,8 +308,8 @@ function createOverlayWindow() {
   applyProtection();
   state.overlayWindow.once('ready-to-show', applyProtection);
   state.overlayWindow.once('show', applyProtection);
-  setTimeout(applyProtection, 200);
-  setTimeout(applyProtection, 1000);
+  if (overlayProtectionWatchdog) overlayProtectionWatchdog.stop();
+  overlayProtectionWatchdog = startProtectionWatchdog(state.overlayWindow, { label: 'exam-overlay' });
 
   state.overlayWindow.webContents.on('did-finish-load', () => {
     state.overlayWindow?.webContents.send('background-opacity-changed', configHelper.getBackgroundOpacity());
@@ -334,6 +342,10 @@ function createOverlayWindow() {
     state.overlayWindow = null;
     state.isOverlayVisible = false;
     state.overlayLocked = false;
+    if (overlayProtectionWatchdog) {
+      overlayProtectionWatchdog.stop();
+      overlayProtectionWatchdog = null;
+    }
   });
 
   const overlayUrl = getRendererUrl('#/overlay-exam');
@@ -458,20 +470,6 @@ function setTheme(theme: 'dark' | 'light') {
   configHelper.setTheme(theme);
   state.currentTheme = theme;
   broadcastTheme(theme);
-}
-
-function setIgnoreMouseEvents(ignore: boolean) {
-  // 悬浮窗默认鼠标穿透（forward 保持 mousemove 转发以支持按钮 hover 检测）。
-  // 仅渲染层头部“截图/搜题/复制”按钮悬停时临时传 false，供快捷键被
-  // 考试输入框/输入法拦截时的鼠标兜底触发；窗口移动/缩放/显隐/截图流程
-  // 都会重新恢复穿透，避免悬浮窗长期可点击而遮挡考试页面。
-  if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
-    if (ignore) {
-      state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-    } else {
-      state.overlayWindow.setIgnoreMouseEvents(false);
-    }
-  }
 }
 
 function minimizeWindow(which: 'main' | 'overlay') {
@@ -648,17 +646,20 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
 // ===== 截图→分析编排（完全沿用原考试插件流程） =====
 async function handleScreenshot(isExtra: boolean): Promise<void> {
   const appConfig = configHelper.getAppConfig();
-  const procMode = configHelper.getProcessingMode();
 
-  // overlay 模式：截图前完全隐藏悬浮窗，确保截图无轮廓
-  if (procMode === 'overlay' && state.isOverlayVisible) {
+  // 截图前隐藏悬浮窗(以窗口实际可见性为准, 不依赖模式与状态标志)，
+  // 确保自身截图在任何情况下都不包含悬浮框--即使防捕获亲和性失效也兜底
+  const overlayWasVisible = !!(
+    state.overlayWindow && !state.overlayWindow.isDestroyed() && state.overlayWindow.isVisible()
+  );
+  if (overlayWasVisible) {
     hideOverlay();
     await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 500)));
   }
 
   const result = await screenshotHelper.captureFullScreen();
 
-  if (procMode === 'overlay') {
+  if (overlayWasVisible) {
     await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
     showOverlay();
   }
@@ -711,16 +712,23 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
     return;
   }
 
-  // 搜题后清空历史截图队列
-  screenshotHelper.clearAll();
-  state.overlayWindow?.webContents.send('screenshots-cleared');
-
   // 进度通知 + 托盘忙碌图标
   notifyVoiceProgress('正在调用 AI 分析...');
   setTrayBusy(true);
 
   // 直接调用 analyze 获取完整结果
   const result = await processingHelper.analyze({ images: [b64], mode });
+  if (result.success) {
+    // 仅在成功后清空历史截图队列；失败时保留截图，允许用户直接重试并便于诊断。
+    screenshotHelper.clearAll();
+    state.overlayWindow?.webContents.send('screenshots-cleared');
+  } else {
+    console.warn('[Main] analyze failed, keeping screenshot queue for retry:', {
+      code: result.errorCode,
+      stage: result.stage,
+      error: result.error,
+    });
+  }
 
   if (procMode === 'voice') {
     // voice 模式：不依赖悬浮框事件，改用 TTS 播报
@@ -856,7 +864,7 @@ function createInterviewOverlayWindow() {
   state.interviewOverlayWindow.setTitle(' ');
   state.interviewOverlayWindow.on('page-title-updated', (e) => e.preventDefault());
 
-  // 防捕获保护（与笔试悬浮窗一致）
+  // 防捕获保护（与笔试悬浮窗一致：应用后读回验证 + 看门狗监测漂移）
   const applyInterviewProtection = () => {
     if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) return;
     try {
@@ -867,8 +875,8 @@ function createInterviewOverlayWindow() {
   applyInterviewProtection();
   state.interviewOverlayWindow.once('ready-to-show', applyInterviewProtection);
   state.interviewOverlayWindow.once('show', applyInterviewProtection);
-  setTimeout(applyInterviewProtection, 200);
-  setTimeout(applyInterviewProtection, 1000);
+  if (interviewProtectionWatchdog) interviewProtectionWatchdog.stop();
+  interviewProtectionWatchdog = startProtectionWatchdog(state.interviewOverlayWindow, { label: 'interview-overlay' });
 
   state.interviewOverlayWindow.webContents.on('did-finish-load', () => {
     state.interviewOverlayWindow?.webContents.send('background-opacity-changed', configHelper.getBackgroundOpacity());
@@ -880,6 +888,10 @@ function createInterviewOverlayWindow() {
     state.interviewOverlayWindow = null;
     state.interviewOverlayActive = false;
     state.interviewOverlayVisible = false;
+    if (interviewProtectionWatchdog) {
+      interviewProtectionWatchdog.stop();
+      interviewProtectionWatchdog = null;
+    }
   });
 
   // 与笔试悬浮窗一致：移动/缩放后持久化窗口位置与尺寸（两个悬浮窗共享已保存配置）
@@ -1160,7 +1172,6 @@ async function initializeApp(): Promise<void> {
     setBackgroundOpacity,
     setZoomFactor,
     setTheme,
-    setIgnoreMouseEvents,
     minimizeWindow,
     maximizeWindow,
     closeWindow,

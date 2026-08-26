@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex,nofollow" />
+    <title>小红书分享审核 · 页面预览</title>
+    <link rel="stylesheet" href="xiaohongshu-review.css?v=20260825-preview1" />
+    <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+    <script defer src="xiaohongshu-review.js?v=20260825-preview1"></script>
+  </head>
+  <body class="xhs-admin-preview-page" data-demo-seed="true">
+    <div class="xhs-preview-shell">
+      <aside class="xhs-preview-sidebar">
+        <div class="xhs-preview-brand"><strong>QuizMate 后台</strong><span>统一运营与积分管理</span></div>
+        <nav class="xhs-preview-nav" aria-label="后台菜单">
+          <span><i data-lucide="layout-dashboard"></i>概览</span>
+          <span><i data-lucide="users"></i>积分用户</span>
+          <span><i data-lucide="receipt-text"></i>订单</span>
+          <span class="active"><i data-lucide="message-square-heart"></i>小红书分享审核</span>
+          <span><i data-lucide="ticket-check"></i>兑换码</span>
+          <span><i data-lucide="sliders-horizontal"></i>运营配置</span>
+        </nav>
+      </aside>
+
+      <main class="xhs-preview-main">
+        <header class="xhs-preview-header">
+          <div><h1>小红书分享审核</h1><p>前端交互原型 · 审核动作和积分发放仅保存在当前浏览器</p></div>
+          <a href="../recharge.html"><i data-lucide="external-link"></i>查看用户提交页</a>
+        </header>
+
+        <section class="xhs-admin-review-view" data-xhs-admin-review>
+          <div class="panel toolbar xhs-admin-titlebar">
+            <div><h2>待办申请</h2><p>核对笔记链接、赞/收藏数据和个人中心截图。重复链接需要二次核验。</p></div>
+            <button type="button" data-xhs-admin-refresh><i data-lucide="refresh-cw"></i>刷新列表</button>
+          </div>
+          <div class="xhs-admin-metrics" data-xhs-admin-metrics></div>
+          <div class="panel xhs-admin-filters">
+            <div class="field"><label>审核状态</label><select data-xhs-filter-status><option value="all">全部状态</option><option value="pending">待审核</option><option value="approved">审核通过</option><option value="rejected">未通过</option></select></div>
+            <div class="field"><label>奖励档位</label><select data-xhs-filter-tier><option value="all">全部档位</option><option value="20">20赞/收藏</option><option value="70">70赞/收藏</option></select></div>
+            <div class="field xhs-admin-filter-search"><label>搜索</label><input type="search" placeholder="用户邮箱或笔记链接" data-xhs-filter-query /></div>
+          </div>
+          <div class="table-wrap xhs-admin-table-wrap">
+            <table class="xhs-admin-table">
+              <thead><tr><th>提交用户</th><th>笔记与数据</th><th>奖励档位</th><th>归属截图</th><th>风险提示</th><th>状态</th><th>提交时间</th><th>操作</th></tr></thead>
+              <tbody data-xhs-admin-list></tbody>
+            </table>
+          </div>
+          <div class="xhs-admin-review-modal" data-xhs-review-modal hidden>
+            <div class="xhs-admin-modal-backdrop" data-close-xhs-review></div>
+            <section class="xhs-admin-modal-panel" role="dialog" aria-modal="true" aria-labelledby="xhs-review-modal-title">
+              <header><div><span>兑换审核</span><h3 id="xhs-review-modal-title" data-xhs-review-title>审核详情</h3></div><button type="button" aria-label="关闭审核详情" title="关闭" data-close-xhs-review><i data-lucide="x"></i></button></header>
+              <div data-xhs-review-detail></div>
+            </section>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>

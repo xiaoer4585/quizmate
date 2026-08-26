@@ -1,8 +1,10 @@
 // Processing helper - calls the unified `analyze` action on study-auth-api.
 // Mirrors the original desktop-client: one-shot request, credits deducted server-side.
 // No SSE streaming - the server returns the full result in a single response.
-import { BrowserWindow } from 'electron'
+import { app, BrowserWindow } from 'electron'
 import crypto from 'crypto'
+import fs from 'fs'
+import path from 'path'
 import { ConfigHelper } from '../ConfigHelper'
 import { ProcessingMode } from '../../shared/shortcuts'
 import { postAction, postActionEnvelope, ApiError } from '../apiClient'
@@ -17,6 +19,8 @@ export interface AnalyzeResult {
   answer?: string
   explanation?: string
   code?: string
+  errorCode?: string
+  stage?: string
   creditBalance?: number
   creditCost?: number
   usedKnowledge?: boolean
@@ -109,6 +113,29 @@ function finiteNumber(value: unknown): number | undefined {
   return Number.isFinite(num) ? num : undefined
 }
 
+function appendDiagnosticLog(event: string, details: Record<string, unknown>): void {
+  try {
+    const logDir = path.join(app.getPath('userData'), 'logs')
+    fs.mkdirSync(logDir, { recursive: true })
+    const safeDetails = { ...details }
+    delete safeDetails.accountToken
+    delete safeDetails.token
+    delete safeDetails.screenshot
+    delete safeDetails.screenshotUrl
+    fs.appendFileSync(
+      path.join(logDir, 'exam-analysis.log'),
+      `${new Date().toISOString()} ${event} ${JSON.stringify(safeDetails)}\n`,
+      'utf8'
+    )
+  } catch {
+    // Diagnostics must never break the user flow.
+  }
+}
+
+function errorPayload(error: string, code: string, stage: string): Record<string, string> {
+  return { error, code, stage }
+}
+
 export class LightweightProcessingHelper {
   private configHelper: ConfigHelper
   private mainWindow: BrowserWindow | null = null
@@ -171,6 +198,30 @@ export class LightweightProcessingHelper {
   }
 
   /**
+   * 邀请代理总览（含阶梯奖励进度、是否已充值、统计/提成/提现等）。
+   * 用于 InviteAgent 面板与支付完成页入口。
+   */
+  public async getReferralOverview(): Promise<{
+    success: boolean
+    overview?: any
+    error?: string
+  }> {
+    const token = this.configHelper.getAuthToken()
+    if (!token) return { success: false, error: '未登录，请先登录账号。' }
+    try {
+      const data = await postAction<Record<string, unknown>>(
+        this.configHelper.getAppConfig().apiBaseUrl,
+        'getReferralOverview',
+        { accountToken: token },
+        { timeoutMs: 15_000 }
+      )
+      return { success: true, overview: data }
+    } catch (e: any) {
+      return { success: false, error: e instanceof Error ? e.message : '获取邀请总览失败' }
+    }
+  }
+
+  /**
    * Run a one-shot analyze request. Sends `initial-start` then either
    * `solution-stream-complete` (success) or `solution-stream-error` (failure)
    * to the overlay window, preserving the legacy event names so the renderer
@@ -179,12 +230,16 @@ export class LightweightProcessingHelper {
   public async analyze(options: AnalyzeOptions): Promise<AnalyzeResult> {
     const token = this.configHelper.getAuthToken()
     if (!token) {
-      this.sendEvent('processing-unauthorized', { error: '未登录，请先登录账号。' })
-      return { success: false, error: '未登录', code: 'AUTH_REQUIRED' }
+      const payload = errorPayload('未登录，请先登录账号。', 'AUTH_REQUIRED', 'auth')
+      appendDiagnosticLog('analyze.reject', payload)
+      this.sendEvent('processing-unauthorized', payload)
+      return { success: false, error: '未登录', errorCode: 'AUTH_REQUIRED', stage: 'auth' }
     }
     if (!options.images || options.images.length === 0) {
-      this.sendEvent('processing-no-screenshots', { error: '请先截图后再搜题。' })
-      return { success: false, error: '没有截图', code: 'NO_SCREENSHOTS' }
+      const payload = errorPayload('请先截图后再搜题。', 'NO_SCREENSHOTS', 'input')
+      appendDiagnosticLog('analyze.reject', payload)
+      this.sendEvent('processing-no-screenshots', payload)
+      return { success: false, error: '没有截图', errorCode: 'NO_SCREENSHOTS', stage: 'input' }
     }
 
     this.sendEvent('initial-start', { mode: options.mode, imageCount: options.images.length })
@@ -272,8 +327,10 @@ export class LightweightProcessingHelper {
       const explanation = structured.explanation || firstText(data, ['explanation', 'analysis', 'reasoning', 'detail'])
       const code = structured.code
       if (!answer && !explanation) {
-        this.sendEvent('solution-stream-error', { error: '模型没有返回有效结果。为避免误判，请刷新积分确认；当前请求不会在客户端重复扣分。' })
-        return { success: false, error: '模型没有返回有效结果', code: 'EMPTY_RESULT' }
+        const payload = errorPayload('模型没有返回有效结果。为避免误判，请刷新积分确认；当前请求不会在客户端重复扣分。', 'EMPTY_RESULT', 'parse')
+        appendDiagnosticLog('analyze.error', { ...payload, requestId, imageBytes: screenshot.buffer.length, totalMs: Date.now() - startedAt })
+        this.sendEvent('solution-stream-error', payload)
+        return { success: false, error: '模型没有返回有效结果', errorCode: 'EMPTY_RESULT', stage: 'parse' }
       }
 
       // creditBalance / creditCost / usedKnowledge / knowledgeHits 在 envelope 顶层
@@ -300,6 +357,13 @@ export class LightweightProcessingHelper {
         raw: data,
       }
       console.log('[ProcessingHelper] analyze timing:', { requestId, imageBytes: screenshot.buffer.length, totalMs: Date.now() - startedAt })
+      appendDiagnosticLog('analyze.success', {
+        requestId,
+        imageBytes: screenshot.buffer.length,
+        totalMs: Date.now() - startedAt,
+        creditCost: result.creditCost,
+        creditBalance: result.creditBalance,
+      })
 
       // Notify overlay with the same payload shape the renderer expects.
       // voice 模式不发送悬浮框事件（由 main.ts 调用 TTS 播报）
@@ -323,20 +387,36 @@ export class LightweightProcessingHelper {
       return result
     } catch (e: any) {
       console.error('[ProcessingHelper] analyze error:', e?.message || e, e?.code ? `(code: ${e.code})` : '')
+      const code = e instanceof ApiError ? e.code : 'UNKNOWN'
+      const stage = e instanceof ApiError
+        ? e.kind === 'auth' ? 'auth'
+          : e.kind === 'credits' ? 'credits'
+            : e.kind === 'timeout' ? 'timeout'
+              : e.kind === 'network' ? 'network'
+                : 'response'
+        : 'unknown'
+      appendDiagnosticLog('analyze.error', {
+        requestId,
+        code,
+        stage,
+        message: e?.message || String(e),
+        imageBytes: screenshot.buffer.length,
+        totalMs: Date.now() - startedAt,
+      })
       if (e instanceof ApiError) {
         if (e.kind === 'auth') {
-          this.sendEvent('processing-unauthorized', { error: e.message })
+          this.sendEvent('processing-unauthorized', errorPayload(e.message, e.code, 'auth'))
         } else if (e.kind === 'credits') {
-          this.sendEvent('out-of-credits', { error: e.message })
+          this.sendEvent('out-of-credits', errorPayload(e.message, e.code, 'credits'))
         } else if (e.kind === 'timeout') {
-          this.sendEvent('solution-stream-error', { error: '分析超时，未扣积分。' })
+          this.sendEvent('solution-stream-error', errorPayload('分析超时，未扣积分。', e.code, 'timeout'))
         } else {
-          this.sendEvent('solution-stream-error', { error: e.message })
+          this.sendEvent('solution-stream-error', errorPayload(e.message, e.code, stage))
         }
-        return { success: false, error: e.message, code: e.code }
+        return { success: false, error: e.message, errorCode: e.code, stage }
       }
-      this.sendEvent('solution-stream-error', { error: e.message || String(e) })
-      return { success: false, error: e.message || String(e), code: 'UNKNOWN' }
+      this.sendEvent('solution-stream-error', errorPayload(e.message || String(e), 'UNKNOWN', 'unknown'))
+      return { success: false, error: e.message || String(e), errorCode: 'UNKNOWN', stage: 'unknown' }
     } finally {
       this.currentController = null
     }

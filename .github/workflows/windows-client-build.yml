@@ -1,0 +1,128 @@
+name: Build QuizMate Windows
+
+# Windows 安装包统一在 GitHub Actions 构建（本地只保留代码）。
+# 产物为 ia32 通用包：单个安装包同时兼容 x64 与 32 位(x86) Windows 系统，
+# 兼容 Win10 及以上系统（Electron 31 起不支持 Win7/8）。
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - windows-build-*
+    tags:
+      - windows-build-*
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Windows ia32 universal installer
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        working-directory: windows客户端/QuizMate-Windows
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows客户端/QuizMate-Windows/package-lock.json
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          set -o pipefail
+          npm ci --no-audit --no-fund 2>&1 | tee -a build.log
+
+      - name: Validate source
+        shell: bash
+        run: |
+          set -o pipefail
+          {
+            npm run typecheck:node
+            npm run typecheck:web
+          } 2>&1 | tee -a build.log
+
+      - name: Build ia32 installer
+        shell: bash
+        env:
+          # 注入自动更新源域名，与 electron-builder.yml 的 publish.url 占位符配套
+          QUIZMATE_UPDATE_BASE_URL: https://quizmate.cn
+        run: |
+          set -o pipefail
+          {
+            npm run build
+            npx electron-builder --win --ia32 --publish never
+          } 2>&1 | tee -a build.log
+
+      - name: Verify installer architecture and artifacts
+        id: artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          exec > >(tee -a build.log) 2>&1
+          EXE=$(find release -maxdepth 1 -name 'QuizMate-Windows-*.exe' -print -quit)
+          BLOCKMAP=$(find release -maxdepth 1 -name 'QuizMate-Windows-*.exe.blockmap' -print -quit)
+          APP_UPDATE=release/win-ia32-unpacked/resources/app-update.yml
+          test -n "$EXE"
+          test -n "$BLOCKMAP"
+          test -f release/latest.yml
+          test -f "$APP_UPDATE"
+
+          # PE 头校验：安装包与解包后的主程序必须为 32 位 (machine=0x14c)，
+          # 保证单个安装包兼容 x64 与 32 位 Windows
+          node -e '
+            const fs = require("fs");
+            for (const p of [process.argv[1], process.argv[2]]) {
+              const b = fs.readFileSync(p);
+              const off = b.readUInt32LE(0x3c);
+              const machine = b.readUInt16LE(off + 4);
+              if (machine !== 0x14c) {
+                console.error(`FAIL: ${p} PE machine=0x${machine.toString(16)}，期望 0x14c (i386)`);
+                process.exit(1);
+              }
+              console.log(`OK: ${p} -> 32-bit (i386)`);
+            }
+          ' "$EXE" "release/win-ia32-unpacked/QuizMate.exe"
+
+          grep -q "version: 2026" release/latest.yml
+          sha256sum "$EXE" | tee sha256.txt
+          echo "exe=$EXE" >> "$GITHUB_OUTPUT"
+          echo "blockmap=$BLOCKMAP" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub prerelease with installer
+        # 用 Release 资产承载产物：不占 Actions 存储配额、不会过期（Actions artifact 配额有限且回收慢）。
+        # 这里直接创建 prerelease，方便测试人员从 GitHub 页面下载，不需要访问 draft release。
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          case "$TAG" in
+            windows-build-*) ;;
+            *) TAG="windows-build-manual-${{ github.run_number }}" ;;
+          esac
+          if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --title "QuizMate Windows ia32 ${TAG}" \
+              --notes "ia32 通用安装包（单个安装包兼容 x64 与 32 位 Windows，兼容 Win10+）。SHA-256 见 sha256.txt。产物用于本地验证后走 releases/ 目录 + 部署脚本发布。"
+          fi
+          gh release upload "$TAG" \
+            --repo "${{ github.repository }}" \
+            --clobber \
+            "${{ steps.artifact.outputs.exe }}" \
+            "${{ steps.artifact.outputs.blockmap }}" \
+            release/latest.yml \
+            sha256.txt \
+            build.log
+          gh release view "$TAG" --repo "${{ github.repository }}" --json url -q '.url'

@@ -51,3 +51,20 @@ export const useClientSettings = () => useQuery({ queryKey: ['clientSettings'], 
 
 // ===== 充值弹窗事件 =====
 export const onShowRechargeModal = (cb: () => void) => api.system.onShowRechargeModal(cb);
+
+// ===== 积分不足蒙版（仅主窗口可见时弹） =====
+// 主进程在用户最小化/隐藏/最小化恢复时推送可见性变化事件。
+export const useMainWindowVisible = (): boolean => {
+  const [visible, setVisible] = useState<boolean>(() => {
+    try { return !!api.system.isMainWindowVisible(); } catch { return true; }
+  });
+  useEffect(() => {
+    let cancelled = false;
+    api.system.isMainWindowVisible().then((v: boolean) => {
+      if (!cancelled) setVisible(!!v);
+    }).catch(() => {});
+    const off = api.system.onMainWindowVisible((v: boolean) => setVisible(!!v));
+    return () => { cancelled = true; off?.(); };
+  }, []);
+  return visible;
+};

@@ -2,9 +2,10 @@ import crypto from "node:crypto";
 import { CREDIT_COST_PER_INTERVIEW } from "../domain/credits.js";
 import { PublicError } from "../errors.js";
 import { hashToken } from "../security/crypto.js";
-import type { ActionDependencies, ActionHandler } from "../types.js";
+import type { ActionDependencies, ActionHandler, RequestContext } from "../types.js";
 import { DEFAULT_INTERVIEW_PROMPT } from "./configuration.js";
 import { normalizeDeviceId } from "./licenses.js";
+import { setModelFailureContext } from "../server.js";
 
 interface SpeechAccount {
   account_id: string;
@@ -250,7 +251,7 @@ export function createSpeechActions(deps: ActionDependencies): Map<string, Actio
     };
   });
 
-  actions.set("generateInterviewAnswer", async (input) => {
+  actions.set("generateInterviewAnswer", async (input, context: RequestContext) => {
     const { account, deviceId } = await authenticateAccount(deps, input);
     const question = String(input.question ?? "").replace(/\s+/g, " ").trim();
     if (question.length < 2) {
@@ -272,13 +273,26 @@ export function createSpeechActions(deps: ActionDependencies): Map<string, Actio
       ? await deps.settings.get("interview_prompt_config")
       : {};
     const configuredPrompt = String(interviewPromptSetting.prompt ?? "").trim() || DEFAULT_INTERVIEW_PROMPT;
-    const result = await deps.runAnalysisModel({
-      prompt: buildInterviewPrompt(question, interviewContext, configuredPrompt),
-      pageContext: null,
-      screenshot: "",
-      source: "interview",
-      mode: "interview"
+    setModelFailureContext({
+      requestMode: "interview",
+      accountId: account.account_id,
+      requestId: context.requestId,
+      clientIp: context.clientIp
     });
+    let result;
+    try {
+      result = await deps.runAnalysisModel({
+        prompt: buildInterviewPrompt(question, interviewContext, configuredPrompt),
+        pageContext: null,
+        screenshot: "",
+        source: "interview",
+        mode: "interview"
+      });
+    } catch (error) {
+      throw error;
+    } finally {
+      setModelFailureContext(undefined);
+    }
     const item = result.items[0];
     const answer = formatInterviewAnswer(String(item?.answer || item?.explanation || result.note || ""));
     if (!answer) {

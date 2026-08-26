@@ -41,8 +41,8 @@ describe("model result parser", () => {
 
   it("falls back to a code answer when a vision model omits the JSON wrapper", () => {
     const result = parseModelResult("```go\nfunc reverseList(head *ListNode) *ListNode { return head }\n```");
-    expect(result.items[0].code).toContain("reverseList");
     expect(result.items[0].answer).toContain("reverseList");
+    expect(result.items[0].explanation).toBe("");
   });
 
   it("rejects malformed or empty model output", () => {
@@ -132,5 +132,157 @@ describe("model result parser", () => {
     expect((calledBody.messages as Array<{ content: string }>)[0].content).toContain("第一人称");
     expect((calledBody.messages as Array<{ content: string }>)[0].content).toContain("解题思路");
     expect(result.items[0].answer).toBe("回答");
+  });
+
+  it("retries once with a strict JSON instruction when the first result cannot be repaired", async () => {
+    const bodies: Array<Array<{ content: string }>> = [];
+    let call = 0;
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
+      call += 1;
+      const body = JSON.parse(String(init?.body ?? "{}")) as { messages: Array<{ content: string }> };
+      bodies.push(body.messages);
+      const content = call === 1
+        // 字符串内未转义英文引号：本地容错无法修复（2026-08-20 线上残余失败类型）
+        ? '{"items":[{"questionNo":"1","summary":"题目1","answer":"我认为"Redis"很快，适合缓存场景","explanation":"解析"}]}'
+        : '{"items":[{"questionNo":"1","summary":"题目1","answer":"第1题答案是：B第二个","explanation":"解析"}]}';
+      return new Response(JSON.stringify({ choices: [{ message: { content } }] }), {
+        status: 200,
+        headers: { "content-type": "application/json" }
+      });
+    });
+
+    const recorded: Array<{ modelType: string; modelName: string }> = [];
+    const runModel = createAnalysisModel(
+      {} as AppConfig,
+      async () => ({ baseUrl: "https://text.example", apiKey: "text-key", model: "ark-code-latest" }),
+      undefined,
+      undefined,
+      (info) => recorded.push(info)
+    );
+
+    const result = await runModel({
+      prompt: "题目内容",
+      pageContext: null,
+      screenshot: "",
+      source: "manual",
+      mode: "exam"
+    });
+
+    expect(call).toBe(2);
+    // 重试请求的用户消息包含严格 JSON 强化指令
+    expect(bodies[1][1].content).toContain("严格合法的 JSON");
+    expect(bodies[1][1].content).toContain("题目内容");
+    expect(result.items[0].answer).toContain("B第二个");
+    // 成功只记录一次调用统计
+    expect(recorded).toEqual([{ modelType: "text", modelName: "ark-code-latest" }]);
+  });
+
+  it("stops after one retry and propagates the error when both results are invalid", async () => {
+    let call = 0;
+    vi.stubGlobal("fetch", async () => {
+      call += 1;
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"items":[{"answer":"我认为"Redis"很快"}]}' } }]
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+
+    const recorded: Array<{ modelType: string; modelName: string }> = [];
+    const runModel = createAnalysisModel(
+      {} as AppConfig,
+      async () => ({ baseUrl: "https://text.example", apiKey: "text-key", model: "ark-code-latest" }),
+      undefined,
+      undefined,
+      (info) => recorded.push(info)
+    );
+
+    await expect(runModel({
+      prompt: "题目内容",
+      pageContext: null,
+      screenshot: "",
+      source: "manual",
+      mode: "exam"
+    })).rejects.toMatchObject({ code: "INVALID_MODEL_RESULT" });
+
+    expect(call).toBe(2);
+    // 全部失败不记录成功统计（与失败不扣积分一致）
+    expect(recorded).toEqual([]);
+  });
+
+  it("does not retry upstream or timeout errors", async () => {
+    let call = 0;
+    vi.stubGlobal("fetch", async () => {
+      call += 1;
+      return new Response("upstream boom", { status: 500 });
+    });
+
+    const failures: Array<Record<string, unknown>> = [];
+    const runModel = createAnalysisModel(
+      {} as AppConfig,
+      async () => ({ baseUrl: "https://text.example", apiKey: "text-key", model: "ark-code-latest" }),
+      undefined,
+      undefined,
+      undefined,
+      (info) => failures.push(info as unknown as Record<string, unknown>),
+      () => ({ requestMode: "exam", accountId: "acct-1", requestId: "req-1", clientIp: "1.2.3.4" })
+    );
+
+    await expect(runModel({
+      prompt: "题目内容",
+      pageContext: null,
+      screenshot: "",
+      source: "manual",
+      mode: "exam"
+    })).rejects.toMatchObject({ code: "MODEL_UPSTREAM_ERROR" });
+
+    expect(call).toBe(1);
+    // 上游 5xx 应当作为失败埋点上报，且携带 mode/账号/requestId/IP
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      modelType: "text",
+      modelName: "ark-code-latest",
+      errorCode: "MODEL_UPSTREAM_ERROR",
+      requestMode: "exam",
+      accountId: "acct-1",
+      requestId: "req-1",
+      clientIp: "1.2.3.4"
+    });
+  });
+
+  it("records a failure for invalid result after retry also fails", async () => {
+    let call = 0;
+    vi.stubGlobal("fetch", async () => {
+      call += 1;
+      return new Response(JSON.stringify({
+        choices: [{ message: { content: '{"items":[{"answer":"我认为"Redis"很快"}]}' } }]
+      }), { status: 200, headers: { "content-type": "application/json" } });
+    });
+
+    const failures: Array<Record<string, unknown>> = [];
+    const runModel = createAnalysisModel(
+      {} as AppConfig,
+      async () => ({ baseUrl: "https://text.example", apiKey: "text-key", model: "ark-code-latest" }),
+      undefined,
+      undefined,
+      undefined,
+      (info) => failures.push(info as unknown as Record<string, unknown>),
+      () => ({ requestMode: "exam" })
+    );
+
+    await expect(runModel({
+      prompt: "题目内容",
+      pageContext: null,
+      screenshot: "",
+      source: "manual",
+      mode: "exam"
+    })).rejects.toMatchObject({ code: "INVALID_MODEL_RESULT" });
+
+    expect(call).toBe(2);
+    expect(failures).toHaveLength(1);
+    expect(failures[0]).toMatchObject({
+      modelType: "text",
+      modelName: "ark-code-latest",
+      errorCode: "INVALID_MODEL_RESULT",
+      requestMode: "exam"
+    });
   });
 });

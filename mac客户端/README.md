@@ -1,6 +1,7 @@
 # Mac 客户端
 
 当前有效工程：`QuizMate-Mac`
+共享桌面公共逻辑位于根目录 `desktop-core`。
 
 ## 产品范围
 
@@ -12,5 +13,4 @@
 
 - Intel Mac：`x64` DMG。
 - Apple 芯片 Mac：`arm64` DMG，适用于 M1、M2、M3、M4 及后续 Apple Silicon。
-
-正式安装包放在 `发布包`。历史 Mac 源码和无效安装包仍只保存在归档目录，不被当前工程引用。
+正式代码不引用历史安装包目录；GitHub 按 `x64` / `arm64` 两条线构建。

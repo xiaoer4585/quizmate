@@ -7,9 +7,11 @@ import type {
   ActionDependencies,
   ActionHandler,
   ActionInput,
-  AnalysisModelResult
+  AnalysisModelResult,
+  RequestContext
 } from "../types.js";
 import { normalizeDeviceId, requireActiveLicense, type LegacyLicenseRow } from "./licenses.js";
+import { setModelFailureContext } from "../server.js";
 
 interface AuthAccount {
   account_id: string;
@@ -229,7 +231,7 @@ async function settleLicenseSuccess(
 }
 
 function analyzeHandler(deps: ActionDependencies): ActionHandler {
-  return async (input) => {
+  return async (input, context: RequestContext) => {
     const access = await authenticate(deps, input);
     const balance = Number(access.account?.credits ?? 0);
     if (access.account && balance < CREDIT_COST_PER_SUCCESS) {
@@ -247,13 +249,22 @@ function analyzeHandler(deps: ActionDependencies): ActionHandler {
 
     const source = String(input.source ?? (input.screenshot ? "screen" : "page")).trim().slice(0, 50);
     const deviceId = access.deviceId;
+    const mode = String(input.mode ?? "");
+    const failureCtx: { requestMode: string; requestId: string; clientIp: string; accountId?: string; accountEmail?: string } = {
+      requestMode: mode || (input.screenshot ? "overlay" : "universal"),
+      requestId: context.requestId,
+      clientIp: context.clientIp
+    };
+    if (access.account?.account_id) failureCtx.accountId = access.account.account_id;
+    if (access.account?.email) failureCtx.accountEmail = access.account.email;
+    setModelFailureContext(failureCtx);
     try {
       const result = await deps.runAnalysisModel({
         prompt: String(input.prompt ?? "").slice(0, 20_000),
         pageContext: input.pageContext ?? null,
         screenshot: String(input.screenshot ?? ""),
         source,
-        mode: String(input.mode ?? "")
+        mode
       });
       const fallback = deps.settings ? await deps.settings.get("android_answer_fallback_config") : {};
       const androidAnswerFallbackMode = ["silent", "show_answer"].includes(String(fallback.mode ?? "")) ? String(fallback.mode) : "show_answer";
@@ -272,6 +283,8 @@ function analyzeHandler(deps: ActionDependencies): ActionHandler {
     } catch (error) {
       await markFailed(deps, access, request.requestId, error);
       throw error;
+    } finally {
+      setModelFailureContext(undefined);
     }
   };
 }

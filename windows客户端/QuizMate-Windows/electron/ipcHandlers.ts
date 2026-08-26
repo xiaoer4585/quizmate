@@ -38,7 +38,6 @@ export interface OverlayControls {
   setBackgroundOpacity: (opacity: number) => void;
   setZoomFactor: (factor: number) => void;
   setTheme: (theme: 'dark' | 'light') => void;
-  setIgnoreMouseEvents: (ignore: boolean) => void;
   minimizeWindow: (which: 'main' | 'overlay') => void;
   maximizeWindow: (which: 'main' | 'overlay') => void;
   closeWindow: (which: 'main' | 'overlay') => void;
@@ -138,7 +137,6 @@ export function registerIpcHandlers(
   ipcMain.handle('overlay:getBounds', () => controls.getWindowBounds());
   ipcMain.handle('overlay:resetPosition', () => controls.resetWindowPosition());
   ipcMain.handle('overlay:setTheme', (_e, theme) => controls.setTheme(theme));
-  ipcMain.handle('overlay:setIgnoreMouseEvents', (_e, ignore: boolean) => controls.setIgnoreMouseEvents(ignore));
   ipcMain.handle('overlay:minimize', (_e, which) => controls.minimizeWindow(which));
   ipcMain.handle('overlay:maximize', (_e, which) => controls.maximizeWindow(which));
   ipcMain.handle('overlay:close', (_e, which) => controls.closeWindow(which));
@@ -249,6 +247,22 @@ export function registerIpcHandlers(
     if (!ctx.processing) return { success: false, error: '处理模块未初始化' };
     return await (ctx.processing as any).generateInviteCode?.() ?? { success: false, error: '不支持' };
   });
+  ipcMain.handle('invite:get-overview', async () => {
+    if (!ctx.processing) return { success: false, error: '处理模块未初始化' };
+    return await (ctx.processing as any).getReferralOverview?.() ?? { success: false, error: '不支持' };
+  });
+
+  // ===== 主窗口可见性（用于积分不足蒙版只在主窗口可见时弹出） =====
+  function computeMainVisible(): boolean {
+    const win = getMainWindow();
+    if (!win || win.isDestroyed()) return false;
+    if (win.isMinimized()) return false;
+    return win.isVisible();
+  }
+  ipcMain.handle('system:isMainWindowVisible', () => computeMainVisible());
+
+  // 监听主窗口 minimize / hide / show / restore 事件（main.ts 负责挂监听，
+  // 这里只暴露查询入口）
   // 保存海报/面经图片到本地（弹出系统保存对话框）
   ipcMain.handle('invite:save-poster', async (_e, dataUrl: string) => {
     try {
@@ -402,4 +416,28 @@ export function registerIpcHandlers(
       status,
     };
   });
+}
+
+/**
+ * 把主窗口可见性变化事件挂接到渲染层。
+ * 由 main.ts 在 createMainWindow 完成后调用一次。
+ */
+export function wireMainWindowVisibility(getMainWindow: () => BrowserWindow | null): void {
+  const win = getMainWindow();
+  if (!win || win.isDestroyed()) return;
+  const emit = () => {
+    const w = getMainWindow();
+    if (!w || w.isDestroyed()) return;
+    const visible = !w.isMinimized() && w.isVisible();
+    BrowserWindow.getAllWindows().forEach((target) => {
+      if (target.isDestroyed()) return;
+      target.webContents.send('system:mainWindowVisible', visible);
+    });
+  };
+  win.on('minimize', emit);
+  win.on('hide', emit);
+  win.on('show', emit);
+  win.on('restore', emit);
+  win.on('focus', emit);
+  win.on('blur', emit);
 }

@@ -9,7 +9,7 @@ on:
     tags:
       - mac-build-*
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   build:
@@ -119,6 +119,42 @@ jobs:
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
+      - name: Create GitHub prerelease with Mac package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME}"
+          case "$TAG" in
+            mac-build-*) ;;
+            *) TAG="mac-build-manual-${{ github.run_number }}" ;;
+          esac
+          RELEASE_TITLE="QuizMate Mac ${TAG}"
+          RELEASE_NOTES="Mac 测试安装包：Intel 与 Apple Silicon 分别构建、分别下载。DMG 用于手动安装测试，ZIP 用于更新链路验证。SHA-256 见对应 sha256 文件。"
+          if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --title "$RELEASE_TITLE" \
+              --notes "$RELEASE_NOTES" || gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null
+          fi
+          cp sha256.txt "sha256-${{ matrix.arch }}.txt"
+          cp architecture.txt "architecture-${{ matrix.arch }}.txt"
+          cp codesign.txt "codesign-${{ matrix.arch }}.txt"
+          cp build.log "build-${{ matrix.arch }}.log"
+          gh release upload "$TAG" \
+            --repo "${{ github.repository }}" \
+            --clobber \
+            "${{ steps.artifact.outputs.dmg }}" \
+            "${{ steps.artifact.outputs.zip }}" \
+            "sha256-${{ matrix.arch }}.txt" \
+            "architecture-${{ matrix.arch }}.txt" \
+            "codesign-${{ matrix.arch }}.txt" \
+            "build-${{ matrix.arch }}.log"
+          gh release view "$TAG" --repo "${{ github.repository }}" --json url -q '.url'
+
       - name: Upload Actions artifact
         continue-on-error: true
         uses: actions/upload-artifact@v4
@@ -134,7 +170,7 @@ jobs:
           retention-days: 1
 
       - name: Upload delivery package
-        if: startsWith(github.ref, 'refs/tags/mac-build-')
+        if: startsWith(github.ref, 'refs/tags/mac-delivery-')
         shell: bash
         env:
           BUILD_ARCH: ${{ matrix.arch }}
@@ -164,7 +200,7 @@ jobs:
             "$ZIP_UPLOAD_URL"
 
       - name: Upload diagnostic log
-        if: always() && startsWith(github.ref, 'refs/tags/mac-build-')
+        if: always() && startsWith(github.ref, 'refs/tags/mac-delivery-')
         shell: bash
         env:
           LOG_UPLOAD_KEY: ${{ matrix.logUploadKey }}

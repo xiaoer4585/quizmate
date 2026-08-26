@@ -36,6 +36,24 @@ description: "Manages QuizMate project version control with date-based tags, fea
   - `quizmate.vip` 域名下的非首页内容停止更新，保留旧版即可
   - 任何官网改动都先在新官网验证，确认无误后再同步跳转逻辑
 
+## Windows 客户端构建硬性要求（2026.8.25 起生效，不可遗忘）
+
+1. **单一安装包必须同时兼容 x64 与 32 位(x86) Windows 系统**：
+   - 构建架构固定为 **ia32**（`electron-builder --win --ia32`，见 `package.json` 的 `package:win` 脚本）
+   - 32 位程序在 x64 与 x86 系统上均可运行，实现"一个安装包兼容两种系统"
+   - 禁止改回 `--x64`（会导致 32 位系统无法安装）；如需拆分双包必须用户明确要求
+2. **兼容 Win10 及以上系统**（Electron 31+ 本身不支持 Win7/8）：
+   - Win10 2004+（build 19041+）使用 `WDA_EXCLUDEFROMCAPTURE` 防捕获
+   - 更老的 Win10 自动降级 `WDA_MONITOR`（`electron/helpers/Win32Protection.ts` 内置版本检测，勿删）
+3. **安装包一律在 GitHub Actions 构建，本地只保留代码**：
+   - 工作流：`.github/workflows/windows-client-build.yml`（手动触发 `workflow_dispatch`）
+   - 触发命令：`gh workflow run windows-client-build.yml --repo wangxiaoer4585/quizmate --ref main`
+   - 监控构建：`gh run watch` 或 `gh run list --workflow=windows-client-build.yml`
+   - 下载产物：`gh run download <run-id> -n QuizMate-Windows-ia32-<run-number> -D <目标目录>`
+   - 产物已含 PE 架构自检（ia32=0x14c），下载后放入 `releases/<日期>/` 再走部署脚本
+   - 本地不再执行 `npm run package:win`（仅作兜底，沙箱/文件锁问题多）
+4. **产物归档**：构建产物（exe/blockmap/latest.yml/app-update.yml）放入 `windows客户端/QuizMate-Windows/releases/<YYYY-MM-DD>*/`，同日已有目录时用 `-fix` 等后缀新开目录，部署脚本用 `QUIZMATE_RELEASE_DIR` 指定
+
 ## 本地 / GitHub / 阿里云 三者关系
 
 ```
