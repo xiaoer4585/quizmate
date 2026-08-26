@@ -92,9 +92,11 @@ jobs:
           ' "$EXE" "release/win-ia32-unpacked/QuizMate.exe"
 
           # 打包产物内的 koffi 原生模块必须是 ia32（防捕获 FFI 依赖）
+          KOFFI=$(find release/win-ia32-unpacked/resources/app.asar.unpacked -path '*/koffi.node' -print -quit)
+          test -n "$KOFFI"
           node -e '
             const fs = require("fs");
-            const path = "release/win-unpacked/resources/app.asar.unpacked/node_modules/koffi/build/koffi/win32_ia32/koffi.node";
+            const path = process.argv[1];
             const b = fs.readFileSync(path);
             const off = b.readUInt32LE(0x3c);
             const machine = b.readUInt16LE(off + 4);
@@ -103,7 +105,7 @@ jobs:
               process.exit(1);
             }
             console.log("OK: koffi.node -> 32-bit (i386)");
-          '
+          ' "$KOFFI"
 
           grep -q "version: 2026" release/latest.yml
           sha256sum "$EXE" | tee sha256.txt
