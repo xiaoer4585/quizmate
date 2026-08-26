@@ -1160,6 +1160,16 @@
       const LEGACY_API_ENDPOINTS = new Set([
         "https://cuolemo-d4g2lqdczd74e3ae5.service.tcloudbase.com/study-auth-api"
       ]);
+      const CREDIT_ADMIN_ACTIONS = new Set([
+        "adminListCreditAccounts",
+        "adminListCreditLogs",
+        "adminAdjustCredits",
+        "adminBatchAdjustCredits",
+        "adminDeleteCreditLog",
+        "adminGetCreditWhitelist",
+        "adminAddCreditWhitelist",
+        "adminRemoveCreditWhitelist"
+      ]);
       const CUSTOMER_SERVICE_URL = "https://kefu.quizmate.vip/";
       const tableActions = {
         accounts: "adminListCreditAccounts",
@@ -1269,11 +1279,26 @@
         aiFailures: [["createdAt", "时间"], ["modelType", "模型类型"], ["modelName", "模型"], ["errorCode", "错误码"], ["errorMessage", "错误信息"], ["httpStatus", "HTTP"], ["requestMode", "模式"], ["accountEmail", "账户"], ["requestId", "请求 ID"], ["clientIp", "IP"]]
       };
 
-      const storedApiEndpoint = localStorage.getItem("study_api_endpoint") || "";
-      if (LEGACY_API_ENDPOINTS.has(storedApiEndpoint.replace(/\/+$/, ""))) {
-        localStorage.setItem("study_api_endpoint", API_DEFAULT);
+      function normalizeStudyApiEndpoint(endpoint) {
+        const text = String(endpoint || "").trim().replace(/\/+$/, "");
+        if (!text) return API_DEFAULT;
+        if (LEGACY_API_ENDPOINTS.has(text)) return API_DEFAULT;
+        try {
+          const url = new URL(text);
+          if (url.hostname.endsWith(".service.tcloudbase.com") && (!url.pathname || url.pathname === "/study-auth-api")) {
+            return API_DEFAULT;
+          }
+        } catch {
+          return text;
+        }
+        return text;
       }
-      els.apiEndpoint.value = localStorage.getItem("study_api_endpoint") || API_DEFAULT;
+
+      const storedApiEndpoint = normalizeStudyApiEndpoint(localStorage.getItem("study_api_endpoint"));
+      if (storedApiEndpoint !== (localStorage.getItem("study_api_endpoint") || "").trim().replace(/\/+$/, "")) {
+        localStorage.setItem("study_api_endpoint", storedApiEndpoint);
+      }
+      els.apiEndpoint.value = storedApiEndpoint;
       els.loginApiEndpoint.value = els.apiEndpoint.value;
       els.cpanApiEndpoint.value = localStorage.getItem("cpan_api_endpoint") || CPAN_API_DEFAULT;
       els.loginEmail.value = state.accountEmail;
@@ -2680,14 +2705,29 @@
         run(() => loadTable(type));
       }
 
-      async function api(action, payload) {
-        saveLocal();
-        const response = await fetch(els.apiEndpoint.value.trim() || API_DEFAULT, {
+      async function postStudyApi(endpoint, action, payload) {
+        const response = await fetch(endpoint, {
           method: "POST", headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ action, accountToken: state.accountToken, ...payload })
         });
         let data;
         try { data = await response.json(); } catch { throw new Error(`接口返回异常（HTTP ${response.status}）`); }
+        return { response, data };
+      }
+
+      async function api(action, payload) {
+        saveLocal();
+        const endpoint = normalizeStudyApiEndpoint(els.apiEndpoint.value);
+        els.apiEndpoint.value = endpoint;
+        localStorage.setItem("study_api_endpoint", endpoint);
+        let result = await postStudyApi(endpoint, action, payload);
+        if (CREDIT_ADMIN_ACTIONS.has(action) && result.data?.code === "UNKNOWN_ACTION" && endpoint !== API_DEFAULT) {
+          els.apiEndpoint.value = API_DEFAULT;
+          localStorage.setItem("study_api_endpoint", API_DEFAULT);
+          setStatus("检测到旧接口不支持积分后台，已切回正式接口并重试。");
+          result = await postStudyApi(API_DEFAULT, action, payload);
+        }
+        const { response, data } = result;
         if (!response.ok || !data.ok) throw new Error(data.error || "请求失败");
         return data.data || {};
       }
@@ -2696,7 +2736,7 @@
         const email = els.loginEmail.value.trim();
         const password = els.loginPassword.value.trim();
         if (!email || !password) throw new Error("请输入邮箱和密码。");
-        const endpoint = els.loginApiEndpoint.value.trim() || API_DEFAULT;
+        const endpoint = normalizeStudyApiEndpoint(els.loginApiEndpoint.value);
         els.apiEndpoint.value = endpoint;
         localStorage.setItem("study_api_endpoint", endpoint);
         setLoginStatus("正在登录...");

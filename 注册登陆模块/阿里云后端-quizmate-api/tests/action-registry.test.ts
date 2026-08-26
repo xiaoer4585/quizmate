@@ -1,4 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("../src/server.js", () => ({
+  setModelFailureContext: () => undefined
+}));
+
 import { createActionRegistry } from "../src/actions/index.js";
 import type { ActionDependencies } from "../src/types.js";
 
@@ -38,6 +43,17 @@ describe("action registry compatibility", () => {
   it("contains every action exposed by the CloudBase studyAuthApi", () => {
     const registry = createActionRegistry(deps);
     expect(cloudBaseActions.filter((action) => !registry.has(action))).toEqual([]);
+  });
+
+  it("keeps legacy aliases for admin credit pages", () => {
+    const registry = createActionRegistry(deps);
+    expect([
+      "adminListAccounts",
+      "adminListCreditUsers",
+      "adminListCreditLedger",
+      "adminListCreditFlow",
+      "adminListCreditFlows"
+    ].filter((action) => !registry.has(action))).toEqual([]);
   });
 });
 

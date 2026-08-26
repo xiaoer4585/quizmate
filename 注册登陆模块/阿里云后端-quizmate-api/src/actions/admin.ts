@@ -104,7 +104,7 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
       page, pageSize, total, totalPages
     };
   });
-  actions.set("adminListCreditAccounts", async (input) => {
+  const listCreditAccounts: ActionHandler = async (input) => {
     await authenticateAdmin(deps, input);
     const { pageSize, requestedPage } = paging(input);
     const emailKeyword = String(input.email ?? "").trim().slice(0, 200);
@@ -130,8 +130,12 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
       [...params, pageSize, (page - 1) * pageSize]
     );
     return { items: result.rows.map((row) => ({ accountId: String(row.account_id), email: String(row.email), credits: Number(row.credits), totalChargedCredits: Number(row.total_charged_credits), totalConsumedCredits: Number(row.total_consumed_credits), registerBonusCredits: Number(row.register_bonus_credits), status: String(row.status), role: String(row.role ?? "user"), createdAt: date(row.created_at), lastLoginAt: date(row.last_login_at), updatedAt: date(row.updated_at), type: "credits" })), page, pageSize, total, totalPages };
-  });
-  actions.set("adminListCreditLogs", async (input) => {
+  };
+  actions.set("adminListCreditAccounts", listCreditAccounts);
+  actions.set("adminListAccounts", listCreditAccounts);
+  actions.set("adminListCreditUsers", listCreditAccounts);
+
+  const listCreditLogs: ActionHandler = async (input) => {
     await authenticateAdmin(deps, input);
     const { pageSize, requestedPage } = paging(input);
     const total = Number((await deps.db.query<{ count: string }>("SELECT count(*)::text AS count FROM credit_ledger")).rows[0]?.count ?? 0);
@@ -147,7 +151,11 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
       credits: Number(row.credits ?? 0), balanceAfter: Number(row.balance_after ?? 0), source: String(row.source ?? ""), orderNo: String(row.order_no ?? ""),
       packageId: String(row.package_id ?? ""), deviceId: String(row.device_id ?? ""), requestId: String(row.request_id ?? ""), createdAt: date(row.created_at)
     })), page, pageSize, total, totalPages };
-  });
+  };
+  actions.set("adminListCreditLogs", listCreditLogs);
+  actions.set("adminListCreditLedger", listCreditLogs);
+  actions.set("adminListCreditFlow", listCreditLogs);
+  actions.set("adminListCreditFlows", listCreditLogs);
   actions.set("adminDashboardSummary", async (input) => {
     await authenticateAdmin(deps, input);
     const result = await deps.db.query<{
