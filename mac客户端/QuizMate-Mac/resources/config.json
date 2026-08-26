@@ -9,7 +9,7 @@
   "resetPasswordUrl": "https://quizmate.cn/#credits",
   "rechargeUrl": "https://quizmate.cn/recharge.html",
   "tutorialUrl": "https://quizmate.cn/",
-  "allowedExternalHosts": ["quizmate.cn", "www.quizmate.vip", "offer.quizmate.cn", "www.offer.quizmate.cn"],
+  "allowedExternalHosts": ["quizmate.cn", "www.quizmate.cn", "www.quizmate.vip", "offer.quizmate.cn", "www.offer.quizmate.cn"],
   "creditCostPerSuccess": 10,
   "creditCostPerInterview": 20,
   "maxScreenshots": 5,

@@ -10,8 +10,8 @@
     "resolveJsonModule": true,
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "baseUrl": ".",
-    "paths": { "@/*": ["src/*"] }
+    "baseUrl": "../../desktop-core",
+    "paths": { "@/*": ["src/*"], "@shared/*": ["shared/*"] }
   },
-  "include": ["src", "shared", "../../desktop-core/interviewTranscript.ts"]
+  "include": ["../../desktop-core/src", "../../desktop-core/shared", "../../desktop-core/interviewTranscript.ts"]
 }

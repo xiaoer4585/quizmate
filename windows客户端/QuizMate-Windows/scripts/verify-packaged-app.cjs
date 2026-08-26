@@ -12,6 +12,14 @@ async function verify(appOutDir) {
   if (!fs.statSync(asarPath).isFile()) throw new Error(`Missing packaged ASAR: ${asarPath}`)
   if (!fs.statSync(executablePath).isFile()) throw new Error(`Missing packaged executable: ${executablePath}`)
 
+  // PE 头校验：必须是 32 位 (machine=0x14c)，保证单安装包兼容 x64 与 32 位 Windows
+  const exeBuf = fs.readFileSync(executablePath)
+  const peOff = exeBuf.readUInt32LE(0x3c)
+  const machine = exeBuf.readUInt16LE(peOff + 4)
+  if (machine !== 0x14c) {
+    throw new Error(`Unexpected PE machine=0x${machine.toString(16)} in ${executablePath}; expected 0x14c (i386)`)
+  }
+
   const extractDir = fs.mkdtempSync(path.join(os.tmpdir(), 'quizmate-asar-'))
   try {
     extractAll(asarPath, extractDir)
@@ -26,7 +34,11 @@ async function verify(appOutDir) {
     const uuid = packagedRequire('uuid')
     if (typeof uuid.v4 !== 'function') throw new Error('Packaged uuid module did not expose v4()')
 
-    process.stdout.write(`PACKAGED_APP_OK version=${packageJson.version} asar=${fs.statSync(asarPath).size}\n`)
+    // koffi 原生模块必须存在（32 位用户态二进制由 koffi 自带）
+    const koffiDir = path.join(extractDir, 'node_modules', 'koffi')
+    if (!fs.statSync(koffiDir).isDirectory()) throw new Error(`Missing koffi module: ${koffiDir}`)
+
+    process.stdout.write(`PACKAGED_APP_OK version=${packageJson.version} arch=i386 asar=${fs.statSync(asarPath).size}\n`)
   } finally {
     fs.rmSync(extractDir, { recursive: true, force: true })
   }

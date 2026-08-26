@@ -11,9 +11,9 @@
     "isolatedModules": true,
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
-    "baseUrl": ".",
+    "baseUrl": "../../desktop-core",
     "paths": { "@/*": ["src/*"], "@shared/*": ["shared/*"] }
   },
-  "include": ["src", "shared"],
+  "include": ["../../desktop-core/src", "../../desktop-core/shared"],
   "references": [{ "path": "./tsconfig.node.json" }]
 }

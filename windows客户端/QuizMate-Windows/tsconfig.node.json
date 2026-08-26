@@ -8,8 +8,8 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "baseUrl": ".",
+    "baseUrl": "../../desktop-core",
     "paths": { "@shared/*": ["shared/*"] }
   },
-  "include": ["electron", "shared", "../../desktop-core"]
+  "include": ["../../desktop-core/electron", "../../desktop-core/shared", "../../desktop-core/types", "../../desktop-core/*.ts"]
 }

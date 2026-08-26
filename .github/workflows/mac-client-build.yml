@@ -1,11 +1,16 @@
 name: Build QuizMate Mac
 
+# Mac 安装包统一在 GitHub Actions 构建（本地只保留代码）。
+# 实际源码在 desktop-core，本工作目录只承担构建配置：
+#   mac客户端/QuizMate-Mac/package.json 与 electron-builder.yml
+# Apple Silicon 与 Intel 分别构建、分别上传产物。
 on:
   workflow_dispatch:
   push:
     branches:
-      - feature/mac-client
-      - mac-build-fix
+      - feature/desktop-unified-core
+      - main
+      - mac-build-*
     tags:
       - mac-build-*
 permissions:

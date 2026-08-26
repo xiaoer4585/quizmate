@@ -1,8 +1,8 @@
 {
-  "name": "quizmate",
+  "name": "quizmate-windows",
   "productName": "QuizMate",
-  "version": "2026.8.25",
-  "description": "QuizMate Windows 客户端 - 笔试与面试实时辅助",
+  "version": "2026.8.28",
+  "description": "QuizMate Windows 客户端 - 笔试与面试实时辅助（共享 desktop-core 源码，本壳仅承担构建配置）",
   "main": "out/main/index.js",
   "author": {
     "name": "QuizMate",
