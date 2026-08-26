@@ -178,7 +178,7 @@ export class UpdateChecker {
     const filename = process.arch === 'arm64'
       ? `QuizMate-Mac-Apple-Silicon-${safeVersion}.dmg`
       : `QuizMate-Mac-Intel-${safeVersion}.dmg`;
-    return `https://quizmate.cn/downloads/${filename}`;
+    return `https://www.quizmate.cn/downloads/${filename}`;
   }
 
   /** 判断是否为网络类错误（DNS解析失败、连接超时等），这类错误静默忽略 */

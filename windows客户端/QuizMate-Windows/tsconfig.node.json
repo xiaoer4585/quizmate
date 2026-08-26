@@ -11,5 +11,5 @@
     "baseUrl": ".",
     "paths": { "@shared/*": ["shared/*"] }
   },
-  "include": ["electron", "shared"]
+  "include": ["electron", "shared", "../../desktop-core"]
 }

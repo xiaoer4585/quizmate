@@ -62,6 +62,7 @@ ehthumbs.db
 
 # === 历史归档代码（不纳入版本管理）===
 归档l历史代码正常不需要引用/
+归档l历史代码/
 
 # === 项目特定的临时/大文件目录 ===
 temp-old-extract/
@@ -102,3 +103,4 @@ build-*.log
 .codex/
 .agents/
 .config/
+.oss-tmp/*
