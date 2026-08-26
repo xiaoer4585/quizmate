@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { User, Mail, Wallet, Zap, RefreshCw, ShieldCheck, LogOut } from 'lucide-react';
 import { api, useProfile } from '../lib/ipc';
+import { isMacPlatform } from '../../shared/shortcuts';
 import InviteAgent from '../components/InviteAgent';
 import RechargeModal from '../components/RechargeModal';
 

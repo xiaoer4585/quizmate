@@ -7,6 +7,7 @@ import {
   Download, Loader2, CheckCircle2, AlertCircle, BookOpen, Chrome, HelpCircle, Sparkles
 } from 'lucide-react';
 import { api, useProfile, useUpdateStatus, useMainWindowVisible } from '../lib/ipc';
+import { isMacPlatform } from '../../shared/shortcuts';
 import RechargeModal from './RechargeModal';
 import ReleaseNotice from './ReleaseNotice';
 
