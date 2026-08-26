@@ -123,7 +123,6 @@ jobs:
             "${{ steps.artifact.outputs.exe }}" \
             "${{ steps.artifact.outputs.blockmap }}" \
             release/latest.yml \
-            release/win-unpacked/resources/app-update.yml \
             sha256.txt \
             build.log
           gh release view "$TAG" --repo "${{ github.repository }}" --json url -q '.url'
