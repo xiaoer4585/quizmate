@@ -6,7 +6,7 @@ import {
   Volume2, Loader2,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
-import { defaultShortcutBindings, examOverlayShortcutActions, examVoiceShortcutActions } from '../../shared/shortcuts';
+import { defaultShortcutBindings, examOverlayShortcutActions, examVoiceShortcutActions, formatAccelerator, isMacPlatform } from '../../shared/shortcuts';
 import ShortcutSettings from '../components/ShortcutSettings';
 import FeatureGuide, { type FeatureGuideStep } from '../components/FeatureGuide';
 
