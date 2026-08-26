@@ -3,18 +3,24 @@
 //
 // 原理:
 //   1. WDA_EXCLUDEFROMCAPTURE (Win10 2004+ / build 19041) - 在 DWM 合成阶段将窗口从所有屏幕捕获中排除
-//      屏幕上正常可见, 但任何截屏/录屏/远程桌面/投屏都无法捕获到该窗口内容
+//      屏幕上正常可见, 但任何截屏/录屏/远程桌面/投屏都无法捕获到该窗口内容, 且不产生黑块
 //   2. WDA_MONITOR (Win10 1809+) - 降级方案: 老系统唯一可用的防捕获手段, 内容不会泄露
-//      (部分采集工具下会渲染为黑块, 但仅在 Win10 2004 以下的老系统才会走到该降级分支)
+//      (部分采集工具下会渲染为黑块, 但仅在 Win10 2004 以下的老系统才会走到该降级分支;
+//       该限制为系统能力边界, 已在用户手册中说明, 不做进一步修复)
 //   3. WS_EX_TOOLWINDOW - 不在任务栏/Alt+Tab 中显示, 减少 EnumWindows 扫描可见性
 //   4. WS_EX_NOACTIVATE - 不抢焦点, 点击不激活窗口, 降低检测风险
 //   5. 空标题 - 防止通过 GetWindowText 扫描关键字
 //
-// 2026.8.25 修复要点(相对 8.23):
-//   - 每次应用保护后用 GetWindowDisplayAffinity 读回实际生效值并验证, 不再"设置后不检查"
-//   - 新增看门狗: 周期性读回亲和性, 发现漂移立即重新应用(防 DWM/系统意外重置)
-//   - 按系统 build 号自适应: Win10 2004+ 用 EXCLUDEFROMCAPTURE, 更老系统用 MONITOR
-//   - 所有应用/漂移/恢复动作均输出日志, 便于远程定位用户机器上的问题
+// 2026.8.26 修复要点(相对 8.25, ia32/32 位系统兼容):
+//   - 修复 32 位安装包(ia32)上 koffi 初始化必然失败、导致保护被降级为 WDA_MONITOR(黑块)的问题:
+//     * GetWindowLongPtrW/SetWindowLongPtrW 只导出于 64 位 user32.dll; 32 位进程(ia32 包,
+//       无论跑在 x64 还是 x86 系统上)必须改用 GetWindowLongW/SetWindowLongW
+//     * 8.25 版因此抛符号解析异常 -> 系统 build 号解析被跳过(_windowsBuild=0) -> 目标亲和性
+//       被误判为 WDA_MONITOR -> 反而把 setContentProtection 已设好的 EXCLUDEFROMCAPTURE
+//       降级回"黑块"模式
+//     * 系统 build 号解析提前并独立 try; 每个 FFI 符号独立声明、独立降级, 单个符号缺失
+//       只损失对应能力, 不再拖垮整条保护链
+//     * ensureInitialized 失败后不再因 user32 已加载而对后续调用误报成功
 //
 // 实测结论(Win11 26200 / Electron 31, 2026-08-25):
 //   - GDI 截图(App自身截图/微信/QQ等)与 WebRTC/DXGI 共享屏幕对 0x11 窗口均完全排除且无黑块
@@ -29,8 +35,8 @@ let kernel32: any = null
 
 let _SetWindowDisplayAffinity: ((hwnd: any, affinity: number) => number) | null = null
 let _GetWindowDisplayAffinity: ((hwnd: any, dwAffinity: any) => number) | null = null
-let _GetWindowLongPtrW: ((hwnd: any, nIndex: number) => any) | null = null
-let _SetWindowLongPtrW: ((hwnd: any, nIndex: number, dwNewLong: any) => any) | null = null
+let _GetWindowLongW: ((hwnd: any, nIndex: number) => any) | null = null
+let _SetWindowLongW: ((hwnd: any, nIndex: number, dwNewLong: any) => any) | null = null
 let _SetWindowTextW: ((hwnd: any, lpString: string) => number) | null = null
 let _GetLastError: (() => number) | null = null
 let _IsWindowVisible: ((hwnd: any) => number) | null = null
@@ -51,43 +57,105 @@ export const WS_EX_LAYERED = 0x00080000
 export const WS_EX_TOPMOST = 0x00000008
 
 let _initialized = false
+let _initOk = false
 let _windowsBuild = 0
 
+/** 声明单个 FFI 符号; 失败只降级对应能力并记录日志, 不影响其余符号 */
+function declareSymbol(name: string, declare: () => void): void {
+  try {
+    declare()
+  } catch (e: any) {
+    console.warn(`[Win32Protection] FFI 符号声明失败(该能力降级): ${name}:`, e?.message || e)
+  }
+}
+
 function ensureInitialized(): boolean {
-  if (_initialized) return user32 !== null
+  if (_initialized) return _initOk
   _initialized = true
 
   if (process.platform !== 'win32') {
     return false
   }
 
+  // 0) 解析系统 build 号(如 "10.0.26200.0" -> 26200), 用于判断 EXCLUDEFROMCAPTURE 支持性。
+  //    必须最先独立完成: 后续任何 FFI 声明失败都不能把版本判定拖垮(否则目标亲和性会被误判)。
+  try {
+    const ver = String(process.getSystemVersion?.() || '')
+    const parts = ver.split('.')
+    _windowsBuild = parseInt(parts[2] || '0', 10) || 0
+  } catch {
+    _windowsBuild = 0
+  }
+
   try {
     koffi = require('koffi')
-    user32 = koffi.load('user32.dll')
-    kernel32 = koffi.load('kernel32.dll')
-
-    _SetWindowDisplayAffinity = user32.func('int __stdcall SetWindowDisplayAffinity(void *hwnd, uint32_t dwAffinity)')
-    _GetWindowDisplayAffinity = user32.func('int __stdcall GetWindowDisplayAffinity(void *hwnd, void *dwAffinity)')
-    _GetWindowLongPtrW = user32.func('int64_t __stdcall GetWindowLongPtrW(void *hwnd, int32_t nIndex)')
-    _SetWindowLongPtrW = user32.func('int64_t __stdcall SetWindowLongPtrW(void *hwnd, int32_t nIndex, int64_t dwNewLong)')
-    _SetWindowTextW = user32.func('int __stdcall SetWindowTextW(void *hwnd, const char16_t *lpString)')
-    _GetLastError = kernel32.func('uint32_t __stdcall GetLastError()')
-    _IsWindowVisible = user32.func('int __stdcall IsWindowVisible(void *hwnd)')
-
-    // 解析系统 build 号(如 "10.0.26200.0" -> 26200), 用于判断 EXCLUDEFROMCAPTURE 支持性
-    try {
-      const ver = String(process.getSystemVersion?.() || '')
-      const parts = ver.split('.')
-      _windowsBuild = parseInt(parts[2] || '0', 10) || 0
-    } catch {
-      _windowsBuild = 0
-    }
-    console.log(`[Win32Protection] initialized, windows build=${_windowsBuild}, excludeFromCapture=${_windowsBuild >= MIN_BUILD_EXCLUDE_FROM_CAPTURE}`)
-    return true
   } catch (e: any) {
-    console.error('[Win32Protection] Failed to initialize:', e)
+    console.error('[Win32Protection] Failed to load koffi:', e)
     return false
   }
+
+  try {
+    user32 = koffi.load('user32.dll')
+  } catch (e: any) {
+    console.error('[Win32Protection] Failed to load user32.dll:', e)
+    return false
+  }
+  try {
+    kernel32 = koffi.load('kernel32.dll')
+  } catch (e: any) {
+    console.warn('[Win32Protection] Failed to load kernel32.dll(GetLastError 将不可用):', e)
+  }
+
+  // 1) 防捕获核心能力(必需)
+  declareSymbol('SetWindowDisplayAffinity', () => {
+    _SetWindowDisplayAffinity = user32.func('int __stdcall SetWindowDisplayAffinity(void *hwnd, uint32_t dwAffinity)')
+  })
+  declareSymbol('GetWindowDisplayAffinity', () => {
+    _GetWindowDisplayAffinity = user32.func('int __stdcall GetWindowDisplayAffinity(void *hwnd, void *dwAffinity)')
+  })
+
+  // 2) 窗口样式加固能力(可选)。
+  //    GetWindowLongPtrW/SetWindowLongPtrW 只导出于 64 位 user32.dll; ia32 进程必须使用
+  //    GetWindowLongW/SetWindowLongW, 否则 koffi 声明阶段即抛 "Cannot find function" 异常。
+  const is64BitProcess = process.arch !== 'ia32'
+  let styleApiName = 'unavailable'
+  if (is64BitProcess) {
+    declareSymbol('GetWindowLongPtrW', () => {
+      _GetWindowLongW = user32.func('int64_t __stdcall GetWindowLongPtrW(void *hwnd, int32_t nIndex)')
+    })
+    declareSymbol('SetWindowLongPtrW', () => {
+      _SetWindowLongW = user32.func('int64_t __stdcall SetWindowLongPtrW(void *hwnd, int32_t nIndex, int64_t dwNewLong)')
+    })
+    if (_GetWindowLongW) styleApiName = 'GetWindowLongPtrW'
+  } else {
+    declareSymbol('GetWindowLongW', () => {
+      _GetWindowLongW = user32.func('int32_t __stdcall GetWindowLongW(void *hwnd, int32_t nIndex)')
+    })
+    declareSymbol('SetWindowLongW', () => {
+      _SetWindowLongW = user32.func('int32_t __stdcall SetWindowLongW(void *hwnd, int32_t nIndex, int32_t dwNewLong)')
+    })
+    if (_GetWindowLongW) styleApiName = 'GetWindowLongW'
+  }
+
+  // 3) 其他辅助能力(可选)
+  declareSymbol('SetWindowTextW', () => {
+    _SetWindowTextW = user32.func('int __stdcall SetWindowTextW(void *hwnd, const char16_t *lpString)')
+  })
+  if (kernel32) {
+    declareSymbol('GetLastError', () => {
+      _GetLastError = kernel32.func('uint32_t __stdcall GetLastError()')
+    })
+  }
+  declareSymbol('IsWindowVisible', () => {
+    _IsWindowVisible = user32.func('int __stdcall IsWindowVisible(void *hwnd)')
+  })
+
+  _initOk = _SetWindowDisplayAffinity !== null && _GetWindowDisplayAffinity !== null
+  console.log(
+    `[Win32Protection] initialized ok=${_initOk}, arch=${process.arch}, windows build=${_windowsBuild}, ` +
+    `excludeFromCapture=${_windowsBuild >= MIN_BUILD_EXCLUDE_FROM_CAPTURE}, styleApi=${styleApiName}`
+  )
+  return _initOk
 }
 
 /** 当前系统是否支持 WDA_EXCLUDEFROMCAPTURE (Win10 2004+) */
@@ -185,23 +253,23 @@ export function getWindowDisplayAffinity(win: BrowserWindow): number | null {
 }
 
 function addExtendedStyles(win: BrowserWindow, styleBits: number): boolean {
-  if (!ensureInitialized() || !_GetWindowLongPtrW || !_SetWindowLongPtrW) return false
+  if (!ensureInitialized() || !_GetWindowLongW || !_SetWindowLongW) return false
   const hwnd = getHwnd(win)
   if (!hwnd) return false
 
   try {
-    const current = _GetWindowLongPtrW(hwnd, GWL_EXSTYLE)
+    const current = _GetWindowLongW(hwnd, GWL_EXSTYLE)
     if (typeof current !== 'number' || current === 0) {
       const err = _GetLastError ? _GetLastError() : 0
-      console.warn(`[Win32Protection] GetWindowLongPtrW(GWL_EXSTYLE) failed, GetLastError=${err}`)
+      console.warn(`[Win32Protection] GetWindowLong(GWL_EXSTYLE) failed, GetLastError=${err}`)
       return false
     }
     const updated = current | styleBits
     if (updated === current) return true
-    const prev = _SetWindowLongPtrW(hwnd, GWL_EXSTYLE, updated)
+    const prev = _SetWindowLongW(hwnd, GWL_EXSTYLE, updated)
     if (!prev) {
       const err = _GetLastError ? _GetLastError() : 0
-      console.warn(`[Win32Protection] SetWindowLongPtrW failed, GetLastError=${err}`)
+      console.warn(`[Win32Protection] SetWindowLong(GWL_EXSTYLE) failed, GetLastError=${err}`)
       return false
     }
     return true
@@ -234,7 +302,8 @@ export interface AntiCaptureResult {
 /**
  * 应用防捕获保护并读回验证。
  * - Win10 2004+: 目标 WDA_EXCLUDEFROMCAPTURE(内容不可见且无黑块), 失败则降级 MONITOR
- * - Win10 2004 以下: 直接 WDA_MONITOR(该系统唯一可用的内容保护, 部分采集工具下可能显示黑块)
+ * - Win10 2004 以下: 直接 WDA_MONITOR(该系统唯一可用的内容保护, 部分采集工具下可能显示黑块,
+ *   系统能力限制, 已在用户手册说明)
  */
 export function applyAntiCapture(win: BrowserWindow): AntiCaptureResult {
   const target = getTargetAffinity()
