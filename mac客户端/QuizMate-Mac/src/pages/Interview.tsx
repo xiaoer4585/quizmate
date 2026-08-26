@@ -2,7 +2,7 @@
 // 功能：配置面试上下文、上传简历、启动悬浮窗、查看历史 QA 记录
 // 语音识别通过主进程连接后台配置的实时语音模型
 import { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Loader2, ShieldCheck, Trash2, Sparkles, FileText, CheckCircle2, Circle, Monitor, Share2, History, Send, Keyboard, Save, RefreshCw, Edit3, Plus, HelpCircle, Bold, Italic, List, ListOrdered } from 'lucide-react';
+import { Mic, MicOff, Loader2, ShieldCheck, ShieldAlert, Trash2, Sparkles, FileText, CheckCircle2, Circle, Monitor, Share2, History, Send, Keyboard, Save, RefreshCw, Edit3, Plus, HelpCircle, Bold, Italic, List, ListOrdered } from 'lucide-react';
 import { api, useProfile } from '../lib/ipc';
 import ShareInterviewModal from '../components/ShareInterviewModal';
 import ShortcutSettings from '../components/ShortcutSettings';
@@ -95,12 +95,15 @@ export default function Interview() {
   const [switchingMode, setSwitchingMode] = useState(false);
   const [contextStatus, setContextStatus] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
+  const systemApi = (window as any).api?.system;
+  const [permissions, setPermissions] = useState<{ screen: string; microphone: string }>({ screen: 'unknown', microphone: 'unknown' });
   const jobDescriptionRef = useRef<HTMLDivElement | null>(null);
 
   const guideAccount = profile?.account?.email || profile?.email || 'current';
   const guideStorageKey = `quizmate.feature-guide.interview.${guideAccount}`;
 
   useEffect(() => {
+    systemApi?.getPermissions?.().then((p: any) => setPermissions({ screen: String(p?.screen || 'unknown'), microphone: String(p?.microphone || 'unknown') })).catch(() => {});
     if (!profile) return;
     const forced = window.location.hash.includes('guide=1');
     if (forced || window.localStorage.getItem(guideStorageKey) !== 'done') setGuideOpen(true);
@@ -114,6 +117,12 @@ export default function Interview() {
     window.addEventListener('quizmate:open-feature-guide', openGuide);
     return () => window.removeEventListener('quizmate:open-feature-guide', openGuide);
   }, []);
+
+  const openInterviewPermission = async (kind: 'screen' | 'microphone') => {
+    if (kind === 'microphone') await systemApi?.requestMicrophone?.().catch(() => {});
+    await systemApi?.openPermissionSettings?.(kind);
+    setTimeout(() => systemApi?.getPermissions?.().then((p: any) => setPermissions({ screen: String(p?.screen || 'unknown'), microphone: String(p?.microphone || 'unknown') })).catch(() => {}), 1000);
+  };
 
   const finishGuide = () => {
     window.localStorage.setItem(guideStorageKey, 'done');
@@ -188,14 +197,17 @@ export default function Interview() {
     return () => { off?.(); };
   }, []);
 
-  // 启动/关闭面试悬浮窗
-  const toggleOverlay = async () => {
-    if (overlayActive) {
-      await api.interview.closeOverlay();
+  // 一个按钮统一控制面试悬浮窗和实时听写，快捷键走同一 IPC。
+  const toggleInterviewSession = async () => {
+    setError('');
+    try {
+      const result = await api.interview.toggleSession(context);
+      setListening(!!result?.listening);
+      setOverlayActive(!!result?.overlay);
+    } catch (e: any) {
+      setError(e?.message || '启动面试失败');
+      setListening(false);
       setOverlayActive(false);
-    } else {
-      await api.interview.createOverlay();
-      setOverlayActive(true);
     }
   };
 
@@ -357,6 +369,16 @@ export default function Interview() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
+      {(permissions.microphone !== 'granted' || permissions.screen !== 'granted') && (
+        <div className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <div className="flex items-center gap-2 font-semibold"><ShieldAlert size={18} className="text-amber-400" /> 面试助手需要音频授权</div>
+          <div className="mt-1 text-xs text-amber-100/80">演示模式会识别麦克风和扬声器；正式面试模式只把扬声器作为面试官问题输入。系统音频采集还需要屏幕录制权限。</div>
+          <div className="mt-2 flex gap-2">
+            {permissions.microphone !== 'granted' && <button onClick={() => openInterviewPermission('microphone')} className="btn-outline text-xs border-amber-500/50 text-amber-200">授权麦克风</button>}
+            {permissions.screen !== 'granted' && <button onClick={() => openInterviewPermission('screen')} className="btn-outline text-xs border-amber-500/50 text-amber-200">授权扬声器/系统音频</button>}
+          </div>
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
@@ -369,8 +391,8 @@ export default function Interview() {
             积分余额 <span className="text-amber-400 font-bold">{credits}</span>
             <span className="text-slate-500 ml-2">（每次 AI 作答消耗 20 积分）</span>
           </div>
-          <button onClick={toggleOverlay} className={`btn-outline text-xs ${overlayActive ? 'text-emerald-400 border-emerald-500/50' : ''}`} title="启动/关闭面试悬浮窗">
-            <Monitor size={14} /> {overlayActive ? '悬浮窗已开' : '启动悬浮窗'}
+          <button onClick={toggleInterviewSession} className={`btn-outline text-xs ${listening || overlayActive ? 'text-emerald-400 border-emerald-500/50' : ''}`} title="开始/结束面试：同时控制听写和悬浮窗">
+            <Monitor size={14} /> {listening ? '结束面试' : '开始面试'}
           </button>
         </div>
       </div>
@@ -407,6 +429,11 @@ export default function Interview() {
               {switchingMode && context.audioMode === 'formal' ? <RefreshCw size={12} className="inline animate-spin mr-1" /> : null}正式面试模式
             </button>
           </div>
+        </div>
+        <div className={`rounded-md px-3 py-2 text-xs font-medium ${context.audioMode === 'formal' ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-200' : 'border border-amber-500/40 bg-amber-500/10 text-amber-200'}`}>
+          {context.audioMode === 'formal'
+            ? '正式面试模式：只识别扬声器/系统音频，作为面试官问题输入；忽略麦克风中的面试者回答。'
+            : '演示模式：同时识别麦克风和扬声器/系统音频，两路声音都会作为问题识别输入。'}
         </div>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div>
@@ -496,15 +523,9 @@ export default function Interview() {
       {/* 控制台 */}
       <div className="card space-y-3">
         <div className="flex items-center gap-3">
-          {!listening ? (
-            <button data-guide-target="interview-listen" onClick={startListening} className="btn bg-rose-500 hover:bg-rose-600 text-white">
-              <Mic size={16} /> 开始听写
-            </button>
-          ) : (
-            <button data-guide-target="interview-listen" onClick={stopListening} className="btn-outline border-rose-500/50 text-rose-400">
-              <MicOff size={16} /> 停止听写
-            </button>
-          )}
+          <button data-guide-target="interview-listen" onClick={toggleInterviewSession} className={listening ? 'btn-outline border-rose-500/50 text-rose-400' : 'btn bg-rose-500 hover:bg-rose-600 text-white'}>
+            {listening ? <MicOff size={16} /> : <Mic size={16} />} {listening ? '结束面试' : '开始面试'}
+          </button>
           {listening && (
             <div className="flex items-center gap-2 text-sm text-rose-400">
               <span className="relative flex h-2.5 w-2.5">
@@ -620,7 +641,7 @@ export default function Interview() {
           { title: '编辑并保存面试上下文', description: '点击编辑，填写应聘岗位、面试公司、答案风格和岗位描述，然后点击保存。AI 会结合这些信息生成回答。', target: '[data-guide-target="interview-context"]' },
           { title: '粘贴并保存简历', description: '点击新建或编辑，直接粘贴简历文本并保存。自我介绍和项目问题会优先使用简历中的真实经历。', target: '[data-guide-target="interview-resume"]' },
           { title: '启动参考答案悬浮窗', description: '点击“启动悬浮窗”，问题流显示在左侧，当前有效问题的参考答案显示在右侧。', target: '[data-guide-target="interview-overlay"]' },
-          { title: '开始听写', description: `点击“开始听写”，或按 ${shortcutBindings.interview_start || '开始/结束听写快捷键'}。识别到有效问题后会立即调用 AI，非问题内容会标记为跳过。`, target: '[data-guide-target="interview-listen"]' },
+          { title: '开始面试', description: `点击“开始面试”，或按 ${shortcutBindings.interview_start || '开始/结束面试快捷键'}。它会同时打开参考答案悬浮窗并启动听写；再次点击或按快捷键即可同时结束。`, target: '[data-guide-target="interview-listen"]' },
           { title: '切换问题和查看答案', description: `使用 ${shortcutBindings.interview_prev_question || '上一题快捷键'} 和 ${shortcutBindings.interview_next_question || '下一题快捷键'} 在问题流中切换；右侧始终显示当前选中问题的参考答案。`, target: '[data-guide-target="interview-results"]' },
         ] as FeatureGuideStep[]}
         onClose={finishGuide}

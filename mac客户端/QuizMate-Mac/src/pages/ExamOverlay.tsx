@@ -3,8 +3,7 @@ import QueueView from '../components/exam/QueueView'
 import SolutionsView from '../components/exam/SolutionsView'
 import RawOutputView from '../components/exam/RawOutputView'
 import { useTheme } from '../contexts/ThemeContext'
-import { shortcutMetadata } from '../../shared/shortcuts'
-import { Camera, CheckCircle2, CircleAlert, Loader2, Search, Sparkles } from 'lucide-react'
+import { Camera, CheckCircle2, CircleAlert, Loader2, Sparkles } from 'lucide-react'
 
 // 笔试悬浮窗透明背景样式（防止 body 的 bg-slate-950 导致黑屏）
 function ExamOverlayStyles() {
@@ -83,10 +82,22 @@ export default function OverlayPage() {
         const filtered = prev.filter(s => s.path !== data.path)
         return [...filtered, newShot]
       })
-      // Stay on queue view if not processing
-      if (status === 'idle' || status === 'error') {
-        setView('queue')
-      }
+      // A successful screenshot is a new operation. Clear any previous AI
+      // failure so the overlay does not imply that this screenshot was sent
+      // to the model before the user presses 搜题.
+      setStatus('idle')
+      setErrorMessage('')
+      setProgress(0)
+      setProgressMessage('截图完成，请点击搜题')
+      setView('queue')
+    }))
+
+    unsubs.push(api?.on('screenshot-start', () => {
+      setStatus('processing')
+      setErrorMessage('')
+      setProgress(10)
+      setProgressMessage('正在截图...')
+      setView('queue')
     }))
 
     unsubs.push(api?.on('screenshot-deleted', () => {
@@ -104,8 +115,15 @@ export default function OverlayPage() {
     }))
 
     unsubs.push(api?.on('screenshot-error', (data: any) => {
-      setErrorMessage(data.error || '截图失败')
+      setErrorMessage(data.code ? `${data.error || '截图失败'}（${data.code}）` : (data.error || '截图失败'))
       setStatus('error')
+    }))
+
+    unsubs.push(api?.on('shortcut-registration-error', (data: any) => {
+      if (data?.action === 'screenshot') {
+        setErrorMessage(`截图快捷键注册失败：${data.accelerator || '当前快捷键'}，请到设置中更换`)
+        setStatus('error')
+      }
     }))
 
     unsubs.push(api?.on('initial-start', () => {
@@ -157,9 +175,7 @@ export default function OverlayPage() {
 
     unsubs.push(api?.on('solution-stream-error', (data: any) => {
       setStatus('error')
-      setErrorMessage(data.error || '处理失败')
-      // Refund credits on error
-      api?.credits.refund(1).catch(() => {})
+      setErrorMessage(data.code ? `${data.error || '处理失败'}（${data.code}）` : (data.error || '处理失败'))
     }))
 
     unsubs.push(api?.on('solution-error', (data: any) => {
@@ -273,14 +289,6 @@ export default function OverlayPage() {
         ? CircleAlert
         : Camera
 
-  // Build shortcut hints for header - only screenshot + search
-  const mainShortcutHints = ['screenshot', 'search']
-    .map(a => ({
-      label: shortcutMetadata.find(m => m.action === a)?.label || a,
-      key: shortcutBindings[a] || '',
-    }))
-    .filter(s => s.key)
-
   return (
     <div className="w-full h-full p-1.5" style={{ background: 'transparent', pointerEvents: 'none' }}>
       <ExamOverlayStyles />
@@ -300,20 +308,12 @@ export default function OverlayPage() {
           </div>
           <div className="min-w-0">
             <div className="text-xs font-semibold leading-none">笔试助手</div>
-            <div className="text-[9px] mt-1 opacity-55">截图识题模式</div>
+            <div className="text-[9px] mt-1 text-cyan-300/80">先全屏截图，再搜题</div>
           </div>
           <div className="flex-1" />
           <div className={`flex items-center gap-1.5 text-[10px] font-medium ${status === 'error' ? 'text-red-400' : status === 'completed' ? 'text-emerald-400' : status === 'processing' ? 'text-cyan-400' : 'opacity-60'}`}>
             <StatusIcon size={12} className={status === 'processing' ? 'animate-spin' : ''} />
             <span className="max-w-44 truncate">{statusLabel}</span>
-          </div>
-          <div className="flex items-center gap-1.5 text-[9px] opacity-70">
-            {mainShortcutHints.map((shortcut) => (
-              <span key={shortcut.label} className="flex items-center gap-1 px-1.5 py-0.5 rounded bg-white/10">
-                {shortcut.label === '全屏截图' ? <Camera size={9} /> : <Search size={9} />}
-                <span>{shortcut.key}</span>
-              </span>
-            ))}
           </div>
         </header>
 

@@ -43,6 +43,17 @@ description: "Manages QuizMate project version control with date-based tags, fea
    - 本地不再执行 `npm run package:win`（仅作兜底，沙箱/文件锁问题多）
 4. **产物归档**：构建产物（exe/blockmap/latest.yml/app-update.yml）放入 `windows客户端/QuizMate-Windows/releases/<YYYY-MM-DD>*/`，同日已有目录时用 `-fix` 等后缀新开目录，部署脚本用 `QUIZMATE_RELEASE_DIR` 指定
 
+## 官网域名规则（更新官网时必看）
+
+- **旧域名**：`www.quizmate.vip` 和 `quizmate.vip`（**不是官网**，仅作引流跳转）
+- **新官网域名**：`www.quizmate.cn` 和 `quizmate.cn`（唯一正式官网）
+- **跳转保留**：`www.quizmate.vip` 和 `quizmate.vip` 的首页**保留跳转引流**到新官网 `www.quizmate.cn` / `quizmate.cn`
+- **其他二级域名**：后续更新官网时**不需要再改动**，无需同步更新
+- **更新官网时的参考规范**：
+  - 只维护 `www.quizmate.cn` / `quizmate.cn` 的内容
+  - `quizmate.vip` 域名下的非首页内容停止更新，保留旧版即可
+  - 任何官网改动都先在新官网验证，确认无误后再同步跳转逻辑
+
 ## 本地 / GitHub / 阿里云 三者关系
 
 ```
@@ -124,6 +135,14 @@ git tag
 ```
 
 ## 版本号规则
+
+### 客户端/产品版本号（各端安装包，如 Windows exe / Mac dmg / 安卓 apk）
+
+- 格式：`YYYY.M.D`，按发布日期定义，月、日不补零，如 `2026.8.22`
+- 当天发布多个版本：在日期后追加 `.01`、`.02` 递增，如 `2026.8.24.01`、`2026.8.24.02`
+- 官网页面展示的版本号必须与实际下载安装包文件名中的版本号一致；发现对不上时，以实际安装包版本为准更新官网
+
+### git tag 版本号
 
 - 格式：`v` + `YYYYMMDD`，如 `v20260725`
 - 同一天多次改动：用 `v20260725-2`、`v20260725-3` 递增

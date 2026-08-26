@@ -91,7 +91,7 @@ export class RealtimeVoiceHelper {
       desktopCapturer.getSources({ types: ['screen'] })
         .then((sources) => callback(sources[0] ? { video: sources[0], audio: 'loopback' } : {}))
         .catch(() => callback({}));
-    }, { useSystemPicker: process.platform === 'darwin' });
+    });
 
     // 注入 ASR API 鉴权头到 WebSocket 握手请求
     ses.webRequest.onBeforeSendHeaders(
@@ -544,12 +544,18 @@ async function startListening(audioMode = 'demo') {
     captureStreams = [];
     let systemCaptureError = '';
     try {
+      // Chromium requires a display video source to establish loopback audio.
+      // The main process selects it automatically; discard the video track immediately.
       const systemStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
+      systemStream.getVideoTracks().forEach(track => {
+        systemStream.removeTrack(track);
+        track.stop();
+      });
       if (systemStream.getAudioTracks().length > 0) {
         captureStreams.push(systemStream);
       } else {
         systemStream.getTracks().forEach(track => track.stop());
-        systemCaptureError = '未获取到电脑声音，请在系统共享窗口中开启“共享系统音频”';
+        systemCaptureError = '未获取到电脑声音，请在系统设置中允许 QuizMate 录制系统音频';
       }
     } catch (error) {
       systemCaptureError = error && error.message ? error.message : String(error);

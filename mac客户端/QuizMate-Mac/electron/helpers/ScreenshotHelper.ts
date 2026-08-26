@@ -61,8 +61,12 @@ export class ScreenshotHelper {
     if (!this.canCaptureNow()) {
       return { success: false, error: '截图过于频繁，请稍后再试' }
     }
-    this.lastScreenshotTime = Date.now()
-    return this.captureFullScreenInternal()
+    const result = await this.captureFullScreenInternal()
+    // Failed captures must be immediately retryable. A permission error should
+    // not arm the rate limiter and turn the next shortcut into a misleading
+    // "too frequent" error.
+    if (result.success) this.lastScreenshotTime = Date.now()
+    return result
   }
 
   private async captureFullScreenInternal(): Promise<ScreenshotResult> {
@@ -117,7 +121,7 @@ export class ScreenshotHelper {
     }
     return {
       success: false,
-      error: '截图失败。请在“系统设置 > 隐私与安全性 > 屏幕与系统音频录制”中允许 QuizMate，重新打开应用后再试',
+      error: '截图失败。请在“系统设置 > 隐私与安全性 > 屏幕录制”中允许 QuizMate，然后彻底退出并重新打开应用',
     }
   }
 
@@ -125,13 +129,13 @@ export class ScreenshotHelper {
     if (!this.canCaptureNow()) {
       return { success: false, error: '截图过于频繁' }
     }
-    this.lastScreenshotTime = Date.now()
     const fileName = `${uuidv4()}.png`
     const tempPath = path.join(this.tempDir, fileName)
     try {
       const region = `${Math.floor(x)},${Math.floor(y)},${Math.max(1, Math.floor(width))},${Math.max(1, Math.floor(height))}`
       await this.runScreencapture(['-x', `-R${region}`, tempPath])
       if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0) {
+        this.lastScreenshotTime = Date.now()
         return { success: true, filePath: tempPath }
       }
     } catch (e) {
@@ -139,7 +143,9 @@ export class ScreenshotHelper {
     }
     // This capture already passed the rate limiter. Do not run it again during
     // the same user action or the fallback will always report "too frequent".
-    return this.captureFullScreenInternal()
+    const fallback = await this.captureFullScreenInternal()
+    if (fallback.success) this.lastScreenshotTime = Date.now()
+    return fallback
   }
 
   public async saveToQueue(filePath: string, isExtra: boolean = false): Promise<string> {
@@ -319,6 +325,6 @@ export class ScreenshotHelper {
     if (process.platform !== 'darwin') return null
     const permission = systemPreferences.getMediaAccessStatus('screen')
     if (permission !== 'denied' && permission !== 'restricted') return null
-    return '请在“系统设置 > 隐私与安全性 > 屏幕与系统音频录制”中允许 QuizMate，然后彻底退出并重新打开应用'
+    return '请在“系统设置 > 隐私与安全性 > 屏幕录制”中允许 QuizMate，然后彻底退出并重新打开应用'
   }
 }

@@ -1,7 +1,7 @@
 // 邀请代理模块 - 从原考试助手迁移
 // 邀请新用户注册双方各得积分，被邀请人充值可获提成
-import { useState } from 'react';
-import { Users, Copy, Check, Image as ImageIcon, Download, Share2, Loader2, Gift } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Users, Copy, Check, Image as ImageIcon, Download, Share2, Loader2, Gift, Trophy } from 'lucide-react';
 import QRCode from 'qrcode';
 import { api } from '../lib/ipc';
 
@@ -14,9 +14,23 @@ export default function InviteAgent() {
   const [posterUrl, setPosterUrl] = useState('');
   const [posterGenerating, setPosterGenerating] = useState(false);
   const [posterStatus, setPosterStatus] = useState('');
+  const [hasRecharged, setHasRecharged] = useState<boolean | null>(null);
+  const [overview, setOverview] = useState<any>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    api.auth.getProfile().then((p: any) => {
+      if (!cancelled) setHasRecharged(p?.account?.hasRecharged === true || p?.hasRecharged === true);
+    }).catch(() => { if (!cancelled) setHasRecharged(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   const handleInvite = async () => {
     if (!panelOpen) {
+      if (hasRecharged === false) {
+        window.dispatchEvent(new CustomEvent('quizmate:open-recharge'));
+        return;
+      }
       setPanelOpen(true);
       if (!inviteData) {
         setLoading(true);
@@ -25,6 +39,8 @@ export default function InviteAgent() {
           const result = await api.invite.generateCode();
           if (result.success) {
             setInviteData({ inviteCode: result.inviteCode, inviteLink: result.inviteLink, shareText: result.shareText });
+            const current = await api.invite.getOverview().catch(() => null);
+            if (current?.success) setOverview(current.overview);
           } else {
             setError(result.error || '获取邀请码失败');
           }
@@ -194,7 +210,7 @@ export default function InviteAgent() {
             <Users size={16} className="text-brand" /> 邀请代理
           </h2>
           <p className="text-xs text-slate-400 mt-1">
-            邀请新用户注册双方各得 20 积分，被邀请人充值可获 20% 提成
+            邀请新用户注册双方各得 20 积分，被邀请人充值可获 20% 提成；充值后可解锁阶梯奖励
           </p>
         </div>
         <button onClick={handleInvite} className="btn bg-emerald-500 hover:bg-emerald-600 text-white text-xs">
@@ -214,6 +230,13 @@ export default function InviteAgent() {
           )}
           {inviteData && (
             <>
+              {overview?.tieredBonus && (
+                <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
+                  <div className="flex items-center gap-1.5 font-medium"><Trophy size={13} /> 邀请阶梯奖励</div>
+                  <div className="mt-1">已充值好友 {overview.tieredBonus.rechargedCount ?? 0} 人</div>
+                  <div className="mt-1">10 人：赠送笔面试上岸包；20 人：赠送无忧包。{overview.tieredBonus.nextTier ? ` 下一档：${overview.tieredBonus.nextTier.description}` : ' 已达到当前最高档。'}</div>
+                </div>
+              )}
               {/* 邀请码 */}
               <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-slate-900/50">
                 <div className="min-w-0">
