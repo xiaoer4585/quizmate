@@ -69,7 +69,7 @@ jobs:
           exec > >(tee -a build.log) 2>&1
           EXE=$(find release -maxdepth 1 -name 'QuizMate-Windows-*.exe' -print -quit)
           BLOCKMAP=$(find release -maxdepth 1 -name 'QuizMate-Windows-*.exe.blockmap' -print -quit)
-          APP_UPDATE=release/win-unpacked/resources/app-update.yml
+          APP_UPDATE=release/win-ia32-unpacked/resources/app-update.yml
           test -n "$EXE"
           test -n "$BLOCKMAP"
           test -f release/latest.yml
@@ -89,7 +89,7 @@ jobs:
               }
               console.log(`OK: ${p} -> 32-bit (i386)`);
             }
-          ' "$EXE" "release/win-unpacked/QuizMate.exe"
+          ' "$EXE" "release/win-ia32-unpacked/QuizMate.exe"
 
           # 打包产物内的 koffi 原生模块必须是 ia32（防捕获 FFI 依赖）
           node -e '
