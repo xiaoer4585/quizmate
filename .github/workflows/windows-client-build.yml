@@ -5,12 +5,6 @@ name: Build QuizMate Windows
 # 兼容 Win10 及以上系统（Electron 31 起不支持 Win7/8）。
 on:
   workflow_dispatch:
-    inputs:
-      upload_test_assets:
-        description: Upload the 2026-08-26 desktop test installers to OSS only
-        required: false
-        type: boolean
-        default: false
   push:
     branches:
       - windows-build-*
@@ -21,104 +15,7 @@ permissions:
   contents: write
 
 jobs:
-  upload-test-installers:
-    if: ${{ github.event_name == 'workflow_dispatch' && inputs.upload_test_assets == true }}
-    name: Upload test installers to OSS
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Download GitHub prerelease assets
-        env:
-          GH_TOKEN: ${{ github.token }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p pkg
-          gh release download windows-build-20260826-desktop-refactor-6 \
-            --repo "${{ github.repository }}" \
-            --pattern 'QuizMate-Windows-2026.8.25.exe' \
-            --dir pkg
-          gh release download mac-build-20260826-desktop-refactor \
-            --repo "${{ github.repository }}" \
-            --pattern 'QuizMate-Mac-x64-2026.8.24.dmg' \
-            --pattern 'QuizMate-Mac-arm64-2026.8.24.dmg' \
-            --dir pkg
-          sha256sum pkg/*
-          test "$(sha256sum pkg/QuizMate-Windows-2026.8.25.exe | awk '{print $1}')" = "9089d7d4693e92b533b50250a3b5eaf6910dce41017eaf922995b74a6e437ce5"
-          test "$(sha256sum pkg/QuizMate-Mac-x64-2026.8.24.dmg | awk '{print $1}')" = "6aeb03c54e2ef0161ab6c70d5261648edbc0e36a463ab58d761b4e9c2adba9f4"
-          test "$(sha256sum pkg/QuizMate-Mac-arm64-2026.8.24.dmg | awk '{print $1}')" = "94952337adc2345d17821048479e86a8ab3643c0b3147574b2f90e5cf71b7446"
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-
-      - name: Upload to OSS test prefix
-        env:
-          OSS_ACCESS_KEY_ID: ${{ secrets.OSS_ACCESS_KEY_ID }}
-          OSS_ACCESS_KEY_SECRET: ${{ secrets.OSS_ACCESS_KEY_SECRET }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          npm init -y >/dev/null
-          npm install ali-oss@6 --no-audit --no-fund
-          node <<'NODE'
-          const fs = require('fs');
-          const path = require('path');
-          const OSS = require('ali-oss');
-          const client = new OSS({
-            region: 'oss-cn-beijing',
-            endpoint: 'https://oss-cn-beijing.aliyuncs.com',
-            bucket: 'quizmate-cn',
-            accessKeyId: process.env.OSS_ACCESS_KEY_ID,
-            accessKeySecret: process.env.OSS_ACCESS_KEY_SECRET,
-            secure: true,
-            timeout: 1_800_000,
-          });
-          const prefix = 'temp/desktop-test-20260826';
-          const files = [
-            ['QuizMate-Windows-2026.8.25.exe', 'application/vnd.microsoft.portable-executable'],
-            ['QuizMate-Mac-x64-2026.8.24.dmg', 'application/x-apple-diskimage'],
-            ['QuizMate-Mac-arm64-2026.8.24.dmg', 'application/x-apple-diskimage'],
-          ];
-          (async () => {
-            for (const [name, contentType] of files) {
-              const local = path.join('pkg', name);
-              const object = `${prefix}/${name}`;
-              const size = fs.statSync(local).size;
-              await client.multipartUpload(object, local, {
-                parallel: 8,
-                partSize: 4 * 1024 * 1024,
-                headers: {
-                  'Content-Type': contentType,
-                  'Content-Disposition': `attachment; filename="${name}"`,
-                  'Cache-Control': 'no-cache',
-                },
-              });
-              const head = await client.head(object);
-              const remoteSize = Number(head.res.headers['content-length']);
-              if (remoteSize !== size) throw new Error(`${object} size mismatch: ${remoteSize} !== ${size}`);
-              console.log(`UPLOAD_VERIFY_OK https://quizmate-cn.oss-cn-beijing.aliyuncs.com/${object} size=${size}`);
-            }
-          })().catch((error) => {
-            console.error(error);
-            process.exit(1);
-          });
-          NODE
-
-      - name: Verify public test URLs
-        shell: bash
-        run: |
-          set -euo pipefail
-          for name in \
-            QuizMate-Windows-2026.8.25.exe \
-            QuizMate-Mac-x64-2026.8.24.dmg \
-            QuizMate-Mac-arm64-2026.8.24.dmg
-          do
-            curl -fsSI "https://quizmate-cn.oss-cn-beijing.aliyuncs.com/temp/desktop-test-20260826/$name" | tee "head-$name.txt"
-          done
-
   build:
-    if: ${{ github.event_name != 'workflow_dispatch' || inputs.upload_test_assets != true }}
     name: Windows ia32 universal installer
     runs-on: windows-latest
 
