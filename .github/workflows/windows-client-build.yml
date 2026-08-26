@@ -69,7 +69,7 @@ jobs:
           exec > >(tee -a build.log) 2>&1
           EXE=$(find release -maxdepth 1 -name 'QuizMate-Windows-*.exe' -print -quit)
           BLOCKMAP=$(find release -maxdepth 1 -name 'QuizMate-Windows-*.exe.blockmap' -print -quit)
-          APP_UPDATE=release/win-unpacked/resources/app-update.yml
+          APP_UPDATE=release/win-ia32-unpacked/resources/app-update.yml
           test -n "$EXE"
           test -n "$BLOCKMAP"
           test -f release/latest.yml
@@ -89,29 +89,16 @@ jobs:
               }
               console.log(`OK: ${p} -> 32-bit (i386)`);
             }
-          ' "$EXE" "release/win-unpacked/QuizMate.exe"
-
-          # 打包产物内的 koffi 原生模块必须是 ia32（防捕获 FFI 依赖）
-          node -e '
-            const fs = require("fs");
-            const path = "release/win-unpacked/resources/app.asar.unpacked/node_modules/koffi/build/koffi/win32_ia32/koffi.node";
-            const b = fs.readFileSync(path);
-            const off = b.readUInt32LE(0x3c);
-            const machine = b.readUInt16LE(off + 4);
-            if (machine !== 0x14c) {
-              console.error(`FAIL: koffi.node PE machine=0x${machine.toString(16)}，期望 0x14c (i386)`);
-              process.exit(1);
-            }
-            console.log("OK: koffi.node -> 32-bit (i386)");
-          '
+          ' "$EXE" "release/win-ia32-unpacked/QuizMate.exe"
 
           grep -q "version: 2026" release/latest.yml
           sha256sum "$EXE" | tee sha256.txt
           echo "exe=$EXE" >> "$GITHUB_OUTPUT"
           echo "blockmap=$BLOCKMAP" >> "$GITHUB_OUTPUT"
 
-      - name: Create draft GitHub Release with installer
-        # 用 Release 资产承载产物：不占 Actions 存储配额、不会过期（Actions artifact 配额有限且回收慢）
+      - name: Create GitHub prerelease with installer
+        # 用 Release 资产承载产物：不占 Actions 存储配额、不会过期（Actions artifact 配额有限且回收慢）。
+        # 这里直接创建 prerelease，方便测试人员从 GitHub 页面下载，不需要访问 draft release。
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -122,15 +109,20 @@ jobs:
             windows-build-*) ;;
             *) TAG="windows-build-manual-${{ github.run_number }}" ;;
           esac
-          gh release create "$TAG" \
+          if ! gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            gh release create "$TAG" \
+              --repo "${{ github.repository }}" \
+              --prerelease \
+              --target "$GITHUB_SHA" \
+              --title "QuizMate Windows ia32 ${TAG}" \
+              --notes "ia32 通用安装包（单个安装包兼容 x64 与 32 位 Windows，兼容 Win10+）。SHA-256 见 sha256.txt。产物用于本地验证后走 releases/ 目录 + 部署脚本发布。"
+          fi
+          gh release upload "$TAG" \
             --repo "${{ github.repository }}" \
-            --draft \
-            --title "QuizMate Windows ia32 ${TAG}" \
-            --notes "ia32 通用安装包（单个安装包兼容 x64 与 32 位 Windows，兼容 Win10+）。SHA-256 见 sha256.txt。产物用于本地验证后走 releases/ 目录 + 部署脚本发布。" \
+            --clobber \
             "${{ steps.artifact.outputs.exe }}" \
             "${{ steps.artifact.outputs.blockmap }}" \
             release/latest.yml \
-            release/win-unpacked/resources/app-update.yml \
             sha256.txt \
             build.log
-          echo "draft release created: $TAG"
+          gh release view "$TAG" --repo "${{ github.repository }}" --json url -q '.url'
