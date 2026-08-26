@@ -9,7 +9,10 @@
     "skipLibCheck": true,
     "resolveJsonModule": true,
     "baseUrl": "../../desktop-core",
-    "paths": { "@shared/*": ["shared/*"] }
+    "paths": {
+      "@shared/*": ["shared/*"],
+      "*": ["node_modules/*", "../mac客户端/QuizMate-Mac/node_modules/*"]
+    }
   },
   "include": ["../../desktop-core/electron", "../../desktop-core/shared", "../../desktop-core/types", "../../desktop-core/*.ts"]
 }

@@ -99,7 +99,10 @@ export function startProtectionWatchdog(
         clearInterval(timer)
         return
       }
-      if (!win.isContentProtected?.()) {
+      // isContentProtected 只在较新 Electron 提供；旧版本直接视为已保护，避免误报
+      const readBack = (win as unknown as { isContentProtected?: () => boolean }).isContentProtected
+      const protectedNow = typeof readBack === 'function' ? readBack.call(win) : true
+      if (!protectedNow) {
         reapplyCount++
         console.warn(`[MacProtection] watchdog(${label}): 保护丢失(第 ${reapplyCount} 次), 重新应用`)
         applyAntiCapture(win)

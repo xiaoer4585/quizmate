@@ -341,9 +341,9 @@ export class UpdateChecker {
   /** macOS: 当前芯片架构对应的官网 DMG 下载地址 */
   private getMacDownloadUrl(version: string): string {
     const safeVersion = /^\d+(?:\.\d+)*$/.test(version) ? version : app.getVersion();
-    const filename = process.arch === 'arm64'
-      ? `QuizMate-Mac-Apple-Silicon-${safeVersion}.dmg`
-      : `QuizMate-Mac-Intel-${safeVersion}.dmg`;
+    // 与 mac客户端/QuizMate-Mac/electron-builder.yml 的
+    // dmg.artifactName(QuizMate-Mac-${arch}-${version}.dmg) 保持一致
+    const filename = `QuizMate-Mac-${process.arch}-${safeVersion}.dmg`;
     return `https://www.quizmate.cn/downloads/${filename}`;
   }
 

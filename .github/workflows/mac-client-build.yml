@@ -58,6 +58,17 @@ jobs:
           set -o pipefail
           npm ci --no-audit --no-fund 2>&1 | tee -a build.log
 
+      - name: Verify desktop-core dependency bridge
+        # postinstall 会通过 scripts/link-core-modules.cjs 在 desktop-core 下创建
+        # 指向本壳 node_modules 的符号链接，vite/tsc 才能解析共享层源码的依赖。
+        shell: bash
+        run: |
+          set -euo pipefail
+          exec > >(tee -a build.log) 2>&1
+          test -d ../../desktop-core/node_modules/electron \
+            || { echo "::error::desktop-core/node_modules bridge missing; link-core-modules.cjs failed"; exit 1; }
+          echo "desktop-core dependency bridge OK"
+
       - name: Validate source
         shell: bash
         run: |

@@ -11,7 +11,10 @@
     "jsx": "react-jsx",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "baseUrl": "../../desktop-core",
-    "paths": { "@/*": ["src/*"], "@shared/*": ["shared/*"] }
+    "paths": {
+      "@/*": ["src/*"],
+      "@shared/*": ["shared/*"]
+    }
   },
   "include": ["../../desktop-core/src", "../../desktop-core/shared", "../../desktop-core/interviewTranscript.ts"]
 }

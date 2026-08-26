@@ -12,14 +12,15 @@
   "homepage": "https://quizmate.cn",
   "type": "module",
   "scripts": {
+    "postinstall": "node scripts/link-core-modules.cjs",
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "package:win": "electron-vite build && electron-builder --win --ia32",
     "verify:win-package": "node scripts/verify-packaged-app.cjs release/win-unpacked",
     "package:store": "electron-vite build && electron-builder --win appx --x64",
-    "typecheck:node": "tsc --noEmit -p tsconfig.node.json",
-    "typecheck:web": "tsc --noEmit -p tsconfig.web.json"
+    "typecheck:node": "node scripts/link-core-modules.cjs && tsc --noEmit -p tsconfig.node.json",
+    "typecheck:web": "node scripts/link-core-modules.cjs && tsc --noEmit -p tsconfig.web.json"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",

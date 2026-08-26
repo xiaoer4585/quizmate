@@ -28,10 +28,6 @@ mac:
     NSCameraUsageDescription: QuizMate does not use the camera.
 dmg:
   artifactName: QuizMate-Mac-${arch}-${version}.dmg
-macUpdate:
-  # zip 产物用于 electron-updater 自动更新（Win 用户通过 latest-mac.yml 拉取）；
-  # dmg 用于官网手动分发。
-  artifactName: QuizMate-Mac-${arch}-${version}-mac.zip
 publish:
   provider: generic
   url: https://quizmate.cn/mac/
