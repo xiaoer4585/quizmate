@@ -7,6 +7,7 @@ export type ShortcutAction =
   | 'opacity_brighter' | 'opacity_darker' | 'opacity_brighter_alt' | 'opacity_darker_alt'
   | 'zoom_out' | 'zoom_reset' | 'zoom_in' | 'toggle_raw_output' | 'delete_latest_screenshot'
   | 'reset_position' | 'refresh_config'
+  | 'restore_main_window'
 
 export type ShortcutCategory = 'main' | 'system'
 export interface ShortcutBinding { action: ShortcutAction; accelerator: string; label: string; configurable: boolean; category: ShortcutCategory }
@@ -19,13 +20,31 @@ const windowsShortcutBindings: Record<ShortcutAction, string> = {
   resize_height_larger: 'Ctrl+Shift+Up', resize_height_smaller: 'Ctrl+Shift+Down', resize_width_smaller: 'Ctrl+Shift+Left', resize_width_larger: 'Ctrl+Shift+Right',
   opacity_brighter: 'Ctrl+Shift+1', opacity_darker: 'Ctrl+Shift+2', opacity_brighter_alt: 'Ctrl+[', opacity_darker_alt: 'Ctrl+]',
   zoom_out: 'Ctrl+-', zoom_reset: 'Ctrl+0', zoom_in: 'Ctrl+=', toggle_raw_output: 'Ctrl+L', delete_latest_screenshot: 'Ctrl+D', reset_position: 'Ctrl+Shift+R', refresh_config: 'Ctrl+Shift+F5',
+  restore_main_window: 'CommandOrControl+Shift+Alt+M',
 }
 
 const macShortcutBindings: Record<ShortcutAction, string> = {
-  ...windowsShortcutBindings,
-  screenshot: 'Command+Option+Q',
-  search: 'Command+Option+E',
-  interview_start: 'Command+Shift+I',
+  screenshot: 'Option+Q', search: 'Option+E', toggle_visibility: 'Option+B', copy_content: 'Option+C', replay: 'Option+R',
+  interview_start: 'Option+I',
+  interview_prev_question: 'Option+Up', interview_next_question: 'Option+Down',
+  quit: '', reset: 'Command+Shift+T', move_up: 'Command+Up', move_down: 'Command+Down', move_left: 'Command+Left', move_right: 'Command+Right',
+  resize_height_larger: 'Command+Shift+Up', resize_height_smaller: 'Command+Shift+Down', resize_width_smaller: 'Command+Shift+Left', resize_width_larger: 'Command+Shift+Right',
+  opacity_brighter: 'Command+Shift+1', opacity_darker: 'Command+Shift+2', opacity_brighter_alt: 'Command+[', opacity_darker_alt: 'Command+]',
+  zoom_out: 'Command+-', zoom_reset: 'Command+0', zoom_in: 'Command+=', toggle_raw_output: 'Command+L', delete_latest_screenshot: 'Command+D', reset_position: 'Command+Shift+R', refresh_config: 'Command+Shift+F5',
+  restore_main_window: 'Command+Shift+Option+M',
+}
+
+/** Keep Option in persisted/UI values while Electron receives its Alt accelerator spelling. */
+export function normalizeMacAccelerator(accelerator: string): string {
+  return accelerator.split('+').map(part => part.trim().toLowerCase() === 'alt' ? 'Option' : part.trim()).join('+')
+}
+
+export function toElectronAccelerator(accelerator: string): string {
+  return accelerator.split('+').map(part => part.trim().toLowerCase() === 'option' ? 'Alt' : part.trim()).join('+')
+}
+
+export function canonicalizeAccelerator(accelerator: string): string {
+  return toElectronAccelerator(accelerator).toLowerCase()
 }
 
 /** Return native defaults while keeping the shared module usable in Electron and the renderer. */
@@ -47,6 +66,7 @@ const systemMetadata: Array<[ShortcutAction, string]> = [
   ['resize_height_larger', '调高高度'], ['resize_height_smaller', '调小高度'], ['resize_width_smaller', '调小宽度'], ['resize_width_larger', '调大宽度'],
   ['opacity_brighter', '调亮透明度'], ['opacity_darker', '调暗透明度'], ['opacity_brighter_alt', '调亮透明度（备用）'], ['opacity_darker_alt', '调暗透明度（备用）'],
   ['zoom_out', '缩小界面'], ['zoom_reset', '重置缩放'], ['zoom_in', '放大界面'], ['quit', '退出软件'], ['reset', '一键重置'], ['toggle_raw_output', '查看原始输出'], ['delete_latest_screenshot', '删除最新截图'], ['reset_position', '恢复窗口位置'], ['refresh_config', '刷新账号配置'],
+  ['restore_main_window', '恢复客户端主窗口'],
 ]
 export const shortcutMetadata: ShortcutBinding[] = [...mainMetadata.map(([action, label]) => ({ action, label, accelerator: defaultShortcutBindings[action], configurable: true, category: 'main' as const })), ...systemMetadata.map(([action, label]) => ({ action, label, accelerator: defaultShortcutBindings[action], configurable: false, category: 'system' as const }))]
 export const configurableActions = shortcutMetadata.filter(s => s.configurable).map(s => s.action)

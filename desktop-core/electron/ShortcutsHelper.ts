@@ -1,6 +1,14 @@
 // Global shortcuts helper - 完全沿用原考试插件的快捷键方案
 import { globalShortcut } from 'electron'
-import { getDefaultShortcutBindings, ShortcutAction, isConfigurable, interviewShortcutActions } from '../shared/shortcuts'
+import {
+  canonicalizeAccelerator,
+  getDefaultShortcutBindings,
+  interviewShortcutActions,
+  isConfigurable,
+  normalizeMacAccelerator,
+  ShortcutAction,
+  toElectronAccelerator,
+} from '../shared/shortcuts'
 import { ConfigHelper } from './ConfigHelper'
 
 type ActionHandler = (action: ShortcutAction) => void
@@ -57,11 +65,17 @@ export class ShortcutsHelper {
     const stored = this.configHelper.getShortcutBindings?.() || {}
     this.defaults = getDefaultShortcutBindings(process.platform)
     this.bindings = { ...this.defaults }
-    for (const action of Object.keys(this.defaults) as ShortcutAction[]) {
-      if (stored[action]) this.bindings[action] = stored[action]
-    }
     const migrated = { ...stored }
     let changed = false
+    for (const action of Object.keys(this.defaults) as ShortcutAction[]) {
+      if (!stored[action]) continue
+      const accelerator = process.platform === 'darwin' ? normalizeMacAccelerator(stored[action]) : stored[action]
+      this.bindings[action] = accelerator
+      if (accelerator !== stored[action]) {
+        migrated[action] = accelerator
+        changed = true
+      }
+    }
     if (stored.screenshot?.toLowerCase() === 'ctrl+w') {
       this.bindings.screenshot = this.defaults.screenshot
       migrated.screenshot = this.defaults.screenshot
@@ -74,12 +88,12 @@ export class ShortcutsHelper {
     }
     if (process.platform === 'darwin') {
       const legacyMac: Record<string, string[]> = {
-        screenshot: ['alt+q', 'command+q', 'command+w', 'command+alt+q'],
-        search: ['alt+e', 'command+e', 'command+alt+e'],
-        interview_start: ['alt+i', 'command+i', 'command+shift+i'],
+        screenshot: ['command+q', 'command+w', 'command+option+q'],
+        search: ['command+e', 'command+option+e'],
+        interview_start: ['command+i', 'command+shift+i'],
       }
       for (const [action, values] of Object.entries(legacyMac)) {
-        const current = stored[action]?.toLowerCase()
+        const current = this.bindings[action]?.toLowerCase()
         if (current && values.includes(current)) {
           this.bindings[action] = this.defaults[action as ShortcutAction]
           migrated[action] = this.defaults[action as ShortcutAction]
@@ -108,12 +122,13 @@ export class ShortcutsHelper {
 
   public setBinding(action: ShortcutAction, accelerator: string): boolean {
     if (!this.isConfigurable(action)) return false
+    const storedAccelerator = process.platform === 'darwin' ? normalizeMacAccelerator(accelerator) : accelerator
     for (const [a, acc] of Object.entries(this.bindings)) {
-      if (a !== action && acc.toLowerCase() === accelerator.toLowerCase()) {
+      if (a !== action && canonicalizeAccelerator(acc) === canonicalizeAccelerator(storedAccelerator)) {
         return false
       }
     }
-    this.bindings[action] = accelerator
+    this.bindings[action] = storedAccelerator
     this.configHelper.setShortcutBindings?.(this.bindings)
     return true
   }
@@ -136,7 +151,7 @@ export class ShortcutsHelper {
   public checkConflict(accelerator: string, excludeAction?: ShortcutAction): ShortcutAction | null {
     for (const [a, acc] of Object.entries(this.bindings)) {
       if (excludeAction && a === excludeAction) continue
-      if (acc.toLowerCase() === accelerator.toLowerCase()) {
+      if (canonicalizeAccelerator(acc) === canonicalizeAccelerator(accelerator)) {
         return a as ShortcutAction
       }
     }
@@ -149,7 +164,8 @@ export class ShortcutsHelper {
 
   private registerAction(action: ShortcutAction, accelerator: string, mode: string): void {
     try {
-      const ret = globalShortcut.register(accelerator, () => {
+      const electronAccelerator = toElectronAccelerator(accelerator)
+      const ret = globalShortcut.register(electronAccelerator, () => {
         if (this.testMode && this.testCallback) {
           this.testCallback(accelerator)
           return
@@ -169,6 +185,7 @@ export class ShortcutsHelper {
 
   private shouldRegister(action: ShortcutAction, mode: 'overlay' | 'voice' | 'interview'): boolean {
     if (action === 'quit') return false
+    if (action === 'restore_main_window') return true
     if (mode === 'voice') return voiceModeActions.has(action)
     if (mode === 'interview') {
       return interviewShortcutActions.includes(action) || ['reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)
@@ -193,11 +210,7 @@ export class ShortcutsHelper {
 
   public getActionsForMode(mode: 'overlay' | 'voice' | 'interview'): ShortcutAction[] {
     const all = Object.keys(this.bindings) as ShortcutAction[]
-    if (mode === 'overlay') {
-      return all.filter(action => !!this.bindings[action] && this.shouldRegister(action, mode))
-    }
-    if (mode === 'interview') return all.filter(action => !!this.bindings[action] && (interviewShortcutActions.includes(action) || ['quit', 'reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)))
-    return all.filter(action => !!this.bindings[action] && voiceModeActions.has(action))
+    return all.filter(action => !!this.bindings[action] && this.shouldRegister(action, mode))
   }
 
   public unregisterAll(): void {
@@ -220,7 +233,7 @@ export class ShortcutsHelper {
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!this.pausedAccelerators.has(accelerator)) continue
       try {
-        const ret = globalShortcut.register(accelerator, () => {
+        const ret = globalShortcut.register(toElectronAccelerator(accelerator), () => {
           if (this.testMode && this.testCallback) {
             this.testCallback(accelerator)
             return

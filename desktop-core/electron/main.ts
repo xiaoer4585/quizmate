@@ -92,7 +92,6 @@ let realtimeVoiceHelper: RealtimeVoiceHelper;
 let interviewHelper: InterviewHelper;
 let updateChecker: UpdateChecker;
 let trayManager: TrayManager | null = null;
-let restoreShortcutRegistered = false;
 
 // 共享上下文
 export const ctx = {
@@ -141,17 +140,6 @@ function hideMainWindowOnMinimize(): void {
   if (IS_MAC) app.dock?.hide();
   trayManager?.destroy();
   win.hide();
-}
-
-function registerRestoreShortcut(): void {
-  if (restoreShortcutRegistered) return;
-  const accelerator = 'CommandOrControl+Shift+Alt+M';
-  try {
-    restoreShortcutRegistered = globalShortcut.register(accelerator, () => restoreMainWindow());
-    if (!restoreShortcutRegistered) console.warn(`[Main] Failed to register restore shortcut: ${accelerator}`);
-  } catch (error) {
-    console.warn('[Main] Restore shortcut registration failed:', error);
-  }
 }
 
 // 生成 Q 图标（当 icon.ico 不存在时使用）
@@ -724,6 +712,9 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       state.interviewOverlayWindow?.webContents.send('refresh-config');
       state.mainWindow?.webContents.send('refresh-config');
       break;
+    case 'restore_main_window':
+      restoreMainWindow();
+      break;
     default:
       console.warn('[Main] Unknown shortcut action:', action);
   }
@@ -1223,7 +1214,6 @@ async function initializeApp(): Promise<void> {
   ctx.shortcuts = shortcutsHelper;
   // 启动时只注册 overlay 模式动作，避免 interview_start 与截图默认键冲突。
   shortcutsHelper.registerGlobalShortcuts();
-  registerRestoreShortcut();
 
   processingHelper = new LightweightProcessingHelper(configHelper);
   ctx.processing = processingHelper;

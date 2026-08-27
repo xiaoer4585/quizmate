@@ -91,7 +91,7 @@ export default function Profile({ onLogout }: { onLogout: () => void }) {
         <div className="flex items-center gap-2 text-sm font-medium mb-2"><ShieldCheck size={16} className="text-emerald-400" /> 隐身保护</div>
         <p className="text-xs text-slate-400 leading-relaxed">
           {isMacPlatform()
-            ? '笔试与面试窗口已启用 macOS 屏幕捕获保护（NSWindowSharingNone），对屏幕共享、录屏软件、Zoom / Meet 等投屏不可见，可放心使用。'
+            ? '笔试与面试窗口已启用 macOS 内容保护、透明背景、非激活显示与鼠标穿透，不使用会产生黑块的遮罩。macOS 15+ 的部分 ScreenCaptureKit 采集方式可能绕过系统保护，正式使用前请在目标录屏或投屏软件中验证。'
             : '笔试与面试窗口已启用 Windows 隐身保护（SetWindowDisplayAffinity），对屏幕共享、录屏软件、远程桌面不可见，可放心使用。'}
         </p>
       </div>
@@ -104,7 +104,7 @@ export default function Profile({ onLogout }: { onLogout: () => void }) {
               <div className="text-sm font-medium text-amber-200">最小化后隐藏任务栏与托盘</div>
               <p className="mt-1 text-xs leading-relaxed text-amber-100/80">
                 {hideAppChromeOnMinimize
-                  ? '已开启：点击最小化后，客户端窗口、任务栏图标和托盘图标都会隐藏。按 ⌘⌥⇧M（Windows 为 Ctrl+Alt+Shift+M），或再次启动 QuizMate，即可恢复。'
+                  ? '已开启：点击最小化后，客户端窗口、任务栏图标和托盘图标都会隐藏。按 ⌘⇧⌥M（Windows 为 Ctrl+Alt+Shift+M），或再次启动 QuizMate，即可恢复。'
                   : '已关闭：最小化后保留任务栏和托盘图标。'}
               </p>
             </div>
