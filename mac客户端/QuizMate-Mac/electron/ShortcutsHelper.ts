@@ -6,14 +6,36 @@ import { ConfigHelper } from './ConfigHelper'
 type ActionHandler = (action: ShortcutAction) => void
 
 const voiceModeActions: Set<string> = new Set<string>([
+  'screenshot',
   'search',
   'toggle_visibility',
   'replay',
-  'quit',
   'reset',
   'interview_start',
   'interview_prev_question',
   'interview_next_question',
+])
+
+// 面试模式下同样可用的窗口调节动作（与笔试悬浮窗一致：移动/缩放/透明度/界面缩放/复位）。
+// 这些动作在 handleShortcutAction 中按 interviewActive 路由到面试悬浮窗，
+// 若不加入白名单，interview:activateShortcuts 切换注册模式后快捷键将无法触发。
+const interviewWindowActions: Set<string> = new Set<string>([
+  'move_up',
+  'move_down',
+  'move_left',
+  'move_right',
+  'resize_height_larger',
+  'resize_height_smaller',
+  'resize_width_smaller',
+  'resize_width_larger',
+  'opacity_brighter',
+  'opacity_darker',
+  'opacity_brighter_alt',
+  'opacity_darker_alt',
+  'zoom_in',
+  'zoom_out',
+  'zoom_reset',
+  'reset_position',
 ])
 
 export class ShortcutsHelper {
@@ -25,6 +47,7 @@ export class ShortcutsHelper {
   private testMode: boolean = false
   private testCallback: ((accelerator: string) => void) | null = null
   private activeMode: 'overlay' | 'voice' | 'interview' = 'overlay'
+  private registrationErrorHandler: ((data: { action: string; accelerator: string; mode: string }) => void) | null = null
 
   constructor(configHelper: ConfigHelper) {
     this.configHelper = configHelper
@@ -36,12 +59,29 @@ export class ShortcutsHelper {
     const migrated: Record<string, string> = {}
     let migrationNeeded = false
     for (const action of Object.keys(defaultShortcutBindings) as ShortcutAction[]) {
+      if (action === 'quit') {
+        if (stored[action]) migrationNeeded = true
+        migrated[action] = ''
+        continue
+      }
       if (!stored[action]) continue
       const normalized = normalizeMacAccelerator(stored[action])
-      const replacement = action === 'screenshot' && ['command+w', 'alt+q'].includes(normalized.toLowerCase())
+      // Older Mac builds used Command+Q/Command+W (and one interim build used
+      // Alt+Q) for screenshots.  Command+Q is reserved by macOS and
+      // Command+W closes the current window, so migrate every legacy value
+      // before registering global shortcuts on upgrade.
+      const replacement = action === 'screenshot' && ['command+q', 'command+w', 'command+alt+q', 'alt+q'].includes(normalized.toLowerCase())
         ? defaultShortcutBindings.screenshot
-        : action === 'search' && ['command+e', 'alt+e'].includes(normalized.toLowerCase())
+        : action === 'search' && ['command+e', 'command+alt+e', 'alt+e'].includes(normalized.toLowerCase())
           ? defaultShortcutBindings.search
+          : action === 'toggle_visibility' && ['command+b', 'command+alt+b'].includes(normalized.toLowerCase())
+            ? defaultShortcutBindings.toggle_visibility
+            : action === 'copy_content' && ['command+c', 'command+shift+c', 'command+alt+c'].includes(normalized.toLowerCase())
+              ? defaultShortcutBindings.copy_content
+              : action === 'replay' && ['command+r', 'command+shift+r', 'command+alt+r'].includes(normalized.toLowerCase())
+                ? defaultShortcutBindings.replay
+                : action === 'interview_start' && ['command+i', 'command+shift+i', 'command+alt+i'].includes(normalized.toLowerCase())
+                  ? defaultShortcutBindings.interview_start
           : normalized
       this.bindings[action] = replacement
       migrated[action] = replacement
@@ -53,6 +93,10 @@ export class ShortcutsHelper {
 
   public setHandler(handler: ActionHandler): void {
     this.handler = handler
+  }
+
+  public setRegistrationErrorHandler(handler: (data: { action: string; accelerator: string; mode: string }) => void): void {
+    this.registrationErrorHandler = handler
   }
 
   public getBindings(): Record<string, string> {
@@ -107,8 +151,11 @@ export class ShortcutsHelper {
     this.pausedAccelerators.clear()
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!accelerator) continue
-      try {
-        const ret = globalShortcut.register(accelerator, () => {
+      if (action === 'quit') continue
+      const candidates = this.getRegistrationAccelerators(action as ShortcutAction, accelerator)
+      let registeredAny = false
+      for (const candidate of candidates) try {
+        const ret = globalShortcut.register(candidate, () => {
           if (this.testMode && this.testCallback) {
             this.testCallback(accelerator)
             return
@@ -118,13 +165,15 @@ export class ShortcutsHelper {
           }
         })
         if (ret) {
-          this.registered.add(accelerator)
+          registeredAny = true
+          this.registered.add(candidate)
         } else {
-          console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
+          console.warn(`[ShortcutsHelper] Failed to register: ${candidate} for ${action}`)
         }
       } catch (e) {
-        console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
+        console.warn(`[ShortcutsHelper] Error registering ${candidate}:`, e)
       }
+      if (!registeredAny) this.registrationErrorHandler?.({ action, accelerator, mode: this.activeMode })
     }
   }
 
@@ -134,10 +183,13 @@ export class ShortcutsHelper {
     this.pausedAccelerators.clear()
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!accelerator) continue
+      if (action === 'quit') continue
       if (mode === 'voice' && !voiceModeActions.has(action)) continue
-      if (mode === 'interview' && !interviewShortcutActions.includes(action as ShortcutAction) && !['quit', 'reset', 'toggle_visibility', 'replay'].includes(action)) continue
-      try {
-        const ret = globalShortcut.register(accelerator, () => {
+      if (mode === 'interview' && !interviewShortcutActions.includes(action as ShortcutAction) && !['reset', 'toggle_visibility', 'replay'].includes(action) && !interviewWindowActions.has(action)) continue
+      const candidates = this.getRegistrationAccelerators(action as ShortcutAction, accelerator)
+      let registeredAny = false
+      for (const candidate of candidates) try {
+        const ret = globalShortcut.register(candidate, () => {
           if (this.testMode && this.testCallback) {
             this.testCallback(accelerator)
             return
@@ -147,14 +199,25 @@ export class ShortcutsHelper {
           }
         })
         if (ret) {
-          this.registered.add(accelerator)
+          registeredAny = true
+          this.registered.add(candidate)
         } else {
-          console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
+          console.warn(`[ShortcutsHelper] Failed to register: ${candidate} for ${action}`)
         }
       } catch (e) {
-        console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
+        console.warn(`[ShortcutsHelper] Error registering ${candidate}:`, e)
       }
+      if (!registeredAny) this.registrationErrorHandler?.({ action, accelerator, mode })
     }
+  }
+
+  private getRegistrationAccelerators(action: ShortcutAction, accelerator: string): string[] {
+    const normalized = accelerator.toLowerCase()
+    // Some macOS keyboard layouts reserve Option+Q/E for text input. Keep the
+    // configured shortcut, but register an Option+Shift fallback as well.
+    if (action === 'screenshot' && normalized === 'alt+q') return [accelerator, 'Alt+Shift+Q']
+    if (action === 'search' && normalized === 'alt+e') return [accelerator, 'Alt+Shift+E']
+    return [accelerator]
   }
 
   public refreshCurrentRegistration(): void {
@@ -166,7 +229,7 @@ export class ShortcutsHelper {
     if (mode === 'overlay') {
       return all.filter(action => !!this.bindings[action])
     }
-    if (mode === 'interview') return all.filter(action => !!this.bindings[action] && (interviewShortcutActions.includes(action) || ['quit', 'reset', 'toggle_visibility', 'replay'].includes(action)))
+    if (mode === 'interview') return all.filter(action => !!this.bindings[action] && (interviewShortcutActions.includes(action) || ['reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)))
     return all.filter(action => !!this.bindings[action] && voiceModeActions.has(action))
   }
 

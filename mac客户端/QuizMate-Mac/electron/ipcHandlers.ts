@@ -1,5 +1,5 @@
 // IPC 路由 - 注册所有渲染层调用的 handler，分发到各 Helper
-import { ipcMain, shell, app, BrowserWindow, dialog, session, clipboard } from 'electron';
+import { ipcMain, shell, app, BrowserWindow, dialog, session, clipboard, systemPreferences } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { ConfigHelper } from './ConfigHelper';
@@ -41,7 +41,7 @@ export interface OverlayControls {
   minimizeWindow: (which: 'main' | 'overlay') => void;
   maximizeWindow: (which: 'main' | 'overlay') => void;
   closeWindow: (which: 'main' | 'overlay') => void;
-  handleScreenshot: (isExtra: boolean) => Promise<void>;
+  handleScreenshot: (isExtra: boolean) => Promise<boolean>;
   handleSearchAction: (mode: ProcessingMode) => Promise<void>;
   launchExamClient: () => Promise<{ success: boolean; error?: string }>;
   closeExamClient: () => Promise<void>;
@@ -50,6 +50,7 @@ export interface OverlayControls {
   cancelShortcutTest: () => void;
   shortcutsHelper: ShortcutsHelper;
   openEmbeddedWindow: (kind: 'recharge' | 'register') => void;
+  toggleInterviewSession: (context?: unknown) => Promise<{ listening: boolean; overlay: boolean }>;
 }
 
 export function registerIpcHandlers(
@@ -79,10 +80,12 @@ export function registerIpcHandlers(
   // ===== 笔试助手 =====
   ipcMain.handle('exam:captureAndAnalyze', async () => {
     // 截图 + 分析一体化流程
-    await controls.handleScreenshot(false);
+    const captured = await controls.handleScreenshot(false);
+    if (!captured) return { success: false };
     await controls.handleSearchAction(ctx.configHelper.getProcessingMode());
+    return { success: true };
   });
-  ipcMain.handle('exam:screenshot', async () => { await controls.handleScreenshot(false); });
+  ipcMain.handle('exam:screenshot', async () => ({ success: await controls.handleScreenshot(false) }));
   ipcMain.handle('exam:search', async () => { await controls.handleSearchAction(ctx.configHelper.getProcessingMode()); });
   ipcMain.handle('exam:stopAnalyze', () => ctx.processing!.cancelStreaming());
   ipcMain.handle('exam:setTrainingMode', (_e, enabled: boolean) => {
@@ -154,7 +157,7 @@ export function registerIpcHandlers(
   ipcMain.handle('interview:start', (_e, context?) => ctx.interview!.start(context));
   ipcMain.handle('interview:restart', (_e, context?) => ctx.interview!.restart(context));
   ipcMain.handle('interview:stop', () => ctx.interview!.stop());
-  ipcMain.handle('interview:toggle', () => ctx.interview!.toggleListening?.());
+  ipcMain.handle('interview:toggle', (_e, context?) => controls.toggleInterviewSession(context));
   ipcMain.handle('interview:activateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode('interview'); return true; });
   ipcMain.handle('interview:deactivateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode()); return true; });
   ipcMain.handle('interview:setContext', (_e, context) => ctx.interview!.setContext(context));
@@ -228,12 +231,28 @@ export function registerIpcHandlers(
   ipcMain.handle('system:openWeb', () => shell.openExternal(ctx.configHelper.getAppConfig().webBaseUrl));
   ipcMain.handle('system:openAdmin', () => shell.openExternal(ctx.configHelper.getAppConfig().adminWebUrl || 'https://www.quizmate.vip/admin-web/index.html'));
   ipcMain.handle('system:version', () => app.getVersion());
+  ipcMain.handle('system:getPermissions', () => ({
+    screen: process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('screen') : 'granted',
+    microphone: process.platform === 'darwin' ? systemPreferences.getMediaAccessStatus('microphone') : 'granted',
+  }));
+  ipcMain.handle('system:requestMicrophone', async () => {
+    if (process.platform !== 'darwin') return true;
+    return systemPreferences.askForMediaAccess('microphone');
+  });
+  ipcMain.handle('system:openPermissionSettings', (_e, kind: 'screen' | 'microphone') => {
+    const pane = kind === 'screen' ? 'Privacy_ScreenCapture' : 'Privacy_Microphone';
+    return shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?${pane}`);
+  });
   ipcMain.handle('system:getAIConfigs', () => ctx.configHelper.getAllAIModelConfigs());
 
   // ===== 邀请代理 / 面经图片保存分享 =====
   ipcMain.handle('invite:generate-code', async () => {
     if (!ctx.processing) return { success: false, error: '处理模块未初始化' };
     return await (ctx.processing as any).generateInviteCode?.() ?? { success: false, error: '不支持' };
+  });
+  ipcMain.handle('invite:get-overview', async () => {
+    if (!ctx.processing) return { success: false, error: '处理模块未初始化' };
+    return await (ctx.processing as any).getReferralOverview?.() ?? { success: false, error: '不支持' };
   });
   // 保存海报/面经图片到本地（弹出系统保存对话框）
   ipcMain.handle('invite:save-poster', async (_e, dataUrl: string) => {

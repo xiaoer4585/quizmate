@@ -25,6 +25,21 @@ function date(value: unknown): string {
   return Number.isFinite(parsed.getTime()) ? parsed.toISOString() : "";
 }
 
+const CREDIT_ACCOUNT_PLATFORMS = new Set([
+  "win32-desktop",
+  "darwin-desktop",
+  "android",
+  "browser-extension"
+]);
+
+function requestedCreditPlatform(input: ActionInput): string {
+  const platform = String(input.platform ?? "").trim();
+  if (platform && !CREDIT_ACCOUNT_PLATFORMS.has(platform)) {
+    throw new PublicError("不支持的平台类型。", "INVALID_PLATFORM");
+  }
+  return platform;
+}
+
 export async function authenticateAdmin(deps: ActionDependencies, input: ActionInput): Promise<{ accountId: string; email: string }> {
   // 优先使用账户 token 认证
   if (input.accountToken || input.token) {
@@ -108,15 +123,33 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
     await authenticateAdmin(deps, input);
     const { pageSize, requestedPage } = paging(input);
     const emailKeyword = String(input.email ?? "").trim().slice(0, 200);
+    const platform = requestedCreditPlatform(input);
     const params: unknown[] = [];
-    let whereClause = "";
+    const conditions: string[] = [];
     if (emailKeyword) {
       params.push(`%${emailKeyword.toLowerCase()}%`);
-      whereClause = "WHERE lower(a.email) LIKE $1";
+      conditions.push(`lower(a.email) LIKE $${params.length}`);
     }
+    if (platform) {
+      params.push(platform);
+      conditions.push(`latest.platform = $${params.length}`);
+    }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const latestPlatformJoin = `LEFT JOIN LATERAL (
+         SELECT CASE
+           WHEN s.platform IN ('win32', 'win32-desktop') THEN 'win32-desktop'
+           WHEN s.platform IN ('darwin', 'darwin-desktop') THEN 'darwin-desktop'
+           WHEN s.platform IN ('android', 'android-app') THEN 'android'
+           WHEN s.platform IN ('browser', 'website', 'browser-extension') THEN 'browser-extension'
+           ELSE s.platform
+         END AS platform FROM account_sessions s
+          WHERE s.account_id = a.account_id AND s.platform IS NOT NULL
+          ORDER BY s.last_seen_at DESC NULLS LAST, s.created_at DESC LIMIT 1
+       ) latest ON true`;
     const totalParams = params.length;
     const total = Number((await deps.db.query<{ count: string }>(
-      `SELECT count(*)::text AS count FROM accounts a JOIN credit_accounts c USING(account_id) ${whereClause}`,
+      `SELECT count(*)::text AS count FROM accounts a JOIN credit_accounts c USING(account_id)
+       ${latestPlatformJoin} ${whereClause}`,
       params
     )).rows[0]?.count ?? 0);
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -124,12 +157,14 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
     const limitParam = `$${totalParams + 1}`;
     const offsetParam = `$${totalParams + 2}`;
     const result = await deps.db.query<Record<string, unknown>>(
-      `SELECT a.*, c.credits, c.total_charged_credits, c.total_consumed_credits
-       FROM accounts a JOIN credit_accounts c USING(account_id) ${whereClause}
+      `SELECT a.*, c.credits, c.total_charged_credits, c.total_consumed_credits,
+              latest.platform AS session_platform
+       FROM accounts a JOIN credit_accounts c USING(account_id)
+       ${latestPlatformJoin} ${whereClause}
        ORDER BY a.created_at DESC LIMIT ${limitParam} OFFSET ${offsetParam}`,
       [...params, pageSize, (page - 1) * pageSize]
     );
-    return { items: result.rows.map((row) => ({ accountId: String(row.account_id), email: String(row.email), credits: Number(row.credits), totalChargedCredits: Number(row.total_charged_credits), totalConsumedCredits: Number(row.total_consumed_credits), registerBonusCredits: Number(row.register_bonus_credits), status: String(row.status), role: String(row.role ?? "user"), createdAt: date(row.created_at), lastLoginAt: date(row.last_login_at), updatedAt: date(row.updated_at), type: "credits" })), page, pageSize, total, totalPages };
+    return { items: result.rows.map((row) => ({ accountId: String(row.account_id), email: String(row.email), credits: Number(row.credits), totalChargedCredits: Number(row.total_charged_credits), totalConsumedCredits: Number(row.total_consumed_credits), registerBonusCredits: Number(row.register_bonus_credits), platform: String(row.session_platform ?? ""), status: String(row.status), role: String(row.role ?? "user"), createdAt: date(row.created_at), lastLoginAt: date(row.last_login_at), updatedAt: date(row.updated_at), type: "credits" })), page, pageSize, total, totalPages };
   };
   actions.set("adminListCreditAccounts", listCreditAccounts);
   actions.set("adminListAccounts", listCreditAccounts);
@@ -138,18 +173,49 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
   const listCreditLogs: ActionHandler = async (input) => {
     await authenticateAdmin(deps, input);
     const { pageSize, requestedPage } = paging(input);
-    const total = Number((await deps.db.query<{ count: string }>("SELECT count(*)::text AS count FROM credit_ledger")).rows[0]?.count ?? 0);
+    const emailKeyword = String(input.email ?? "").trim().slice(0, 200);
+    const platform = requestedCreditPlatform(input);
+    const params: unknown[] = [];
+    const conditions: string[] = [];
+    if (emailKeyword) {
+      params.push(`%${emailKeyword.toLowerCase()}%`);
+      conditions.push(`lower(a.email) LIKE $${params.length}`);
+    }
+    if (platform) {
+      params.push(platform);
+      conditions.push(`latest.platform = $${params.length}`);
+    }
+    const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const latestPlatformJoin = `LEFT JOIN LATERAL (
+         SELECT CASE
+           WHEN s.platform IN ('win32', 'win32-desktop') THEN 'win32-desktop'
+           WHEN s.platform IN ('darwin', 'darwin-desktop') THEN 'darwin-desktop'
+           WHEN s.platform IN ('android', 'android-app') THEN 'android'
+           WHEN s.platform IN ('browser', 'website', 'browser-extension') THEN 'browser-extension'
+           ELSE s.platform
+         END AS platform FROM account_sessions s
+          WHERE s.account_id = a.account_id AND s.platform IS NOT NULL
+          ORDER BY s.last_seen_at DESC NULLS LAST, s.created_at DESC LIMIT 1
+       ) latest ON true`;
+    const total = Number((await deps.db.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM credit_ledger l JOIN accounts a USING(account_id)
+       ${latestPlatformJoin} ${whereClause}`,
+      params
+    )).rows[0]?.count ?? 0);
     const totalPages = Math.max(1, Math.ceil(total / pageSize));
     const page = Math.min(requestedPage, totalPages);
+    params.push(pageSize, (page - 1) * pageSize);
     const result = await deps.db.query<Record<string, unknown>>(
-      `SELECT l.*, a.email FROM credit_ledger l JOIN accounts a USING(account_id)
-       ORDER BY l.created_at DESC LIMIT $1 OFFSET $2`,
-      [pageSize, (page - 1) * pageSize]
+      `SELECT l.*, a.email, latest.platform AS session_platform
+         FROM credit_ledger l JOIN accounts a USING(account_id)
+         ${latestPlatformJoin} ${whereClause}
+        ORDER BY l.created_at DESC LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
     );
     return { items: result.rows.map((row) => ({
       logId: String(row.log_id ?? ""), accountId: String(row.account_id ?? ""), email: String(row.email ?? ""), type: String(row.operation_type ?? ""),
       credits: Number(row.credits ?? 0), balanceAfter: Number(row.balance_after ?? 0), source: String(row.source ?? ""), orderNo: String(row.order_no ?? ""),
-      packageId: String(row.package_id ?? ""), deviceId: String(row.device_id ?? ""), requestId: String(row.request_id ?? ""), createdAt: date(row.created_at)
+      packageId: String(row.package_id ?? ""), platform: String(row.session_platform ?? ""), deviceId: String(row.device_id ?? ""), requestId: String(row.request_id ?? ""), createdAt: date(row.created_at)
     })), page, pageSize, total, totalPages };
   };
   actions.set("adminListCreditLogs", listCreditLogs);

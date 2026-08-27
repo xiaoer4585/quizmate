@@ -6,7 +6,7 @@
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
 //   - 托盘忙碌图标 + voice 模式进度通知
 // Mac 客户端只保留笔试助手与面试助手；求职流程由免费浏览器插件提供。
-import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, session, systemPreferences } from 'electron';
+import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, session, systemPreferences, Menu } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { pathToFileURL } from 'url';
@@ -478,11 +478,13 @@ function setTheme(theme: 'dark' | 'light') {
   broadcastTheme(theme);
 }
 
-function setIgnoreMouseEvents(_ignore: boolean) {
-  // 悬浮窗始终鼠标穿透，不接受 false 参数
-  // 这是核心设计：用户通过快捷键操作，悬浮窗不干扰下方应用
+function setIgnoreMouseEvents(ignore: boolean) {
+  // 悬浮窗默认鼠标穿透，接收 ignore=false 时临时解除以便悬浮窗内的按钮接收点击
+  // （如 OverlayActionButton 兜底按钮的 hover/click）。主进程在窗口隐藏/截图等流程
+  // 末尾会重新恢复 true，避免悬浮窗干扰下方应用。
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
-    state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    if (ignore) state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    else state.overlayWindow.setIgnoreMouseEvents(false);
   }
 }
 
@@ -594,11 +596,7 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       }
       break;
     case 'interview_start':
-      if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) {
-        createInterviewOverlayWindow();
-      }
-      if (interviewHelper?.isListening()) interviewHelper.stop();
-      else await interviewHelper?.start();
+      await toggleInterviewSession();
       break;
     case 'interview_prev_question':
       state.interviewOverlayWindow?.webContents.send('interview:navigate', { direction: 'prev' });
@@ -658,29 +656,49 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
 }
 
 // ===== 截图→分析编排（完全沿用原考试插件流程） =====
-async function handleScreenshot(isExtra: boolean): Promise<void> {
+function sendClientEvent(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.webContents.send(channel, payload);
+  }
+}
+
+async function handleScreenshot(isExtra: boolean): Promise<boolean> {
   const appConfig = configHelper.getAppConfig();
   const procMode = configHelper.getProcessingMode();
+  const wasVisible = state.isOverlayVisible;
+  sendClientEvent('screenshot-start', { isExtra });
 
   // overlay 模式：截图前完全隐藏悬浮窗，确保截图无轮廓
-  if (procMode === 'overlay' && state.isOverlayVisible) {
+  if (procMode === 'overlay' && wasVisible) {
     hideOverlay();
     await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 500)));
   }
-
-  const result = await screenshotHelper.captureFullScreen();
-
-  if (procMode === 'overlay') {
-    await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
-    showOverlay();
-  }
-
-  if (result.success && result.filePath) {
-    const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
-    const base64 = await screenshotHelper.fileToBase64(saved || result.filePath);
-    state.overlayWindow?.webContents.send('screenshot-added', { path: saved, base64, isExtra });
-  } else {
-    state.overlayWindow?.webContents.send('screenshot-error', { error: result.error });
+  try {
+    const result = await screenshotHelper.captureFullScreen();
+    if (result.success && result.filePath) {
+      const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
+      if (!saved) {
+        sendClientEvent('screenshot-error', { error: '截图已获取，但保存失败，请检查磁盘空间后重试。', code: 'SCREENSHOT_SAVE_FAILED', stage: 'save' });
+        return false;
+      }
+      const base64 = await screenshotHelper.fileToBase64(saved);
+      if (!base64) {
+        sendClientEvent('screenshot-error', { error: '截图已保存，但读取失败，请重新截图。', code: 'SCREENSHOT_READ_FAILED', stage: 'read' });
+        return false;
+      }
+      sendClientEvent('screenshot-added', { path: saved, base64, isExtra });
+      return true;
+    }
+    sendClientEvent('screenshot-error', { error: result.error || '截图失败，请重新授权后重试。', code: 'SCREENSHOT_CAPTURE_FAILED', stage: 'capture' });
+    return false;
+  } catch (error: any) {
+    sendClientEvent('screenshot-error', { error: error?.message || '截图失败，请重试。', code: 'SCREENSHOT_UNEXPECTED_ERROR', stage: 'capture' });
+    return false;
+  } finally {
+    if (procMode === 'overlay' && wasVisible) {
+      await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
+      showOverlay();
+    }
   }
 }
 
@@ -692,7 +710,11 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   if (procMode === 'voice' && queue.length === 0) {
     notifyVoiceProgress('正在截图...');
     setTrayBusy(true);
-    await handleScreenshot(false);
+    const captured = await handleScreenshot(false);
+    if (!captured) {
+      setTrayBusy(false);
+      return;
+    }
     queue = screenshotHelper.getQueue(false);
   }
 
@@ -723,16 +745,18 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
     return;
   }
 
-  // 搜题后清空历史截图队列
-  screenshotHelper.clearAll();
-  state.overlayWindow?.webContents.send('screenshots-cleared');
-
   // 进度通知 + 托盘忙碌图标
   notifyVoiceProgress('正在调用 AI 分析...');
   setTrayBusy(true);
 
   // 直接调用 analyze 获取完整结果
   const result = await processingHelper.analyze({ images: [b64], mode });
+
+  // 失败时保留原截图，用户可直接重试；仅成功后清空队列。
+  if (result.success) {
+    screenshotHelper.clearAll();
+    sendClientEvent('screenshots-cleared', undefined);
+  }
 
   if (procMode === 'voice') {
     // voice 模式：不依赖悬浮框事件，改用 TTS 播报
@@ -894,6 +918,19 @@ function createInterviewOverlayWindow() {
     state.interviewOverlayVisible = false;
   });
 
+  // 与笔试悬浮窗一致：移动/缩放后持久化窗口位置与尺寸（两个悬浮窗共享已保存配置）
+  state.interviewOverlayWindow.on('move', () => {
+    if (!state.interviewOverlayWindow) return;
+    const b = state.interviewOverlayWindow.getBounds();
+    configHelper.setWindowPosition({ x: b.x, y: b.y });
+  });
+
+  state.interviewOverlayWindow.on('resize', () => {
+    if (!state.interviewOverlayWindow) return;
+    const b = state.interviewOverlayWindow.getBounds();
+    configHelper.setWindowSize({ width: b.width, height: b.height });
+  });
+
   const interviewUrl = getRendererUrl('#/overlay-interview');
   if (interviewUrl) state.interviewOverlayWindow.loadURL(interviewUrl);
 
@@ -980,6 +1017,26 @@ function closeInterviewOverlay() {
   state.interviewOverlayVisible = false;
 }
 
+/** One control for the interview workflow: overlay and realtime dictation share one lifecycle. */
+async function toggleInterviewSession(context?: unknown): Promise<{ listening: boolean; overlay: boolean }> {
+  if (interviewHelper?.isListening()) {
+    interviewHelper.stop();
+    hideInterviewOverlay();
+    return { listening: false, overlay: false };
+  }
+  if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) createInterviewOverlayWindow();
+  else showInterviewOverlay();
+  try {
+    await interviewHelper?.start(context as any);
+    const listening = !!interviewHelper?.isListening();
+    if (!listening) hideInterviewOverlay();
+    return { listening, overlay: listening && state.interviewOverlayVisible };
+  } catch {
+    hideInterviewOverlay();
+    return { listening: false, overlay: false };
+  }
+}
+
 // ===== overlay 适配器：将面试悬浮窗适配为 InterviewHelper 所需的 OverlayManager 接口 =====
 const overlayAdapter = {
   render(payload: { type: 'exam' | 'interview'; title?: string; content: string; streaming?: boolean }) {
@@ -1050,6 +1107,13 @@ function createTrayManager(): void {
         authManager.getProfile().then(() => updateTrayState());
       });
     },
+    // 托盘兜底入口：填空/输入题场景下快捷键被拦截时，从托盘触发截图与搜题
+    captureScreenshot: () => {
+      void handleScreenshot(false);
+    },
+    searchQuestion: () => {
+      void handleSearchAction(configHelper.getProcessingMode());
+    },
     quit: () => {
       state.quitting = true;
       app.quit();
@@ -1096,6 +1160,12 @@ async function initializeApp(): Promise<void> {
   shortcutsHelper = new ShortcutsHelper(configHelper);
   shortcutsHelper.init();
   shortcutsHelper.setHandler(handleShortcutAction);
+  shortcutsHelper.setRegistrationErrorHandler((data) => {
+    console.error('[Main] global shortcut registration failed:', data);
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('shortcut-registration-error', data);
+    });
+  });
   ctx.shortcuts = shortcutsHelper;
   // 启动时立即注册全局快捷键，确保 Command+B 可随时启动悬浮框
   shortcutsHelper.registerGlobalShortcuts();
@@ -1150,6 +1220,7 @@ async function initializeApp(): Promise<void> {
     cancelShortcutTest,
     shortcutsHelper,
     openEmbeddedWindow,
+    toggleInterviewSession,
   });
 
   // ===== 笔试悬浮窗状态查询 =====
@@ -1200,6 +1271,10 @@ if (!gotLock) {
   });
 
   app.whenReady().then(async () => {
+    // Do not let macOS' default application menu consume Command+Q and quit
+    // the client while the user is working. The app remains tray-resident;
+    // quitting is available only through an explicit lifecycle action.
+    Menu.setApplicationMenu(null);
     await configureMacPermissions();
     await initializeApp().catch((e) => {
       console.error('[Main] Init failed:', e);

@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   Play, Square, RefreshCw, ExternalLink, Info, Eye, EyeOff,
-  Volume2, Loader2,
+  Volume2, Loader2, ShieldAlert,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import {
@@ -40,6 +40,8 @@ export default function Exam() {
   const [shortcutBindings, setShortcutBindings] = useState<Record<string, string>>(defaultShortcutBindings);
   const [ttsTesting, setTtsTesting] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const systemApi = (window as any).api?.system;
+  const [screenPermission, setScreenPermission] = useState<string>('unknown');
 
   // 加载初始配置数据
   const loadData = useCallback(async () => {
@@ -70,6 +72,7 @@ export default function Exam() {
 
   useEffect(() => {
     loadData();
+    systemApi?.getPermissions?.().then((p: any) => setScreenPermission(String(p?.screen || 'unknown'))).catch(() => {});
     // 监听后端事件
     const unsubs: Array<(() => void) | undefined> = [];
     // 积分变动
@@ -91,6 +94,11 @@ export default function Exam() {
       unsubs.forEach((u) => u && u());
     };
   }, [api, loadData]);
+
+  const openScreenPermission = async () => {
+    await systemApi?.openPermissionSettings?.('screen');
+    setTimeout(() => systemApi?.getPermissions?.().then((p: any) => setScreenPermission(String(p?.screen || 'unknown'))).catch(() => {}), 1000);
+  };
 
   const guideAccount = userInfo?.email || userInfo?.username || 'current';
   const guideStorageKey = `quizmate.feature-guide.exam.${guideAccount}`;
@@ -184,6 +192,13 @@ export default function Exam() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
+      {screenPermission !== 'granted' && screenPermission !== 'unknown' && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm text-amber-200">
+          <ShieldAlert size={18} className="mt-0.5 shrink-0 text-amber-400" />
+          <div className="flex-1"><b>请先允许屏幕录制</b><div className="mt-1 text-xs text-amber-100/80">笔试助手需要“系统设置 → 隐私与安全性 → 屏幕录制”权限，授权后请完全退出并重新打开 QuizMate。</div></div>
+          <button onClick={openScreenPermission} className="btn-outline text-xs border-amber-500/50 text-amber-200">打开设置</button>
+        </div>
+      )}
       {/* 头部：用户信息 + 积分 + 操作按钮 */}
       <div className="card">
         <div className="flex items-center justify-between gap-3 flex-wrap">
