@@ -8,7 +8,8 @@ description: "Manages QuizMate project version control with date-based tags, fea
 ## 项目概况
 
 - **项目名**: quizmate（考试插件）
-- **GitHub 仓库**: 私有仓库 `quizmate`，使用 SSH 认证
+- **远程仓库**: Gitee 私有仓库 `jiangweikeji/quizmate`（origin，SSH 认证；注意不是 GitHub）
+- **Gitee 邮箱要求**: 提交作者邮箱必须在 Gitee 账号中设为「公开」，否则推送会被钩子拒绝（2026-08-27 遇到并已解决，邮箱 wangpengroy@qq.com）
 - **版本号规则**: `v + 日期`，如 `v20260725`（每天最多一个版本号）
 - **分支策略**: main（稳定）+ feature/描述（改动分支）
 
