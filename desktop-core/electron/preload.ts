@@ -118,6 +118,7 @@ const api = {
     onShowRechargeModal: (cb: () => void) => on('system:showRechargeModal', cb),
     /** 主窗口当前是否对用户可见（可见且未最小化）。用于渲染层判断是否允许弹积分不足蒙版。 */
     isMainWindowVisible: () => invoke('system:isMainWindowVisible'),
+    restoreMainWindow: () => invoke('system:restoreMainWindow'),
     /** 主窗口可见性变化（true=可见 & 未最小化，false=最小化/隐藏）。 */
     onMainWindowVisible: (cb: (visible: boolean) => void) =>
       on('system:mainWindowVisible', (visible: unknown) => cb(!!visible)),

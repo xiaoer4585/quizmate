@@ -6,7 +6,7 @@
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
 //   - 托盘忙碌图标 + voice 模式进度通知
 // Windows 客户端只保留笔试助手与面试助手；求职流程由免费浏览器插件提供。
-import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, Menu, session, systemPreferences } from 'electron';
+import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, Menu, session, systemPreferences, Notification } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { pathToFileURL } from 'url';
@@ -15,6 +15,7 @@ import { AuthManager } from './AuthManager';
 import { TrayManager } from './TrayManager';
 import { registerIpcHandlers, wireMainWindowVisibility } from './ipcHandlers';
 import { ScreenshotHelper } from './helpers/ScreenshotHelper';
+import type { ScreenshotResult } from './helpers/ScreenshotHelper';
 import { LightweightProcessingHelper } from './helpers/ProcessingHelper';
 import { ShortcutsHelper } from './ShortcutsHelper';
 import { TtsHelper } from './helpers/TtsHelper';
@@ -91,6 +92,7 @@ let realtimeVoiceHelper: RealtimeVoiceHelper;
 let interviewHelper: InterviewHelper;
 let updateChecker: UpdateChecker;
 let trayManager: TrayManager | null = null;
+let restoreShortcutRegistered = false;
 
 // 共享上下文
 export const ctx = {
@@ -116,6 +118,40 @@ function getAppIconPath(): string | undefined {
   const iconPath = getAssetPath('resources', iconFile);
   if (fs.existsSync(iconPath)) return iconPath;
   return undefined;
+}
+
+function restoreMainWindow(): void {
+  const win = state.mainWindow;
+  if (!win || win.isDestroyed()) {
+    createMainWindow();
+    return;
+  }
+  if (IS_MAC) app.dock?.show();
+  try { win.setSkipTaskbar(false); } catch {}
+  if (win.isMinimized()) win.restore();
+  win.show();
+  win.focus();
+  createTrayManager();
+}
+
+function hideMainWindowOnMinimize(): void {
+  const win = state.mainWindow;
+  if (!win || win.isDestroyed() || state.quitting) return;
+  try { win.setSkipTaskbar(true); } catch {}
+  if (IS_MAC) app.dock?.hide();
+  trayManager?.destroy();
+  win.hide();
+}
+
+function registerRestoreShortcut(): void {
+  if (restoreShortcutRegistered) return;
+  const accelerator = 'CommandOrControl+Shift+Alt+M';
+  try {
+    restoreShortcutRegistered = globalShortcut.register(accelerator, () => restoreMainWindow());
+    if (!restoreShortcutRegistered) console.warn(`[Main] Failed to register restore shortcut: ${accelerator}`);
+  } catch (error) {
+    console.warn('[Main] Restore shortcut registration failed:', error);
+  }
 }
 
 // 生成 Q 图标（当 icon.ico 不存在时使用）
@@ -254,7 +290,22 @@ function createMainWindow() {
     },
   });
 
-  state.mainWindow.on('ready-to-show', () => state.mainWindow?.show());
+  state.mainWindow.on('ready-to-show', () => {
+    if (IS_MAC) app.dock?.show();
+    state.mainWindow?.setSkipTaskbar(false);
+    state.mainWindow?.show();
+  });
+  state.mainWindow.on('minimize' as never, (event: Electron.Event) => {
+    const hideChrome = configHelper.getClientSettings().hideAppChromeOnMinimize !== false;
+    if (hideChrome) {
+      event.preventDefault();
+      hideMainWindowOnMinimize();
+    } else {
+      try { state.mainWindow?.setSkipTaskbar(false); } catch {}
+      if (IS_MAC) app.dock?.show();
+      createTrayManager();
+    }
+  });
   // 窗口获得焦点时从后端刷新积分，保证多端实时同步
   state.mainWindow.on('focus', () => refreshCreditsFromServer());
   // 同步更新检测器的主窗口引用，用于推送更新状态
@@ -387,7 +438,7 @@ function createOverlayWindow() {
   if (overlayUrl) state.overlayWindow.loadURL(overlayUrl);
 
   state.overlayWindow.setAlwaysOnTop(true, 'screen-saver');
-  state.overlayWindow.setSkipTaskbar(false);
+  state.overlayWindow.setSkipTaskbar(true);
   // 窗口创建后立即设置鼠标穿透（核心：永不关闭）
   state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
 
@@ -692,19 +743,38 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 500)));
   }
 
-  const result = await screenshotHelper.captureFullScreen();
-
-  if (overlayWasVisible) {
-    await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
-    showOverlay();
+  let result: ScreenshotResult;
+  try {
+    result = await screenshotHelper.captureFullScreen();
+  } catch (error) {
+    console.error('[Main] Screenshot capture threw:', error);
+    result = { success: false, error: '截图失败，请检查屏幕录制权限后重试' };
+  } finally {
+    if (overlayWasVisible) {
+      await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
+      showOverlay();
+    }
   }
 
   if (result.success && result.filePath) {
     const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
     const base64 = await screenshotHelper.fileToBase64(saved || result.filePath);
-    state.overlayWindow?.webContents.send('screenshot-added', { path: saved, base64, isExtra });
+    const payload = { path: saved, base64, isExtra };
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('screenshot-added', payload);
+    });
   } else {
-    state.overlayWindow?.webContents.send('screenshot-error', { error: result.error });
+    const payload = { error: result.error || '截图失败，请稍后重试', code: 'CAPTURE_FAILED', stage: 'capture' };
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('screenshot-error', payload);
+    });
+    try {
+      if (Notification.isSupported()) {
+        new Notification({ title: 'QuizMate 截图失败', body: payload.error }).show();
+      }
+    } catch (error) {
+      console.warn('[Main] Screenshot failure notification failed:', error);
+    }
   }
 }
 
@@ -1056,30 +1126,9 @@ function createTrayManager(): void {
   if (trayManager) return;
   const iconPath = getAssetPath('resources', IS_MAC ? 'icon.png' : 'icon.ico');
   trayManager = new TrayManager({
-    showMainWindow: () => {
-      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-        state.mainWindow.show();
-        state.mainWindow.focus();
-      } else {
-        createMainWindow();
-      }
-    },
-    showLogin: () => {
-      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-        state.mainWindow.show();
-        state.mainWindow.focus();
-      } else {
-        createMainWindow();
-      }
-    },
-    showSettings: () => {
-      if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-        state.mainWindow.show();
-        state.mainWindow.focus();
-      } else {
-        createMainWindow();
-      }
-    },
+    showMainWindow: () => restoreMainWindow(),
+    showLogin: () => restoreMainWindow(),
+    showSettings: () => restoreMainWindow(),
     toggleOverlay: () => {
       if (state.overlayLocked) {
         // 悬浮框已存在：切换显示/隐藏（与 Ctrl+B 语义一致，不销毁窗口）
@@ -1166,9 +1215,15 @@ async function initializeApp(): Promise<void> {
   shortcutsHelper = new ShortcutsHelper(configHelper);
   shortcutsHelper.init();
   shortcutsHelper.setHandler(handleShortcutAction);
+  shortcutsHelper.setRegistrationErrorHandler((data) => {
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('shortcut-registration-error', data);
+    });
+  });
   ctx.shortcuts = shortcutsHelper;
-  // 启动时立即注册全局快捷键，确保 Ctrl+B 可随时启动悬浮框
+  // 启动时只注册 overlay 模式动作，避免 interview_start 与截图默认键冲突。
   shortcutsHelper.registerGlobalShortcuts();
+  registerRestoreShortcut();
 
   processingHelper = new LightweightProcessingHelper(configHelper);
   ctx.processing = processingHelper;
@@ -1222,6 +1277,7 @@ async function initializeApp(): Promise<void> {
     cancelShortcutTest,
     shortcutsHelper,
     openEmbeddedWindow,
+    restoreMainWindow,
   });
 
   // ===== 笔试悬浮窗状态查询 =====
@@ -1262,14 +1318,7 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
-  app.on('second-instance', () => {
-    if (state.mainWindow) {
-      if (state.mainWindow.isMinimized()) state.mainWindow.restore();
-      state.mainWindow.focus();
-    } else {
-      createMainWindow();
-    }
-  });
+  app.on('second-instance', () => restoreMainWindow());
 
   app.whenReady().then(async () => {
     // Windows/Linux 移除菜单栏; macOS 保留系统默认菜单(否则文本框的 Cmd+C/V 复制粘贴会失效)
@@ -1280,9 +1329,7 @@ if (!gotLock) {
     });
   });
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
-  });
+  app.on('activate', () => restoreMainWindow());
 
   app.on('window-all-closed', () => {
     if (state.quitting) return;

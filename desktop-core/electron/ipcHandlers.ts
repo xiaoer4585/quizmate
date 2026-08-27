@@ -50,6 +50,7 @@ export interface OverlayControls {
   cancelShortcutTest: () => void;
   shortcutsHelper: ShortcutsHelper;
   openEmbeddedWindow: (kind: 'recharge' | 'register') => void;
+  restoreMainWindow: () => void;
 }
 
 export function registerIpcHandlers(
@@ -72,6 +73,10 @@ export function registerIpcHandlers(
   ipcMain.handle('config:updateClientSettings', (_e, patch) => {
     ctx.configHelper.updateClientSettings(patch);
     return ctx.configHelper.getClientSettings();
+  });
+  ipcMain.handle('system:restoreMainWindow', () => {
+    controls.restoreMainWindow();
+    return true;
   });
   ipcMain.handle('guide:getState', () => ctx.configHelper.getOnboardingGuideState());
   ipcMain.handle('guide:setCompleted', (_e, completed?: boolean) => ctx.configHelper.setOnboardingGuideCompleted(completed !== false));

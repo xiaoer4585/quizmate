@@ -61,6 +61,8 @@ export interface ClientSettings {
   theme?: 'dark' | 'light';
   backgroundOpacity?: number;
   zoomFactor?: number;
+  /** Hide the main window from taskbar/Dock and remove the tray icon on minimize. */
+  hideAppChromeOnMinimize?: boolean;
   [k: string]: unknown;
 }
 
@@ -118,6 +120,7 @@ export class DesktopConfigHelper {
           theme: 'dark',
           backgroundOpacity: 0.8,
           zoomFactor: 1.0,
+          hideAppChromeOnMinimize: true,
         },
         shortcutBindings: {},
         backgroundOpacity: 0.8,

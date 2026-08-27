@@ -1,6 +1,6 @@
 // Global shortcuts helper - 完全沿用原考试插件的快捷键方案
 import { globalShortcut } from 'electron'
-import { defaultShortcutBindings, ShortcutAction, isConfigurable, interviewShortcutActions } from '../shared/shortcuts'
+import { getDefaultShortcutBindings, ShortcutAction, isConfigurable, interviewShortcutActions } from '../shared/shortcuts'
 import { ConfigHelper } from './ConfigHelper'
 
 type ActionHandler = (action: ShortcutAction) => void
@@ -46,6 +46,8 @@ export class ShortcutsHelper {
   private testMode: boolean = false
   private testCallback: ((accelerator: string) => void) | null = null
   private activeMode: 'overlay' | 'voice' | 'interview' = 'overlay'
+  private defaults: Record<ShortcutAction, string> = getDefaultShortcutBindings()
+  private registrationErrorHandler: ((data: { action: string; accelerator: string; mode: string }) => void) | null = null
 
   constructor(configHelper: ConfigHelper) {
     this.configHelper = configHelper
@@ -53,32 +55,36 @@ export class ShortcutsHelper {
 
   public init(): void {
     const stored = this.configHelper.getShortcutBindings?.() || {}
-    this.bindings = { ...defaultShortcutBindings }
-    for (const action of Object.keys(defaultShortcutBindings) as ShortcutAction[]) {
+    this.defaults = getDefaultShortcutBindings(process.platform)
+    this.bindings = { ...this.defaults }
+    for (const action of Object.keys(this.defaults) as ShortcutAction[]) {
       if (stored[action]) this.bindings[action] = stored[action]
     }
     const migrated = { ...stored }
     let changed = false
     if (stored.screenshot?.toLowerCase() === 'ctrl+w') {
-      this.bindings.screenshot = defaultShortcutBindings.screenshot
-      migrated.screenshot = defaultShortcutBindings.screenshot
+      this.bindings.screenshot = this.defaults.screenshot
+      migrated.screenshot = this.defaults.screenshot
       changed = true
     }
     if (stored.search?.toLowerCase() === 'ctrl+e') {
-      this.bindings.search = defaultShortcutBindings.search
-      migrated.search = defaultShortcutBindings.search
+      this.bindings.search = this.defaults.search
+      migrated.search = this.defaults.search
       changed = true
     }
-    const legacyInterviewDefaults: Record<string, string> = {
-      interview_start: 'Alt+Q',
-      interview_prev_question: 'Alt+Up',
-      interview_next_question: 'Alt+Down',
-    }
-    for (const [action, next] of Object.entries(legacyInterviewDefaults)) {
-      if (stored[action] && stored[action] !== next && ['ctrl+shift+i', 'ctrl+shift+j', 'ctrl+alt+up', 'ctrl+alt+down'].includes(stored[action].toLowerCase())) {
-        this.bindings[action] = next
-        migrated[action] = next
-        changed = true
+    if (process.platform === 'darwin') {
+      const legacyMac: Record<string, string[]> = {
+        screenshot: ['alt+q', 'command+q', 'command+w', 'command+alt+q'],
+        search: ['alt+e', 'command+e', 'command+alt+e'],
+        interview_start: ['alt+i', 'command+i', 'command+shift+i'],
+      }
+      for (const [action, values] of Object.entries(legacyMac)) {
+        const current = stored[action]?.toLowerCase()
+        if (current && values.includes(current)) {
+          this.bindings[action] = this.defaults[action as ShortcutAction]
+          migrated[action] = this.defaults[action as ShortcutAction]
+          changed = true
+        }
       }
     }
     if (changed) this.configHelper.setShortcutBindings?.(migrated)
@@ -88,12 +94,16 @@ export class ShortcutsHelper {
     this.handler = handler
   }
 
+  public setRegistrationErrorHandler(handler: (data: { action: string; accelerator: string; mode: string }) => void): void {
+    this.registrationErrorHandler = handler
+  }
+
   public getBindings(): Record<string, string> {
     return { ...this.bindings }
   }
 
   public getBinding(action: ShortcutAction): string {
-    return this.bindings[action] || defaultShortcutBindings[action]
+    return this.bindings[action] || this.defaults[action]
   }
 
   public setBinding(action: ShortcutAction, accelerator: string): boolean {
@@ -110,12 +120,12 @@ export class ShortcutsHelper {
 
   public resetBinding(action: ShortcutAction): void {
     if (!this.isConfigurable(action)) return
-    this.bindings[action] = defaultShortcutBindings[action]
+    this.bindings[action] = this.defaults[action]
     this.configHelper.setShortcutBindings?.(this.bindings)
   }
 
   public resetAll(): void {
-    this.bindings = { ...defaultShortcutBindings }
+    this.bindings = { ...this.defaults }
     this.configHelper.setShortcutBindings?.({})
   }
 
@@ -134,30 +144,36 @@ export class ShortcutsHelper {
   }
 
   public registerGlobalShortcuts(): void {
-    this.activeMode = 'overlay'
-    this.unregisterAll()
-    this.pausedAccelerators.clear()
-    for (const [action, accelerator] of Object.entries(this.bindings)) {
-      if (!accelerator) continue
-      try {
-        const ret = globalShortcut.register(accelerator, () => {
-          if (this.testMode && this.testCallback) {
-            this.testCallback(accelerator)
-            return
-          }
-          if (this.handler) {
-            this.handler(action as ShortcutAction)
-          }
-        })
-        if (ret) {
-          this.registered.add(accelerator)
-        } else {
-          console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
+    this.registerGlobalShortcutsForMode('overlay')
+  }
+
+  private registerAction(action: ShortcutAction, accelerator: string, mode: string): void {
+    try {
+      const ret = globalShortcut.register(accelerator, () => {
+        if (this.testMode && this.testCallback) {
+          this.testCallback(accelerator)
+          return
         }
-      } catch (e) {
-        console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
+        this.handler?.(action)
+      })
+      if (ret) this.registered.add(accelerator)
+      else {
+        console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
+        this.registrationErrorHandler?.({ action, accelerator, mode })
       }
+    } catch (e) {
+      console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
+      this.registrationErrorHandler?.({ action, accelerator, mode })
     }
+  }
+
+  private shouldRegister(action: ShortcutAction, mode: 'overlay' | 'voice' | 'interview'): boolean {
+    if (action === 'quit') return false
+    if (mode === 'voice') return voiceModeActions.has(action)
+    if (mode === 'interview') {
+      return interviewShortcutActions.includes(action) || ['reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)
+    }
+    return !interviewShortcutActions.includes(action)
   }
 
   public registerGlobalShortcutsForMode(mode: 'overlay' | 'voice' | 'interview'): void {
@@ -166,26 +182,8 @@ export class ShortcutsHelper {
     this.pausedAccelerators.clear()
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!accelerator) continue
-      if (mode === 'voice' && !voiceModeActions.has(action)) continue
-      if (mode === 'interview' && !interviewShortcutActions.includes(action as ShortcutAction) && !['quit', 'reset', 'toggle_visibility', 'replay'].includes(action) && !interviewWindowActions.has(action)) continue
-      try {
-        const ret = globalShortcut.register(accelerator, () => {
-          if (this.testMode && this.testCallback) {
-            this.testCallback(accelerator)
-            return
-          }
-          if (this.handler) {
-            this.handler(action as ShortcutAction)
-          }
-        })
-        if (ret) {
-          this.registered.add(accelerator)
-        } else {
-          console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
-        }
-      } catch (e) {
-        console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
-      }
+      if (!this.shouldRegister(action as ShortcutAction, mode)) continue
+      this.registerAction(action as ShortcutAction, accelerator, mode)
     }
   }
 
@@ -196,7 +194,7 @@ export class ShortcutsHelper {
   public getActionsForMode(mode: 'overlay' | 'voice' | 'interview'): ShortcutAction[] {
     const all = Object.keys(this.bindings) as ShortcutAction[]
     if (mode === 'overlay') {
-      return all.filter(action => !!this.bindings[action])
+      return all.filter(action => !!this.bindings[action] && this.shouldRegister(action, mode))
     }
     if (mode === 'interview') return all.filter(action => !!this.bindings[action] && (interviewShortcutActions.includes(action) || ['quit', 'reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)))
     return all.filter(action => !!this.bindings[action] && voiceModeActions.has(action))

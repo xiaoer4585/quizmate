@@ -11,7 +11,7 @@ export type ShortcutAction =
 export type ShortcutCategory = 'main' | 'system'
 export interface ShortcutBinding { action: ShortcutAction; accelerator: string; label: string; configurable: boolean; category: ShortcutCategory }
 
-export const defaultShortcutBindings: Record<ShortcutAction, string> = {
+const windowsShortcutBindings: Record<ShortcutAction, string> = {
   screenshot: 'Alt+Q', search: 'Alt+E', toggle_visibility: 'Ctrl+B', copy_content: 'Ctrl+Shift+C', replay: 'Ctrl+R',
   interview_start: 'Alt+Q',
   interview_prev_question: 'Alt+Up', interview_next_question: 'Alt+Down',
@@ -20,6 +20,22 @@ export const defaultShortcutBindings: Record<ShortcutAction, string> = {
   opacity_brighter: 'Ctrl+Shift+1', opacity_darker: 'Ctrl+Shift+2', opacity_brighter_alt: 'Ctrl+[', opacity_darker_alt: 'Ctrl+]',
   zoom_out: 'Ctrl+-', zoom_reset: 'Ctrl+0', zoom_in: 'Ctrl+=', toggle_raw_output: 'Ctrl+L', delete_latest_screenshot: 'Ctrl+D', reset_position: 'Ctrl+Shift+R', refresh_config: 'Ctrl+Shift+F5',
 }
+
+const macShortcutBindings: Record<ShortcutAction, string> = {
+  ...windowsShortcutBindings,
+  screenshot: 'Command+Option+Q',
+  search: 'Command+Option+E',
+  interview_start: 'Command+Shift+I',
+}
+
+/** Return native defaults while keeping the shared module usable in Electron and the renderer. */
+export function getDefaultShortcutBindings(platform?: string): Record<ShortcutAction, string> {
+  const currentPlatform = platform || (typeof process !== 'undefined' ? process.platform : '') ||
+    (typeof navigator !== 'undefined' && /Macintosh|Mac OS X/i.test(navigator.userAgent) ? 'darwin' : '')
+  return { ...(currentPlatform === 'darwin' ? macShortcutBindings : windowsShortcutBindings) }
+}
+
+export const defaultShortcutBindings: Record<ShortcutAction, string> = getDefaultShortcutBindings()
 
 const mainMetadata: Array<[ShortcutAction, string]> = [
   ['screenshot', '全屏截图'], ['search', '搜题'], ['toggle_visibility', '显示/隐藏悬浮框'], ['copy_content', '复制答案'], ['replay', '重听答案'],
@@ -43,8 +59,6 @@ export const interviewShortcutActions: ShortcutAction[] = ['interview_start', 'i
 export const modeByAction: Partial<Record<ShortcutAction, ProcessingMode>> = { search: 'overlay' }
 
 // ===== 平台展示辅助（主进程/渲染层共用） =====
-// 默认绑定两端完全一致: Windows 上 Alt 即 Alt 键, macOS 上 Electron 的 Alt 修饰键即 Option(⌥) 键,
-// 因此注册逻辑无需平台差异; 仅"展示层"按平台渲染符号。
 
 /** 当前是否为 macOS(渲染层无 process 对象, 退化为 userAgent 判定) */
 export function isMacPlatform(): boolean {

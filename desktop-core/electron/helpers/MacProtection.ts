@@ -99,12 +99,16 @@ export function startProtectionWatchdog(
         clearInterval(timer)
         return
       }
-      // isContentProtected 只在较新 Electron 提供；旧版本直接视为已保护，避免误报
+      // Older Electron versions cannot read back NSWindow.sharingType. Reapply
+      // idempotently on every tick so hide/show and display changes cannot leave
+      // the overlay unprotected.
       const readBack = (win as unknown as { isContentProtected?: () => boolean }).isContentProtected
-      const protectedNow = typeof readBack === 'function' ? readBack.call(win) : true
-      if (!protectedNow) {
+      const protectedNow = typeof readBack === 'function' ? readBack.call(win) : false
+      if (!protectedNow || typeof readBack !== 'function') {
         reapplyCount++
-        console.warn(`[MacProtection] watchdog(${label}): 保护丢失(第 ${reapplyCount} 次), 重新应用`)
+        if (reapplyCount === 1 || reapplyCount % 10 === 0) {
+          console.log(`[MacProtection] watchdog(${label}): reapplying content protection (${reapplyCount})`)
+        }
         applyAntiCapture(win)
       }
     } catch (e) {

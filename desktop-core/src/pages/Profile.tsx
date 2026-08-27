@@ -1,6 +1,6 @@
 // 个人中心 - 账号信息、积分、充值入口、邀请代理
-import { useState } from 'react';
-import { User, Mail, Wallet, Zap, RefreshCw, ShieldCheck, LogOut } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { User, Mail, Wallet, Zap, RefreshCw, ShieldCheck, LogOut, EyeOff, RotateCcw } from 'lucide-react';
 import { api, useProfile } from '../lib/ipc';
 import { isMacPlatform } from '../../shared/shortcuts';
 import InviteAgent from '../components/InviteAgent';
@@ -9,6 +9,20 @@ import RechargeModal from '../components/RechargeModal';
 export default function Profile({ onLogout }: { onLogout: () => void }) {
   const { data: profile, refetch } = useProfile();
   const [rechargeOpen, setRechargeOpen] = useState(false);
+  const [hideAppChromeOnMinimize, setHideAppChromeOnMinimize] = useState(true);
+
+  useEffect(() => {
+    api.config.getClientSettings()
+      .then((settings: { hideAppChromeOnMinimize?: boolean }) => {
+        setHideAppChromeOnMinimize(settings.hideAppChromeOnMinimize !== false);
+      })
+      .catch(() => {});
+  }, []);
+
+  const updateHideAppChrome = async (enabled: boolean) => {
+    setHideAppChromeOnMinimize(enabled);
+    await api.config.updateClientSettings({ hideAppChromeOnMinimize: enabled });
+  };
 
   const acct = profile?.account;
   const credits = profile?.creditBalance ?? acct?.credits ?? 0;
@@ -80,6 +94,35 @@ export default function Profile({ onLogout }: { onLogout: () => void }) {
             ? '笔试与面试窗口已启用 macOS 屏幕捕获保护（NSWindowSharingNone），对屏幕共享、录屏软件、Zoom / Meet 等投屏不可见，可放心使用。'
             : '笔试与面试窗口已启用 Windows 隐身保护（SetWindowDisplayAffinity），对屏幕共享、录屏软件、远程桌面不可见，可放心使用。'}
         </p>
+      </div>
+
+      <div className="card border-amber-500/30 bg-amber-500/5">
+        <div className="flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-start gap-3">
+            <EyeOff size={18} className="mt-0.5 text-amber-300" />
+            <div>
+              <div className="text-sm font-medium text-amber-200">最小化后隐藏任务栏与托盘</div>
+              <p className="mt-1 text-xs leading-relaxed text-amber-100/80">
+                {hideAppChromeOnMinimize
+                  ? '已开启：点击最小化后，客户端窗口、任务栏图标和托盘图标都会隐藏。按 ⌘⌥⇧M（Windows 为 Ctrl+Alt+Shift+M），或再次启动 QuizMate，即可恢复。'
+                  : '已关闭：最小化后保留任务栏和托盘图标。'}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={hideAppChromeOnMinimize}
+            onClick={() => updateHideAppChrome(!hideAppChromeOnMinimize)}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${hideAppChromeOnMinimize ? 'bg-amber-500' : 'bg-slate-600'}`}
+            title="切换最小化隐藏策略"
+          >
+            <span className={`absolute top-1 h-4 w-4 rounded-full bg-white transition-transform ${hideAppChromeOnMinimize ? 'translate-x-6' : 'translate-x-1'}`} />
+          </button>
+        </div>
+        <button type="button" onClick={() => api.system.restoreMainWindow()} className="btn-ghost mt-3 text-xs text-amber-200">
+          <RotateCcw size={14} /> 立即恢复客户端窗口
+        </button>
       </div>
 
       {/* 退出登录 */}
