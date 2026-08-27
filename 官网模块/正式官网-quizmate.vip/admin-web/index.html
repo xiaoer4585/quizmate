@@ -546,6 +546,15 @@
           <div class="panel">
             <div class="form-grid">
               <div class="field"><label for="accountEmailInput">邮箱筛选</label><input id="accountEmailInput" placeholder="模糊匹配，可留空" /></div>
+              <div class="field"><label for="accountPlatform">最近登录平台</label>
+                <select id="accountPlatform">
+                  <option value="">全部平台</option>
+                  <option value="win32-desktop">Windows</option>
+                  <option value="darwin-desktop">Mac</option>
+                  <option value="android">安卓</option>
+                  <option value="browser-extension">浏览器插件</option>
+                </select>
+              </div>
               <div class="actions" style="align-self:end"><button id="searchAccountsBtn" type="button">查询</button><button id="clearAccountsFilterBtn" class="secondary" type="button">清空条件</button></div>
             </div>
           </div>
@@ -558,6 +567,15 @@
           <div class="panel">
             <div class="form-grid">
               <div class="field"><label for="creditLogEmail">邮箱筛选</label><input id="creditLogEmail" placeholder="模糊匹配，可留空" /></div>
+              <div class="field"><label for="creditLogPlatform">平台筛选</label>
+                <select id="creditLogPlatform">
+                  <option value="">全部平台</option>
+                  <option value="win32-desktop">Windows</option>
+                  <option value="darwin-desktop">Mac</option>
+                  <option value="android">安卓</option>
+                  <option value="browser-extension">浏览器插件</option>
+                </select>
+              </div>
               <div class="field"><label>白名单过滤</label>
                 <div class="inline-check"><input id="creditLogHideWhitelist" type="checkbox" checked /><label for="creditLogHideWhitelist">隐藏白名单邮箱的流水</label></div>
               </div>
@@ -1170,6 +1188,10 @@
         "adminAddCreditWhitelist",
         "adminRemoveCreditWhitelist"
       ]);
+      const CREDIT_ADMIN_ACTION_ALIASES = {
+        adminListCreditAccounts: ["adminListAccounts", "adminListCreditUsers"],
+        adminListCreditLogs: ["adminListCreditLedger", "adminListCreditFlow", "adminListCreditFlows"]
+      };
       const CUSTOMER_SERVICE_URL = "https://kefu.quizmate.vip/";
       const tableActions = {
         accounts: "adminListCreditAccounts",
@@ -1227,7 +1249,8 @@
         orderStatus: $("#orderStatus"), orderType: $("#orderType"), orderProvider: $("#orderProvider"),
         orderEmail: $("#orderEmail"), orderNo: $("#orderNo"), orderStartDate: $("#orderStartDate"), orderEndDate: $("#orderEndDate"),
         accountEmail: $("#accountEmailInput"),
-        creditLogEmail: $("#creditLogEmail"), creditLogHideWhitelist: $("#creditLogHideWhitelist"),
+        accountPlatform: $("#accountPlatform"),
+        creditLogEmail: $("#creditLogEmail"), creditLogHideWhitelist: $("#creditLogHideWhitelist"), creditLogPlatform: $("#creditLogPlatform"),
         epayEnabled: $("#epayEnabled"), epayApiUrl: $("#epayApiUrl"), epayPid: $("#epayPid"), epayKey: $("#epayKey"),
         epayNotifyUrl: $("#epayNotifyUrl"), epayReturnUrl: $("#epayReturnUrl"), epayMerchantPrivateKey: $("#epayMerchantPrivateKey"), epayPlatformPublicKey: $("#epayPlatformPublicKey"),
         epayKeyStatus: $("#epayKeyStatus"), epayMerchantPrivateKeyStatus: $("#epayMerchantPrivateKeyStatus"), epayPlatformPublicKeyStatus: $("#epayPlatformPublicKeyStatus"),
@@ -1262,8 +1285,8 @@
       };
 
       const columns = {
-        accounts: [["email", "邮箱"], ["credits", "余额"], ["totalChargedCredits", "累计充值"], ["totalConsumedCredits", "累计消耗"], ["registerBonusCredits", "注册赠送"], ["status", "状态"], ["role", "角色"], ["lastLoginAt", "最后登录"], ["createdAt", "注册时间"], ["__actions", "操作"]],
-        creditLogs: [["email", "邮箱"], ["type", "类型"], ["credits", "积分变化"], ["balanceAfter", "变化后余额"], ["orderNo", "订单号"], ["packageId", "套餐"], ["source", "来源"], ["deviceId", "设备"], ["createdAt", "时间"], ["__actions", "操作"]],
+        accounts: [["email", "邮箱"], ["credits", "余额"], ["totalChargedCredits", "累计充值"], ["totalConsumedCredits", "累计消耗"], ["registerBonusCredits", "注册赠送"], ["platform", "最近登录平台"], ["status", "状态"], ["role", "角色"], ["lastLoginAt", "最后登录"], ["createdAt", "注册时间"], ["__actions", "操作"]],
+        creditLogs: [["email", "邮箱"], ["type", "类型"], ["credits", "积分变化"], ["balanceAfter", "变化后余额"], ["orderNo", "订单号"], ["packageId", "套餐"], ["platform", "平台"], ["source", "来源"], ["deviceId", "设备"], ["createdAt", "时间"], ["__actions", "操作"]],
         licenses: [["code", "序列号"], ["days", "天数"], ["status", "状态"], ["source", "来源"], ["deviceId", "绑定设备"], ["activatedAt", "激活时间"], ["expiresAt", "到期时间"], ["createdAt", "创建时间"], ["__actions", "操作"]],
         devices: [["licenseCode", "序列号"], ["deviceId", "设备 ID"], ["lastSeenAt", "最后在线"], ["createdAt", "首次绑定"], ["updatedAt", "更新时间"]],
         orders: [["outTradeNo", "订单号"], ["orderType", "订单类型"], ["status", "状态"], ["provider", "通道"], ["amount", "金额"], ["email", "邮箱"], ["packageId", "套餐"], ["totalCredits", "充值积分"], ["creditBalanceAfter", "到账后余额"], ["paidAt", "付款时间"], ["createdAt", "创建时间"], ["error", "错误"], ["__actions", "操作"]],
@@ -1516,6 +1539,7 @@
       $("#searchAccountsBtn").addEventListener("click", () => { state.tables.accounts.page = 1; run(() => loadTable("accounts")); });
       $("#clearAccountsFilterBtn").addEventListener("click", () => {
         els.accountEmail.value = "";
+        els.accountPlatform.value = "";
         state.tables.accounts.page = 1; run(() => loadTable("accounts"));
       });
       // 兑换码：批量生成 + 复制 + 筛选
@@ -1544,6 +1568,7 @@
       $("#searchCreditLogsBtn").addEventListener("click", () => { state.tables.creditLogs.page = 1; run(() => loadTable("creditLogs")); });
       $("#clearCreditLogsFilterBtn").addEventListener("click", () => {
         els.creditLogEmail.value = "";
+        els.creditLogPlatform.value = "";
         els.creditLogHideWhitelist.checked = true;
         localStorage.setItem("study_admin_credit_hide_whitelist", "1");
         state.tables.creditLogs.page = 1; run(() => loadTable("creditLogs"));
@@ -2131,11 +2156,11 @@
       }
 
       function creditLogFilters() {
-        return { email: els.creditLogEmail.value.trim(), excludeWhitelist: els.creditLogHideWhitelist.checked };
+        return { email: els.creditLogEmail.value.trim(), excludeWhitelist: els.creditLogHideWhitelist.checked, platform: els.creditLogPlatform.value };
       }
 
       function accountFilters() {
-        return { email: els.accountEmail.value.trim() };
+        return { email: els.accountEmail.value.trim(), platform: els.accountPlatform.value };
       }
 
       function aiFailureFilters() {
@@ -2727,6 +2752,15 @@
           setStatus("检测到旧接口不支持积分后台，已切回正式接口并重试。");
           result = await postStudyApi(API_DEFAULT, action, payload);
         }
+        if (CREDIT_ADMIN_ACTIONS.has(action) && result.data?.code === "UNKNOWN_ACTION") {
+          for (const alias of CREDIT_ADMIN_ACTION_ALIASES[action] || []) {
+            const aliasResult = await postStudyApi(els.apiEndpoint.value, alias, payload);
+            if (aliasResult.data?.code !== "UNKNOWN_ACTION") {
+              result = aliasResult;
+              break;
+            }
+          }
+        }
         const { response, data } = result;
         if (!response.ok || !data.ok) throw new Error(data.error || "请求失败");
         return data.data || {};
@@ -2897,10 +2931,21 @@
         pending_review: "待审核", approved: "审核通过", paid: "已打款", rejected: "已驳回"
       };
 
+      const PLATFORM_BADGE_MAP = {
+        "win32-desktop": { label: "Windows", type: "badge-info" },
+        "darwin-desktop": { label: "Mac", type: "badge-info" },
+        android: { label: "安卓", type: "badge-success" },
+        "browser-extension": { label: "浏览器插件", type: "badge-warning" }
+      };
+
       function formatCell(value, key) {
         if (value === undefined || value === null || value === "") return "-";
         if (/At$/.test(key)) { const time = new Date(value).getTime(); if (Number.isFinite(time)) return new Date(value).toLocaleString("zh-CN"); }
         if (key === "createdAt" && value) { const time = new Date(value).getTime(); if (Number.isFinite(time)) return new Date(value).toLocaleString("zh-CN"); }
+        if (key === "platform") {
+          const badge = PLATFORM_BADGE_MAP[value];
+          return badge ? `<span class="badge ${badge.type}">${escapeHtml(badge.label)}</span>` : escapeHtml(value || "-");
+        }
         if (key === "status") return `<span class="badge">${escapeHtml(REFERRAL_STATUS_MAP[value] || value)}</span>`;
         if (key === "orderType") return `<span class="badge">${escapeHtml(value)}</span>`;
         if (key === "size") return formatBytes(value);
