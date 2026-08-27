@@ -96,9 +96,24 @@ jobs:
           # 保证单个安装包兼容 x64 与 32 位 Windows
           node -e '
             const fs = require("fs");
-            for (const p of [process.argv[1], process.argv[2]]) {
+            for (const p of process.argv.slice(1)) {
               const b = fs.readFileSync(p);
+              if (b.length < 0x40 || b[0] !== 0x4d || b[1] !== 0x5a) {
+                console.error(`FAIL: ${p} 不是有效的 PE 文件`);
+                process.exit(1);
+              }
               const off = b.readUInt32LE(0x3c);
+              if (
+                off < 0x40 ||
+                off + 6 > b.length ||
+                b[off] !== 0x50 ||
+                b[off + 1] !== 0x45 ||
+                b[off + 2] !== 0x00 ||
+                b[off + 3] !== 0x00
+              ) {
+                console.error(`FAIL: ${p} PE 签名无效`);
+                process.exit(1);
+              }
               const machine = b.readUInt16LE(off + 4);
               if (machine !== 0x14c) {
                 console.error(`FAIL: ${p} PE machine=0x${machine.toString(16)}，期望 0x14c (i386)`);
