@@ -1,0 +1,4 @@
+interface:
+  display_name: "QuizMate Production Release"
+  short_description: "Sync GitHub and deploy verified QuizMate releases to Aliyun"
+  default_prompt: "Use $quizmate-release to publish the current QuizMate change to GitHub and Aliyun production, then verify both."
