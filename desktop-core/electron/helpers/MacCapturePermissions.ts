@@ -47,4 +47,3 @@ export function getMacScreenPermission(mediaStatus: MacScreenPermission): MacScr
   if (preflightScreenCaptureAccess() === true) return 'granted'
   return mediaStatus
 }
-
