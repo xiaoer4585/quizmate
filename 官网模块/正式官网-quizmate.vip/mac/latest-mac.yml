@@ -1,11 +1,11 @@
-version: 2026.8.21
+version: 2026.8.20
 files:
-  - url: QuizMate-Mac-arm64-2026.8.21.zip
-    sha512: gav0H/xtukLlud7cgbbvpyrRLzIKraKUbZ4VNgBvSFVpWhvGGKbEGl4cXiIk3naA8I98NyuP2Cd18NMp5+K6wA==
-    size: 126877056
-  - url: QuizMate-Mac-x64-2026.8.21.zip
-    sha512: 8MCJzNWXB+UMe8NDxBNX/zN92NcoxBJRl1w2ZbpZXrwx1X7O76bRDPR7QNea3yGw5WDPvm/OmGOe/hnpIyVcVA==
-    size: 128983164
-path: QuizMate-Mac-arm64-2026.8.21.zip
-sha512: gav0H/xtukLlud7cgbbvpyrRLzIKraKUbZ4VNgBvSFVpWhvGGKbEGl4cXiIk3naA8I98NyuP2Cd18NMp5+K6wA==
-releaseDate: '2026-08-20T08:20:00.000Z'
+  - url: https://quizmate-cn.oss-cn-beijing.aliyuncs.com/temp/mac-test-20260822/QuizMate-Mac-Apple-Silicon-2026.8.20.dmg
+    sha512: SlMjN2LlFDTZX3zEtxp5CGMQiTSPtyepEXcnSqlBlDu9SSeM6OQ/DAJIP7M0g7Eqm6Wt3llRIW0QpsclL+ecEw==
+    size: 126888428
+  - url: https://quizmate-cn.oss-cn-beijing.aliyuncs.com/temp/mac-test-20260822/QuizMate-Mac-Intel-2026.8.20.dmg
+    sha512: u3Q2T1DRLvGgNOdQ+W0vp5juqAPfC+KPUSz3h4DkL9LgqXyYbSkgst4KIlvLJLyv+ithM2Tc9u4K+Q28T7huQA==
+    size: 130583188
+path: https://quizmate-cn.oss-cn-beijing.aliyuncs.com/temp/mac-test-20260822/QuizMate-Mac-Apple-Silicon-2026.8.20.dmg
+sha512: SlMjN2LlFDTZX3zEtxp5CGMQiTSPtyepEXcnSqlBlDu9SSeM6OQ/DAJIP7M0g7Eqm6Wt3llRIW0QpsclL+ecEw==
+releaseDate: '2026-08-20T00:00:00.000Z'

@@ -5,7 +5,7 @@ import { hashToken } from "../security/crypto.js";
 import type { ActionDependencies, ActionHandler, RequestContext } from "../types.js";
 import { DEFAULT_INTERVIEW_PROMPT } from "./configuration.js";
 import { normalizeDeviceId } from "./licenses.js";
-import { setModelFailureContext } from "../server.js";
+import { setModelFailureContext } from "../services/model-failure-context.js";
 
 interface SpeechAccount {
   account_id: string;

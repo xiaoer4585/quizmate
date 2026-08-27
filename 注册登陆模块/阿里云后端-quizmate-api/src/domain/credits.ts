@@ -4,7 +4,7 @@ export const REGISTER_BONUS_CREDITS = 50;
 
 // 邀请注册机制常量
 export const REFERRAL_BONUS_CREDITS = 20;       // 邀请注册双方各得积分
-export const REFERRAL_COMMISSION_RATE = 0.20;   // 充值提成比例 20%
+export const REFERRAL_COMMISSION_RATE = 0.05;   // 充值提成比例 5%（CHG-20260822-05：邀请返现从 20% 调为 5%）
 export const MAX_REFERRAL_COUNT = 50;            // 每用户邀请上限
 export const REFERRAL_BONUS_CREDITS_VALUE = REFERRAL_BONUS_CREDITS * CREDIT_COST_PER_SUCCESS / 100; // 仅用于参考展示
 
@@ -14,3 +14,14 @@ export const CREDIT_PACKAGES = [
   { id: "pro", name: "笔面试上岸包", amount: "149.00", baseCredits: 1500, bonusCredits: 1000, tag: "性价比之选" },
   { id: "unlimited", name: "无忧包", amount: "399.90", baseCredits: 4000, bonusCredits: 4000, tag: "推荐" }
 ] as const;
+
+// 邀请裂变阶梯奖励（邀请「已充值」用户数达到阈值时一次性发放对应积分包）
+//  - 10 位 = 笔面试上岸包 (pro)
+//  - 20 位 = 无忧包 (unlimited)
+// 注：发放走 referral_tiered_grants 表，幂等键 (account_id, tier_key)
+export const REFERRAL_TIERED_BONUSES = [
+  { tierKey: "tier-10-pro",        invitedRechargedCount: 10, tierCredits: 0, tierPackageId: "pro",        badge: "笔面试上岸奖励", description: "10 位好友成功充值，赠 笔面试上岸包" },
+  { tierKey: "tier-20-unlimited",  invitedRechargedCount: 20, tierCredits: 0, tierPackageId: "unlimited",  badge: "无忧上岸奖励",   description: "20 位好友成功充值，赠 无忧包" }
+] as const;
+
+export type ReferralTieredBonus = (typeof REFERRAL_TIERED_BONUSES)[number];
