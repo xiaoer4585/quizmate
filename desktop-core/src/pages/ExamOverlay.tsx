@@ -125,6 +125,12 @@ export default function OverlayPage() {
       setStatus('error')
     }))
 
+    unsubs.push(api?.on('screenshot-started', () => {
+      setErrorMessage('')
+      setStatus('processing')
+      setProgressMessage('正在截取屏幕...')
+    }))
+
     unsubs.push(api?.on('initial-start', () => {
       setStatus('processing')
       setView('solutions')

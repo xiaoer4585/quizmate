@@ -51,6 +51,7 @@ const api = {
     cancelShortcutTest: () => invoke('exam:cancelShortcutTest'),
     // 快捷键绑定
     getShortcutBindings: () => invoke('shortcuts:getBindings'),
+    getShortcutRegistrationErrors: () => invoke('shortcuts:getRegistrationErrors'),
     setShortcutBinding: (action: string, accelerator: string) => invoke('shortcuts:setBinding', action, accelerator),
     resetShortcutBinding: (action: string) => invoke('shortcuts:resetBinding', action),
     resetAllShortcuts: () => invoke('shortcuts:resetAll'),
@@ -161,6 +162,7 @@ const electronAPI = {
     getClientSettings: () => invoke('config:getClientSettings'),
     updateClientSettings: (settings: any) => invoke('config:updateClientSettings', settings),
     getShortcutBindings: () => invoke('shortcuts:getBindings'),
+    getShortcutRegistrationErrors: () => invoke('shortcuts:getRegistrationErrors'),
     setShortcutBinding: (action: any, accelerator: string) => invoke('shortcuts:setBinding', action, accelerator),
     resetShortcutBinding: (action: any) => invoke('shortcuts:resetBinding', action),
     resetAllShortcuts: () => invoke('shortcuts:resetAll'),

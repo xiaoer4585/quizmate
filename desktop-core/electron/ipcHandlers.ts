@@ -97,6 +97,7 @@ export function registerIpcHandlers(
 
   // ===== 快捷键 =====
   ipcMain.handle('shortcuts:getBindings', () => controls.shortcutsHelper.getBindings());
+  ipcMain.handle('shortcuts:getRegistrationErrors', () => controls.shortcutsHelper.getRegistrationErrors());
   ipcMain.handle('shortcuts:setBinding', (_e, action: string, accelerator: string) => {
     const updated = controls.shortcutsHelper.setBinding(action as any, accelerator);
     if (updated) {

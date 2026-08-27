@@ -10,8 +10,8 @@
 //
 // 与 Win32Protection 保持同一接口(protection.ts 按平台分发):
 //   - applyAllProtections / applyAntiCapture / startProtectionWatchdog / removeAntiCapture
-//   - macOS 无 GetWindowDisplayAffinity 读回机制, 看门狗改为周期性幂等重设(开销极低),
-//     防止系统状态切换导致的静默失效
+//   - 旧版 Electron 没有公开的 macOS 保护状态读取 API; 新版运行时若提供
+//     isContentProtected() 则读取验证, 否则看门狗周期性幂等重设。
 //
 // 说明: macOS 15+ 上使用 ScreenCaptureKit 的新采集工具可能突破 sharingType 保护,
 // 属系统级能力边界(Apple 有意变更), 已在用户手册中说明。
@@ -48,12 +48,28 @@ const MAC_CAPTURE_EXCLUDED = 0x11
 
 export function applyAntiCapture(win: BrowserWindow): AntiCaptureResult {
   try {
-    // NSWindowSharingNone: 窗口对截屏/录屏/共享屏幕整体缺席, 无黑块
+    // NSWindowSharingNone: 窗口对常规截屏/录屏/共享屏幕整体缺席, 无黑块。
     win.setContentProtection(true)
-    return { excluded: true, monitor: false, affinity: MAC_CAPTURE_EXCLUDED, verified: true }
+    const state = readContentProtection(win)
+    return {
+      excluded: state !== false,
+      monitor: false,
+      affinity: MAC_CAPTURE_EXCLUDED,
+      verified: state === true,
+    }
   } catch (error) {
     console.warn('[MacProtection] setContentProtection failed:', error)
     return { excluded: false, monitor: false, affinity: 0, verified: false }
+  }
+}
+
+/** Electron 31 does not type this API, while newer Electron runtimes expose it. */
+export function readContentProtection(win: BrowserWindow): boolean | null {
+  try {
+    const readBack = (win as unknown as { isContentProtected?: () => boolean }).isContentProtected
+    return typeof readBack === 'function' ? readBack.call(win) : null
+  } catch {
+    return null
   }
 }
 
@@ -80,8 +96,8 @@ export function applyAllProtections(win: BrowserWindow): ProtectionResult {
 
 /**
  * 防捕获看门狗: 周期性幂等重设 setContentProtection。
- * macOS 无 DisplayAffinity 读回机制, 重设开销极低且无副作用;
- * 窗口销毁后自动停止。
+ * 旧版 macOS Electron 无公开读回机制时，重设开销极低且无副作用；
+ * 新版运行时只有读回为 false/未知时才重设。窗口销毁后自动停止。
  */
 export function startProtectionWatchdog(
   win: BrowserWindow,
@@ -102,9 +118,8 @@ export function startProtectionWatchdog(
       // Older Electron versions cannot read back NSWindow.sharingType. Reapply
       // idempotently on every tick so hide/show and display changes cannot leave
       // the overlay unprotected.
-      const readBack = (win as unknown as { isContentProtected?: () => boolean }).isContentProtected
-      const protectedNow = typeof readBack === 'function' ? readBack.call(win) : false
-      if (!protectedNow || typeof readBack !== 'function') {
+      const protectedNow = readContentProtection(win)
+      if (protectedNow !== true) {
         reapplyCount++
         if (reapplyCount === 1 || reapplyCount % 10 === 0) {
           console.log(`[MacProtection] watchdog(${label}): reapplying content protection (${reapplyCount})`)

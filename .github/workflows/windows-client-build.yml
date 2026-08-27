@@ -123,14 +123,14 @@ jobs:
           set -euo pipefail
           git fetch --force origin "refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
           TAG_PAYLOAD_B64=$(git cat-file tag "$GITHUB_REF_NAME" | sed '1,/^$/d' | tr -d '\n')
-          for key in exe blockmap latest sha256; do
+          # 测试包不上传 latest.yml，避免安装后被纳入任何自动更新链路。
+          for key in exe blockmap sha256; do
             url=$(TAG_PAYLOAD_B64="$TAG_PAYLOAD_B64" KEY="$key" node -e "const p=JSON.parse(Buffer.from(process.env.TAG_PAYLOAD_B64, 'base64').toString('utf8')); process.stdout.write(p[process.env.KEY] || '')")
             test -n "$url"
             echo "::add-mask::$url"
             case "$key" in
               exe) file="$EXE_PATH"; content_type='application/vnd.microsoft.portable-executable' ;;
               blockmap) file="$BLOCKMAP_PATH"; content_type='application/octet-stream' ;;
-              latest) file='release/latest.yml'; content_type='text/yaml; charset=utf-8' ;;
               sha256) file='sha256.txt'; content_type='text/plain; charset=utf-8' ;;
             esac
             curl --fail --silent --show-error --retry 3 \

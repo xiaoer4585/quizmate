@@ -13,6 +13,8 @@ const impl = process.platform === 'darwin' ? Mac : Win32
 
 export const applyAllProtections: (win: BrowserWindow) => Win32.ProtectionResult = impl.applyAllProtections
 export const applyAntiCapture: (win: BrowserWindow) => Win32.AntiCaptureResult = impl.applyAntiCapture
+export const readContentProtection: (win: BrowserWindow) => boolean | null =
+  process.platform === 'darwin' ? Mac.readContentProtection : (() => null)
 export const startProtectionWatchdog: (
   win: BrowserWindow,
   opts?: { label?: string; intervalMs?: number }

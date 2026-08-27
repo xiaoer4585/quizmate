@@ -22,7 +22,7 @@ import { TtsHelper } from './helpers/TtsHelper';
 import { ByteDanceTtsHelper } from './helpers/ByteDanceTtsHelper';
 import { SapiVoiceHelper } from './helpers/SapiVoiceHelper';
 import { RealtimeVoiceHelper } from './helpers/RealtimeVoiceHelper';
-import { applyAllProtections, applyAntiCapture, startProtectionWatchdog, ProtectionWatchdog, ProtectionResult } from './helpers/protection';
+import { applyAllProtections, applyAntiCapture, readContentProtection, startProtectionWatchdog, ProtectionWatchdog, ProtectionResult } from './helpers/protection';
 import { InterviewHelper } from './helpers/InterviewHelper';
 import { OverlayManager } from './OverlayManager';
 import { UpdateChecker } from './UpdateChecker';
@@ -321,6 +321,7 @@ function createMainWindow() {
 // 亲和性看门狗句柄（悬浮窗销毁/重建时复用）
 let overlayProtectionWatchdog: ProtectionWatchdog | null = null;
 let interviewProtectionWatchdog: ProtectionWatchdog | null = null;
+let screenshotInFlight = false;
 
 function createOverlayWindow() {
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
@@ -722,40 +723,65 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
 
 // ===== 截图→分析编排（完全沿用原考试插件流程） =====
 async function handleScreenshot(isExtra: boolean): Promise<void> {
-  const appConfig = configHelper.getAppConfig();
-
-  // 截图前隐藏悬浮窗(以窗口实际可见性为准, 不依赖模式与状态标志)，
-  // 确保自身截图在任何情况下都不包含悬浮框--即使防捕获亲和性失效也兜底
-  const overlayWasVisible = !!(
-    state.overlayWindow && !state.overlayWindow.isDestroyed() && state.overlayWindow.isVisible()
-  );
-  if (overlayWasVisible) {
-    hideOverlay();
-    await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 500)));
-  }
-
-  let result: ScreenshotResult;
-  try {
-    result = await screenshotHelper.captureFullScreen();
-  } catch (error) {
-    console.error('[Main] Screenshot capture threw:', error);
-    result = { success: false, error: '截图失败，请检查屏幕录制权限后重试' };
-  } finally {
-    if (overlayWasVisible) {
-      await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
-      showOverlay();
-    }
-  }
-
-  if (result.success && result.filePath) {
-    const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
-    const base64 = await screenshotHelper.fileToBase64(saved || result.filePath);
-    const payload = { path: saved, base64, isExtra };
+  if (screenshotInFlight) {
     BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) win.webContents.send('screenshot-added', payload);
+      if (!win.isDestroyed()) win.webContents.send('screenshot-error', { error: '截图正在处理中，请稍候', code: 'CAPTURE_IN_FLIGHT', stage: 'capture' });
     });
-  } else {
-    const payload = { error: result.error || '截图失败，请稍后重试', code: 'CAPTURE_FAILED', stage: 'capture' };
+    return;
+  }
+  screenshotInFlight = true;
+  try {
+    const appConfig = configHelper.getAppConfig();
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('screenshot-started', { isExtra });
+    });
+
+    // 截图前隐藏悬浮窗(以窗口实际可见性为准, 不依赖模式与状态标志)，
+    // 确保自身截图在任何情况下都不包含悬浮框--即使防捕获亲和性失效也兜底
+    const overlayWasVisible = !!(
+      state.overlayWindow && !state.overlayWindow.isDestroyed() && state.overlayWindow.isVisible()
+    );
+    // A protected window should remain visible locally and be absent from normal
+    // capture APIs. On Electron versions without readback, hide as a fallback.
+    const overlayProtectionState = state.overlayWindow && !state.overlayWindow.isDestroyed()
+      ? readContentProtection(state.overlayWindow)
+      : null;
+    const needsTemporaryHide = overlayWasVisible && overlayProtectionState !== true;
+    if (needsTemporaryHide) {
+      hideOverlay();
+      await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 500)));
+    }
+
+    let result: ScreenshotResult;
+    try {
+      result = await screenshotHelper.captureFullScreen();
+    } catch (error) {
+      console.error('[Main] Screenshot capture threw:', error);
+      result = { success: false, error: '截图失败，请检查屏幕录制权限后重试', code: 'CAPTURE_THROWN', stage: 'capture' };
+    } finally {
+      if (needsTemporaryHide) {
+        await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
+        showOverlay();
+      }
+    }
+
+    if (result.success && result.filePath) {
+      const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
+      if (!saved) {
+        throw new Error('截图已采集，但保存失败');
+      }
+      const base64 = await screenshotHelper.fileToBase64(saved);
+      if (!base64) {
+        throw new Error('截图已保存，但读取失败');
+      }
+      const payload = { path: saved, base64, isExtra };
+      BrowserWindow.getAllWindows().forEach((win) => {
+        if (!win.isDestroyed()) win.webContents.send('screenshot-added', payload);
+      });
+      return;
+    }
+
+    const payload = { error: result.error || '截图失败，请稍后重试', code: result.code || 'CAPTURE_FAILED', stage: result.stage || 'capture' };
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('screenshot-error', payload);
     });
@@ -766,6 +792,15 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     } catch (error) {
       console.warn('[Main] Screenshot failure notification failed:', error);
     }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const payload = { error: message || '截图失败，请稍后重试', code: 'SCREENSHOT_PIPELINE_FAILED', stage: 'save' };
+    console.error('[Main] Screenshot pipeline failed:', error);
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('screenshot-error', payload);
+    });
+  } finally {
+    screenshotInFlight = false;
   }
 }
 
@@ -1282,6 +1317,16 @@ async function initializeApp(): Promise<void> {
 
   // 创建主窗口
   createMainWindow();
+  const replayShortcutRegistrationErrors = () => {
+    const errors = shortcutsHelper.getRegistrationErrors();
+    if (!errors.length) return;
+    for (const error of errors) {
+      state.mainWindow?.webContents.send('shortcut-registration-error', error);
+    }
+    shortcutsHelper.clearRegistrationErrors();
+  };
+  // Registration happens before BrowserWindow creation; replay after renderer load.
+  state.mainWindow?.webContents.once('did-finish-load', replayShortcutRegistrationErrors);
 
   // 托盘
   createTrayManager();

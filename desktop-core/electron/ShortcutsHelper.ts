@@ -14,6 +14,8 @@ import { ConfigHelper } from './ConfigHelper'
 type ActionHandler = (action: ShortcutAction) => void
 
 const voiceModeActions: Set<string> = new Set<string>([
+  // Screenshot remains available in subtitle/voice mode.
+  'screenshot',
   'search',
   'toggle_visibility',
   'replay',
@@ -56,6 +58,7 @@ export class ShortcutsHelper {
   private activeMode: 'overlay' | 'voice' | 'interview' = 'overlay'
   private defaults: Record<ShortcutAction, string> = getDefaultShortcutBindings()
   private registrationErrorHandler: ((data: { action: string; accelerator: string; mode: string }) => void) | null = null
+  private registrationErrors: Array<{ action: string; accelerator: string; mode: string }> = []
 
   constructor(configHelper: ConfigHelper) {
     this.configHelper = configHelper
@@ -110,6 +113,14 @@ export class ShortcutsHelper {
 
   public setRegistrationErrorHandler(handler: (data: { action: string; accelerator: string; mode: string }) => void): void {
     this.registrationErrorHandler = handler
+  }
+
+  public getRegistrationErrors(): Array<{ action: string; accelerator: string; mode: string }> {
+    return this.registrationErrors.map((item) => ({ ...item }))
+  }
+
+  public clearRegistrationErrors(): void {
+    this.registrationErrors = []
   }
 
   public getBindings(): Record<string, string> {
@@ -175,12 +186,18 @@ export class ShortcutsHelper {
       if (ret) this.registered.add(accelerator)
       else {
         console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
-        this.registrationErrorHandler?.({ action, accelerator, mode })
+        this.reportRegistrationError({ action, accelerator, mode })
       }
     } catch (e) {
       console.warn(`[ShortcutsHelper] Error registering ${accelerator}:`, e)
-      this.registrationErrorHandler?.({ action, accelerator, mode })
+      this.reportRegistrationError({ action, accelerator, mode })
     }
+  }
+
+  private reportRegistrationError(data: { action: string; accelerator: string; mode: string }): void {
+    this.registrationErrors.push(data)
+    if (this.registrationErrors.length > 50) this.registrationErrors.shift()
+    this.registrationErrorHandler?.(data)
   }
 
   private shouldRegister(action: ShortcutAction, mode: 'overlay' | 'voice' | 'interview'): boolean {
@@ -195,6 +212,7 @@ export class ShortcutsHelper {
 
   public registerGlobalShortcutsForMode(mode: 'overlay' | 'voice' | 'interview'): void {
     this.activeMode = mode
+    this.clearRegistrationErrors()
     this.unregisterAll()
     this.pausedAccelerators.clear()
     for (const [action, accelerator] of Object.entries(this.bindings)) {

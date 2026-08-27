@@ -10,6 +10,11 @@ import { v4 as uuidv4 } from 'uuid'
 import { exec, execFile } from 'child_process'
 import { ConfigHelper } from '../ConfigHelper'
 import { LightweightProcessingHelper } from './ProcessingHelper'
+import {
+  getMacScreenPermission,
+  requestScreenCaptureAccess,
+  type MacScreenPermission,
+} from './MacCapturePermissions'
 
 const IS_MAC = process.platform === 'darwin'
 
@@ -26,6 +31,8 @@ export interface ScreenshotResult {
   filePath?: string
   base64?: string
   error?: string
+  code?: string
+  stage?: string
 }
 
 export class ScreenshotHelper {
@@ -35,6 +42,7 @@ export class ScreenshotHelper {
   private tempDir: string = ''
   private lastScreenshotTime: number = 0
   private processing: LightweightProcessingHelper | null = null
+  private captureInFlight = false
 
   constructor(configHelper: ConfigHelper) {
     this.configHelper = configHelper
@@ -64,22 +72,30 @@ export class ScreenshotHelper {
   }
 
   public async captureFullScreen(): Promise<ScreenshotResult> {
+    if (this.captureInFlight) {
+      return { success: false, error: '截图正在处理中，请稍候', code: 'CAPTURE_IN_FLIGHT', stage: 'capture' }
+    }
     if (!this.canCaptureNow()) {
       return { success: false, error: '截图过于频繁，请稍后再试' }
     }
-    const result = await this.captureFullScreenInternal()
-    // 失败的截图必须立即可重试: 权限错误不应占用限流窗口,
-    // 否则下一次快捷键会被误报为"截图过于频繁"
-    if (result.success) this.lastScreenshotTime = Date.now()
-    return result
+    this.captureInFlight = true
+    try {
+      const result = await this.captureFullScreenInternal()
+      // 失败的截图必须立即可重试: 权限错误不应占用限流窗口,
+      // 否则下一次快捷键会被误报为"截图过于频繁"
+      if (result.success) this.lastScreenshotTime = Date.now()
+      return result
+    } finally {
+      this.captureInFlight = false
+    }
   }
 
   private async captureFullScreenInternal(): Promise<ScreenshotResult> {
     const fileName = `${uuidv4()}.png`
     const tempPath = path.join(this.tempDir, fileName)
 
-    // macOS: 先检测屏幕录制权限
-    const permissionError = this.getScreenPermissionError()
+    // macOS: 先探测并按需请求屏幕录制权限，覆盖 not-determined 状态。
+    const permissionError = await this.ensureScreenCapturePermission()
     if (permissionError) return { success: false, error: permissionError }
 
     if (IS_MAC) {
@@ -94,45 +110,52 @@ export class ScreenshotHelper {
         const source = sources.find((item) => item.display_id === String(display.id)) || sources[0]
         if (source && !source.thumbnail.isEmpty()) {
           const png = source.thumbnail.toPNG()
-          if (png.length > 0) {
+          const imageError = this.validateImage(png, thumbnailSize)
+          if (!imageError) {
             fs.writeFileSync(tempPath, png)
             return { success: true, filePath: tempPath }
           }
+          console.warn('[ScreenshotHelper] macOS desktopCapturer returned invalid image:', imageError)
         }
-        const permissionAfterCapture = this.getScreenPermissionError()
+        const permissionAfterCapture = await this.ensureScreenCapturePermission(false)
         if (permissionAfterCapture) return { success: false, error: permissionAfterCapture }
       } catch (e) {
         console.warn('[ScreenshotHelper] Electron screen capture failed, trying screenshot-desktop:', e)
-        const permissionAfterCapture = this.getScreenPermissionError()
+        const permissionAfterCapture = await this.ensureScreenCapturePermission(false)
         if (permissionAfterCapture) return { success: false, error: permissionAfterCapture }
       }
     }
 
-    // 跨平台主路径: screenshot-desktop
-    try {
-      const screenshot = await import('screenshot-desktop')
-      await screenshot.default({ filename: tempPath, format: 'png' })
-      if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0) {
-        return { success: true, filePath: tempPath }
-      }
-    } catch (e) {
-      console.warn('[ScreenshotHelper] screenshot-desktop failed, trying platform fallback:', e)
-    }
-
+    // macOS 只使用系统 screencapture 作为明确回退，避免多套采集器争抢 TCC 状态。
     if (IS_MAC) {
-      // macOS 系统兜底: screencapture
       try {
         await this.runScreencapture(['-x', tempPath])
-        if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0) {
-          return { success: true, filePath: tempPath }
+        if (fs.existsSync(tempPath)) {
+          const png = fs.readFileSync(tempPath)
+          const imageError = this.validateImage(png)
+          if (!imageError) return { success: true, filePath: tempPath }
+          console.warn('[ScreenshotHelper] macOS screencapture returned invalid image:', imageError)
         }
       } catch (e) {
         console.error('[ScreenshotHelper] macOS screencapture fallback failed:', e)
       }
       return {
         success: false,
-        error: '截图失败。请在"系统设置 > 隐私与安全性 > 屏幕录制"中允许 QuizMate，然后彻底退出并重新打开应用',
+        error: '截图失败。请在“系统设置 > 隐私与安全性 > 屏幕录制”中允许 QuizMate，然后彻底退出并重新打开应用',
+        code: 'SCREEN_CAPTURE_FAILED',
+        stage: 'capture',
       }
+    }
+
+    // Windows 主路径: screenshot-desktop
+    try {
+      const screenshot = await import('screenshot-desktop')
+      await screenshot.default({ filename: tempPath, format: 'png' })
+      if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0 && !this.validateImage(fs.readFileSync(tempPath))) {
+        return { success: true, filePath: tempPath }
+      }
+    } catch (e) {
+      console.warn('[ScreenshotHelper] screenshot-desktop failed, trying platform fallback:', e)
     }
 
     // Windows 兜底: PowerShell + System.Drawing
@@ -149,7 +172,7 @@ $g.Dispose()
 $bmp.Dispose()
 `
       await this.runPowerShell(psScript)
-      if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0) {
+      if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0 && !this.validateImage(fs.readFileSync(tempPath))) {
         return { success: true, filePath: tempPath }
       }
     } catch (e) {
@@ -379,17 +402,64 @@ $bmp.Dispose()
 
   private runScreencapture(args: string[]): Promise<void> {
     return new Promise((resolve, reject) => {
-      execFile('/usr/sbin/screencapture', args, { timeout: 15000 }, (err) => {
-        if (err) reject(err)
+      execFile('/usr/sbin/screencapture', args, { timeout: 15000 }, (err, _stdout, stderr) => {
+        if (err) {
+          console.warn('[ScreenshotHelper] screencapture exited with error:', { message: err.message, stderr })
+          reject(err)
+        }
         else resolve()
       })
     })
   }
 
-  private getScreenPermissionError(): string | null {
+  private validateImage(buffer: Buffer, expectedSize?: { width: number; height: number }): string | null {
+    if (buffer.length < 32 || buffer.readUInt32BE(0) !== 0x89504e47) return 'PNG 数据为空或格式无效'
+    try {
+      const image = nativeImage.createFromBuffer(buffer)
+      if (image.isEmpty()) return '图像为空'
+      const size = image.getSize()
+      if (size.width < 2 || size.height < 2) return `图像尺寸无效 ${size.width}x${size.height}`
+      if (expectedSize) {
+        // Retina displays may report a one-pixel rounding difference. Reject
+        // only clearly unrelated thumbnails, which otherwise look like a
+        // successful capture to the caller.
+        const widthRatio = size.width / Math.max(1, expectedSize.width)
+        const heightRatio = size.height / Math.max(1, expectedSize.height)
+        if (widthRatio < 0.25 || heightRatio < 0.25) return '图像尺寸与屏幕不匹配'
+      }
+      const bitmap = image.toBitmap()
+      let visiblePixel = false
+      for (let i = 0; i < bitmap.length; i += 16) {
+        if (bitmap[i] !== 0 || bitmap[i + 1] !== 0 || bitmap[i + 2] !== 0) {
+          visiblePixel = true
+          break
+        }
+      }
+      return visiblePixel ? null : '采集结果为全黑或全透明图像'
+    } catch (error) {
+      return `图像解析失败: ${error instanceof Error ? error.message : String(error)}`
+    }
+  }
+
+  private async ensureScreenCapturePermission(requestIfNeeded = true): Promise<string | null> {
     if (!IS_MAC) return null
-    const permission = systemPreferences.getMediaAccessStatus('screen')
-    if (permission !== 'denied' && permission !== 'restricted') return null
-    return '请在"系统设置 > 隐私与安全性 > 屏幕录制"中允许 QuizMate，然后彻底退出并重新打开应用'
+    const mediaStatus = systemPreferences.getMediaAccessStatus('screen') as MacScreenPermission
+    const status = getMacScreenPermission(mediaStatus)
+    console.info('[ScreenshotHelper] screen permission status:', status)
+    if (status === 'granted') return null
+    if (!requestIfNeeded || status === 'denied' || status === 'restricted') {
+      return '请在“系统设置 > 隐私与安全性 > 屏幕录制”中允许 QuizMate，然后彻底退出并重新打开应用'
+    }
+    try {
+      // desktopCapturer probe registers the app in the Screen & System Audio Recording category.
+      await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 1, height: 1 } })
+    } catch (error) {
+      console.warn('[ScreenshotHelper] screen permission probe failed:', error)
+    }
+    requestScreenCaptureAccess()
+    await new Promise((resolve) => setTimeout(resolve, 500))
+    const actual = getMacScreenPermission(systemPreferences.getMediaAccessStatus('screen') as MacScreenPermission)
+    if (actual === 'granted') return null
+    return '请在“系统设置 > 隐私与安全性 > 屏幕录制”中允许 QuizMate，然后彻底退出并重新打开应用'
   }
 }

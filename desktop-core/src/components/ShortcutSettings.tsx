@@ -44,6 +44,21 @@ export default function ShortcutSettings({
     }
   }, [api, capturing])
 
+  useEffect(() => {
+    let active = true
+    const showRegistrationErrors = (errors: any) => {
+      const latest = Array.isArray(errors) ? errors[errors.length - 1] : errors
+      if (!active || !latest) return
+      setStatus(`${latest.accelerator || '快捷键'} 注册失败，可能被其他应用占用，请更换组合键后重试`)
+    }
+    api.config.getShortcutRegistrationErrors?.().then(showRegistrationErrors).catch(() => {})
+    const unsubscribe = api.on?.('shortcut-registration-error', showRegistrationErrors)
+    return () => {
+      active = false
+      unsubscribe?.()
+    }
+  }, [api])
+
   const beginCapture = (action: ShortcutAction) => {
     setEditingAction(action)
     setCapturing(true)
