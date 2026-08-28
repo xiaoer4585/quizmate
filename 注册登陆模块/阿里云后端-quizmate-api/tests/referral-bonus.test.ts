@@ -36,8 +36,8 @@ describe("referral activation bonus", () => {
       }
     } as unknown as PoolClient;
 
-    await analysisInternals.tryActivateReferral(client, "invitee-1");
-    await analysisInternals.tryActivateReferral(client, "invitee-1");
+    const awardedBalance = await analysisInternals.tryActivateReferral(client, "invitee-1");
+    const duplicateBalance = await analysisInternals.tryActivateReferral(client, "invitee-1");
 
     expect(balanceUpdates).toEqual([
       { accountId: "invitee-1", credits: 20 },
@@ -48,5 +48,7 @@ describe("referral activation bonus", () => {
       { accountId: "inviter-1", credits: 20, source: "referral_inviter" }
     ]);
     expect(rewarded).toBe(true);
+    expect(awardedBalance).toBe(120);
+    expect(duplicateBalance).toBeNull();
   });
 });

@@ -1,11 +1,13 @@
-// 官网全量部署：代码文件 + assets 图片，仅发布到 quizmate-cn 正式站。
-// www.quizmate.cn / quizmate.cn 是正式官网；quizmate.vip 仅保留根域名跳转和既有后台入口。
-// 注意：本脚本不上传 quizmate-vip，避免误覆盖旧域名的跳转、后台或历史对象。
+// 旧官网跳转脚本：
+// quizmate.vip / www.quizmate.vip 的公开 HTML 页面统一跳到 www.quizmate.cn
+// admin-web 保留在 vip 域名，不在这里处理。
 const fs = require('fs');
 const path = require('path');
 const OSS = require('../../注册登陆模块/阿里云统一入口-study-auth-api/node_modules/ali-oss');
 
-const siteRoot = path.resolve(__dirname, '../../官网模块/正式官网-quizmate.vip');
+const SITE_ROOT = path.resolve(__dirname, '../../官网模块/正式官网-quizmate.vip');
+const TARGET_BASE = 'https://www.quizmate.cn';
+const BUCKET = 'quizmate-vip';
 
 function loadCredentials() {
   if (process.env.ALIBABA_CLOUD_ACCESS_KEY_ID && process.env.ALIBABA_CLOUD_ACCESS_KEY_SECRET) {
@@ -15,169 +17,68 @@ function loadCredentials() {
     };
   }
 
-  const config = JSON.parse(
-    fs.readFileSync(path.join(process.env.USERPROFILE, '.aliyun', 'config.json'), 'utf8'),
-  );
+  const config = JSON.parse(fs.readFileSync(path.join(process.env.USERPROFILE, '.aliyun', 'config.json'), 'utf8'));
   const profile = config.profiles.find((item) => item.name === config.current);
   if (!profile) throw new Error('Current Aliyun CLI profile not found');
   return {
     accessKeyId: profile.access_key_id,
     accessKeySecret: profile.access_key_secret,
-    stsToken: profile.sts_token || undefined,
   };
 }
 
-const credentials = loadCredentials();
-const clients = [
-  { name: 'quizmate-cn', client: new OSS({ region: 'cn-beijing', endpoint: 'https://oss-cn-beijing.aliyuncs.com', bucket: 'quizmate-cn', secure: true, accessKeyId: credentials.accessKeyId, accessKeySecret: credentials.accessKeySecret, stsToken: credentials.stsToken, timeout: 120_000 }) },
-];
-
-// 顶层代码/文本文件（objectName, relativeFile, contentType）
-const codeFiles = [
-  ['index.html', 'index.html', 'text/html; charset=utf-8'],
-  ['styles.css', 'styles.css', 'text/css; charset=utf-8'],
-  ['guide.html', 'guide.html', 'text/html; charset=utf-8'],
-  ['docs.html', 'docs.html', 'text/html; charset=utf-8'],
-  ['download.html', 'download.html', 'text/html; charset=utf-8'],
-  ['recharge.html', 'recharge.html', 'text/html; charset=utf-8'],
-  ['app.js', 'app.js', 'application/javascript; charset=utf-8'],
-  ['credits.js', 'credits.js', 'application/javascript; charset=utf-8'],
-  ['sitemap.xml', 'sitemap.xml', 'application/xml; charset=utf-8'],
-  ['robots.txt', 'robots.txt', 'text/plain; charset=utf-8'],
-  ['llms.txt', 'llms.txt', 'text/plain; charset=utf-8'],
-  ['baidu_verify_codeva-fEW8nhfoB3.html', 'baidu_verify_codeva-fEW8nhfoB3.html', 'text/html; charset=utf-8'],
-  ['WW_verify_c0b5Kdhx7G5xk36W.txt', 'WW_verify_c0b5Kdhx7G5xk36W.txt', 'text/plain; charset=utf-8'],
-  ['downloads/QuizMate-Android-2026.07.31.apk', 'downloads/QuizMate-Android-2026.07.31.apk', 'application/vnd.android.package-archive'],
-  ['downloads/QuizMate-Career-Extension-2.2.0.zip', 'downloads/QuizMate-Career-Extension-2.2.0.zip', 'application/zip'],
-];
-
-function contentTypeFor(ext) {
-  switch (ext.toLowerCase()) {
-    case '.html': case '.htm': return 'text/html; charset=utf-8';
-    case '.css': return 'text/css; charset=utf-8';
-    case '.js': return 'application/javascript; charset=utf-8';
-    case '.json': return 'application/json; charset=utf-8';
-    case '.xml': return 'application/xml; charset=utf-8';
-    case '.txt': return 'text/plain; charset=utf-8';
-    case '.png': return 'image/png';
-    case '.jpg': case '.jpeg': return 'image/jpeg';
-    case '.gif': return 'image/gif';
-    case '.avif': return 'image/avif';
-    case '.svg': return 'image/svg+xml';
-    case '.webp': return 'image/webp';
-    case '.ico': return 'image/x-icon';
-    case '.mp4': return 'video/mp4';
-    default: return 'application/octet-stream';
-  }
-}
-
-// 递归收集 assets/ 下的文件（排除 mp4 等大文件）
-function collectAssets() {
-  const result = [];
-  const assetsDir = path.join(siteRoot, 'assets');
-  if (!fs.existsSync(assetsDir)) return result;
+function collectRedirectPages() {
+  const pages = [];
   function walk(dir) {
     for (const name of fs.readdirSync(dir)) {
       const full = path.join(dir, name);
-      const rel = path.relative(siteRoot, full).split(path.sep).join('/');
+      const rel = path.relative(SITE_ROOT, full).split(path.sep).join('/');
+      if (rel === 'admin-web' || rel.startsWith('admin-web/')) continue;
       const stat = fs.statSync(full);
       if (stat.isDirectory()) {
         walk(full);
-      } else if (stat.isFile()) {
-        const ext = path.extname(name).toLowerCase();
-        if (ext === '.mp4') continue; // 跳过大视频
-        result.push([rel, rel, contentTypeFor(ext)]);
+      } else if (stat.isFile() && path.extname(rel).toLowerCase() === '.html') {
+        pages.push(rel);
       }
     }
   }
-  walk(assetsDir);
-  return result;
+  walk(SITE_ROOT);
+  return pages;
 }
 
-function collectPublicFiles() {
-  const result = [];
-  const rootFiles = new Set([
-    'index.html', 'blog.html', 'guide.html', 'docs.html', 'download.html', 'recharge.html', 'purchase.html', 'faq.html',
-    'ai-written-test-assistant.html', 'ai-interview-assistant.html', 'campus-recruitment-ai-assistant.html', 'career-ai-tools.html',
-    'about.html', 'privacy.html', 'security.html', 'changelog.html',
-    'styles.css', 'seo-pages.css', 'app.js', 'credits.js', 'sitemap.xml', 'robots.txt', 'llms.txt',
-    'baidu_verify_codeva-fEW8nhfoB3.html', 'WW_verify_c0b5Kdhx7G5xk36W.txt',
-  ]);
-  function walk(dir) {
-    for (const name of fs.readdirSync(dir)) {
-      const full = path.join(dir, name);
-      const rel = path.relative(siteRoot, full).split(path.sep).join('/');
-      if (rel === 'admin-web' || rel.startsWith('admin-web/') || rel === 'downloads' || rel.startsWith('downloads/') || rel === 'assets' || rel.startsWith('assets/')) continue;
-      const stat = fs.statSync(full);
-      if (stat.isDirectory()) walk(full);
-      else if (stat.isFile() && (rootFiles.has(rel) || (rel.startsWith('blog/') && rel.endsWith('.html')))) {
-        result.push([rel, rel, contentTypeFor(path.extname(name))]);
-      }
-    }
-  }
-  walk(siteRoot);
-  return result;
-}
-
-async function put(client, bucketName, objectName, relativeFile, contentType) {
-  const file = path.join(siteRoot, relativeFile);
-  if (!fs.existsSync(file)) throw new Error(`File not found: ${file}`);
-  const result = await client.put(objectName, file, {
-    headers: {
-      'Content-Type': contentType,
-      'Cache-Control': 'no-cache',
-    },
-  });
-  if (result.res.status !== 200) throw new Error(`Upload failed for ${objectName}: status ${result.res.status}`);
-  process.stdout.write(`PUT_OK [${bucketName}] ${objectName} ${fs.statSync(file).size} bytes\n`);
+function redirectHtml(rel) {
+  const target = rel === 'index.html' ? `${TARGET_BASE}/` : `${TARGET_BASE}/${rel}`;
+  return `<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta http-equiv="refresh" content="0;url=${target}"><title>QuizMate</title><script>location.replace(${JSON.stringify(target)}+location.search+location.hash);</script></head><body></body></html>`;
 }
 
 async function main() {
-  const assets = collectAssets();
-  const publicFiles = collectPublicFiles();
-  const unique = new Map([...codeFiles, ...publicFiles, ...assets].map(entry => [entry[0], entry]));
-  const all = [...unique.values()];
-  process.stdout.write(`DEPLOY_START total=${all.length} (code=${codeFiles.length}, assets=${assets.length}) buckets=${clients.map((c) => c.name).join(',')}\n`);
+  const credentials = loadCredentials();
+  const client = new OSS({
+    endpoint: 'https://oss-cn-beijing.aliyuncs.com',
+    cname: true,
+    bucket: BUCKET,
+    secure: true,
+    accessKeyId: credentials.accessKeyId,
+    accessKeySecret: credentials.accessKeySecret,
+    timeout: 120_000,
+  });
 
-  let totalOk = 0;
-  let totalFail = 0;
-  // 每个 bucket 独立上传 + 独立验证
-  for (const { name: bucketName, client } of clients) {
-    process.stdout.write(`\n=== BUCKET ${bucketName} ===\n`);
-    let ok = 0;
-    let fail = 0;
-    for (const [obj, rel, ct] of all) {
-      try {
-        await put(client, bucketName, obj, rel, ct);
-        ok++;
-      } catch (e) {
-        fail++;
-        process.stderr.write(`PUT_FAIL [${bucketName}] ${obj} ${e.message}\n`);
-      }
-    }
-
-    // 抽样验证关键文件
-    process.stdout.write(`--- VERIFY [${bucketName}] ---\n`);
-    for (const obj of ['index.html', 'styles.css', 'guide.html', 'download.html', 'recharge.html']) {
-      try {
-        const head = await client.head(obj);
-        const len = head.res.headers['content-length'] || '?';
-        process.stdout.write(`VERIFY [${bucketName}] ${obj}: ${len} bytes\n`);
-      } catch (e) {
-        process.stderr.write(`VERIFY_FAIL [${bucketName}] ${obj} ${e.message}\n`);
-      }
-    }
-
-    process.stdout.write(`BUCKET_COMPLETE [${bucketName}] ok=${ok} fail=${fail}\n`);
-    totalOk += ok;
-    totalFail += fail;
+  const pages = collectRedirectPages();
+  let ok = 0;
+  for (const rel of pages) {
+    await client.put(rel, Buffer.from(redirectHtml(rel), 'utf8'), {
+      headers: {
+        'Content-Type': 'text/html; charset=utf-8',
+        'Cache-Control': 'no-cache',
+      },
+    });
+    console.log(`REDIRECT_OK ${rel}`);
+    ok++;
   }
 
-  process.stdout.write(`\nDEPLOY_COMPLETE ok=${totalOk} fail=${totalFail}\n`);
-  if (totalFail > 0) process.exitCode = 1;
+  console.log(`LEGACY_REDIRECTS_OK files=${ok} target=${TARGET_BASE}`);
 }
 
 main().catch((error) => {
-  process.stderr.write(`DEPLOY_FAIL ${error.name || ''} ${error.status || ''} ${error.code || ''} ${error.message}\n`);
+  console.error('LEGACY_REDIRECTS_FAIL', error.message);
   process.exitCode = 1;
 });

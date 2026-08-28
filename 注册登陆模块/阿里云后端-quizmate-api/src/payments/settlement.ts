@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import type { PoolClient } from "pg";
 import type { Database } from "../db.js";
-import { REFERRAL_COMMISSION_RATE } from "../domain/credits.js";
+import { CREDIT_PACKAGES, REFERRAL_COMMISSION_RATE, REFERRAL_TIERED_BONUSES } from "../domain/credits.js";
 import type { PaymentRuntimeConfig } from "./config.js";
 import {
   paymentPayloadDigest,
@@ -265,6 +265,9 @@ export async function settlePaymentCallback(
     // 邀请充值提成：检查充值用户是否有邀请人
     await createReferralCommission(client, order.account_id, outTradeNo, order.amount, order.package_id ?? "");
 
+    // 邀请裂变阶梯奖励：邀请人累计完成「首单充值」的 invitee 数达到 10 / 20 时，一次性发放对应积分包
+    await checkAndGrantTieredReward(client, order.account_id, outTradeNo);
+
     await finishEvent(client, provider, eventId, "settled");
     await client.query("COMMIT");
     return { accepted: true, duplicate: false, settled: true, reason: "settled" };
@@ -294,11 +297,11 @@ async function createReferralCommission(
   const inviterId = referredResult.rows[0]?.referred_by;
   if (!inviterId) return;
 
-  // 查找邀请关系（必须已奖励状态，即通过了首次使用验证）
+  // 合法邀请注册后即可参与充值提成；同设备拦截关系不会进入这些状态。
   const referralResult = await client.query<{ referral_id: string }>(
     `SELECT referral_id FROM referrals
       WHERE inviter_account_id = $1 AND invitee_account_id = $2
-        AND status = 'rewarded'`,
+        AND status IN ('registered','activated','rewarded')`,
     [inviterId, inviteeAccountId]
   );
   const referralId = referralResult.rows[0]?.referral_id;
@@ -323,3 +326,82 @@ async function createReferralCommission(
     [referralId, inviterId, inviteeAccountId, orderNo, amount.toFixed(2), REFERRAL_COMMISSION_RATE, commissionAmount.toFixed(2)]
   );
 }
+
+// 邀请裂变阶梯奖励：邀请人累计已充值 invitee 数达到 10 / 20 时，一次性发放对应积分包（笔面试上岸包 / 无忧包）
+//  - 幂等：referral_tiered_grants UNIQUE(account_id, tier_key)
+//  - 仅统计合法邀请关系且 orders.status='paid' 的去重 invitee 数
+//  - 该函数假定 inviteeAccountId 已是 paid 状态（调用方在 settlement 事务内）
+export async function checkAndGrantTieredReward(
+  client: PoolClient,
+  inviteeAccountId: string | null,
+  orderNo: string
+): Promise<void> {
+  if (!inviteeAccountId) return;
+
+  // 找出 invitee 的邀请人
+  const inviterResult = await client.query<{ referred_by: string }>(
+    "SELECT referred_by FROM accounts WHERE account_id = $1 AND referred_by IS NOT NULL",
+    [inviteeAccountId]
+  );
+  const inviterId = inviterResult.rows[0]?.referred_by;
+  if (!inviterId) return;
+
+  // 计算当前邀请人累计已充值 invitee 数（去重）
+  const statsResult = await client.query<{ recharged_count: string }>(
+    `SELECT COUNT(DISTINCT r.invitee_account_id)::text AS recharged_count
+       FROM referrals r
+       JOIN orders o ON o.account_id = r.invitee_account_id
+      WHERE r.inviter_account_id = $1
+        AND r.status IN ('registered','activated','rewarded')
+        AND o.status = 'paid'
+        AND o.order_type = 'credits'
+        AND o.amount > 0`,
+    [inviterId]
+  );
+  const rechargedCount = Number(statsResult.rows[0]?.recharged_count ?? 0);
+
+  // 按阈值从小到大遍历，符合则发放对应 tier（幂等）
+  const sortedTiers = [...REFERRAL_TIERED_BONUSES].sort((a, b) => a.invitedRechargedCount - b.invitedRechargedCount);
+  for (const tier of sortedTiers) {
+    if (rechargedCount < tier.invitedRechargedCount) break;
+
+    const pkg = tier.tierPackageId
+      ? CREDIT_PACKAGES.find((item) => item.id === tier.tierPackageId)
+      : undefined;
+    const tierCredits = (pkg?.baseCredits ?? 0) + (pkg?.bonusCredits ?? 0);
+    if (tierCredits <= 0) continue;
+
+    // 幂等插入 grant 记录
+    const inserted = await client.query<{ grant_id: string }>(
+      `INSERT INTO referral_tiered_grants(
+         account_id, tier_key, invited_recharged_count, trigger_order_no, credits_granted, package_id
+       )
+       VALUES ($1, $2, $3, $4, $5, $6)
+       ON CONFLICT (account_id, tier_key) DO NOTHING
+       RETURNING grant_id`,
+      [inviterId, tier.tierKey, rechargedCount, orderNo, tierCredits, tier.tierPackageId]
+    );
+    if (!inserted.rowCount) continue;
+
+    // 发放积分包
+    const updated = await client.query<{ credits: string | number }>(
+      `UPDATE credit_accounts
+          SET credits = credits + $2,
+              total_charged_credits = total_charged_credits + $2,
+              updated_at = now()
+        WHERE account_id = $1
+        RETURNING credits`,
+      [inviterId, tierCredits]
+    );
+    const balance = updated.rows[0]?.credits;
+    if (balance === undefined) continue;
+
+    await client.query(
+      `INSERT INTO credit_ledger(account_id, operation_type, credits, balance_after, source, order_no, package_id, reason)
+       VALUES ($1, 'referral_tier_bonus', $2, $3, 'referral_tiered_grant', $4, $5, $6)`,
+      [inviterId, tierCredits, balance, orderNo, tier.tierPackageId, `${tier.badge}|${tier.description}`]
+    );
+  }
+}
+
+export const paymentSettlementInternals = { createReferralCommission };

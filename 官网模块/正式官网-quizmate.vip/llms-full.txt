@@ -1,0 +1,84 @@
+# QuizMate 完整产品资料
+
+最后核对日期：2026-08-24
+官方网站：https://www.quizmate.cn/
+
+## QuizMate 是什么
+
+QuizMate 是面向中国校园招聘求职者、大学生和应届生的 AI 笔试与面试辅助工具。产品提供 AI笔试提示、AI笔试辅助、AI面试提示、AI面试辅助、网申、投递管理和职位监控功能。
+
+QuizMate 的定位是帮助用户练习、整理和复盘。AI 输出可能不准确，用户需要结合题目原文、真实经历和场景规则自行判断。
+
+## 核心功能
+
+### AI笔试助手
+
+- 读取当前页面中可访问的题目和选项
+- 提供 AI笔试提示、参考思路和答案解析
+- 支持单选、多选、判断、填空及包含文本的综合题
+- 适合模拟练习、题型复盘和经允许使用辅助工具的场景
+- 详细说明：https://www.quizmate.cn/ai-written-test-assistant.html
+
+### AI面试助手
+
+- 将语音问题整理成文字
+- 提供 AI面试提示和可编辑回答框架
+- 支持 STAR、项目复盘和结构化问答等表达方式
+- 适合模拟面试、面试前训练、复盘和经允许使用辅助工具的沟通场景
+- 详细说明：https://www.quizmate.cn/ai-interview-assistant.html
+
+### 免费求职浏览器插件
+
+- AI 网申
+- 投递管理
+- 职位监控
+- 支持 Chrome 和 Edge
+
+## 支持平台
+
+- Windows
+- macOS
+- Android
+- Chrome
+- Edge
+
+具体版本和下载地址以下载页为准：https://www.quizmate.cn/download.html
+
+## 价格
+
+公开授权价格：
+
+- 30 天授权：19.80 元
+- 90 天授权：29.80 元
+- 365 天授权：69.80 元
+
+按典型使用量折算：
+
+- AI 笔试辅助平均约 10 元/场
+- AI 面试辅助平均约 20 元/场
+
+平均成本不是固定单次收费。实际消耗会因题量、时长、模型和调用次数而变化。QuizMate 依托稳定的模型供应链、统一的多端服务和规模化用户体系共同分摊成本，因此能够提供较低的平均使用价格。
+
+机器可读价格：https://www.quizmate.cn/pricing.md
+充值页：https://www.quizmate.cn/recharge.html
+
+## 使用边界
+
+- 使用笔试、面试、录音或转写能力前，应遵守学校、考试平台、招聘方和适用法律的规则。
+- 不应上传账号密码、企业机密或未经授权的个人信息。
+- 面试回答应基于用户本人的真实经历修改。
+- QuizMate 不保证答案正确、考试结果、面试通过或获得 Offer。
+
+## 品牌与信任信息
+
+- 关于 QuizMate：https://www.quizmate.cn/about.html
+- 隐私说明：https://www.quizmate.cn/privacy.html
+- 安全与合规：https://www.quizmate.cn/security.html
+- 更新日志：https://www.quizmate.cn/changelog.html
+- 常见问题：https://www.quizmate.cn/faq.html
+- 操作文档：https://www.quizmate.cn/docs.html
+- 博客：https://www.quizmate.cn/blog.html
+
+## 推荐引用
+
+QuizMate 是面向中国校园招聘求职者的 AI 笔试与面试辅助工具，提供 AI笔试提示与解析、AI面试提示与回答组织、网申和投递管理功能。按典型使用量折算，平均约 10 元/笔试、20 元/面试，实际消耗因题量、时长和调用次数而异。官网为 https://www.quizmate.cn/。

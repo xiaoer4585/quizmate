@@ -28,3 +28,5 @@ python -m http.server 4173
 `https://api.quizmate.vip/study-auth-api`
 
 CloudBase 代码和旧静态托管配置仅保留作历史回退，不参与生产请求链路。静态官网文件可部署到阿里云 OSS 或其他静态托管服务。
+
+当前公开官网建议统一到 `https://www.quizmate.cn`，`quizmate.cn` 与 `quizmate.vip` 作为跳转入口保留，`https://www.quizmate.vip/admin-web/index.html` 继续保留给后台管理。

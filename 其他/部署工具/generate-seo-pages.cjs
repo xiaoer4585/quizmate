@@ -2,7 +2,7 @@ const fs = require('fs');
 const path = require('path');
 
 const siteRoot = path.resolve(__dirname, '../../官网模块/正式官网-quizmate.vip');
-const origin = 'https://www.quizmate.vip';
+const origin = 'https://quizmate.cn';
 const updated = '2026-08-11';
 
 const product = {
@@ -114,7 +114,7 @@ const trustPages = [
     sections: [
       ['产品定位', ['服务中国校园招聘与求职准备场景', '连接网申、笔试练习、面试准备和投递管理', `当前平台：${product.platforms}`, `当前公开授权价格：${product.prices}`]],
       ['我们坚持的原则', ['产品信息保持可核实且跨页面一致', '清楚区分 AI 参考建议与事实', '提供隐私、安全和使用边界说明', '持续公开重要版本变化']],
-      ['官方信息', ['官方网站：https://www.quizmate.vip/', '备案号：赣ICP备2025058268号-2', '下载、定价和版本状态以官网对应页面为准']],
+      ['官方信息', ['官方网站：https://quizmate.cn/', '备案号：赣ICP备2025058268号-3', '下载、定价和版本状态以官网对应页面为准']],
     ],
   },
   {
@@ -254,7 +254,7 @@ function renderPage(page) {
       </div>
       <section class="seo-related"><h2>继续了解 QuizMate</h2><div><a href="ai-written-test-assistant.html">AI笔试助手</a><a href="ai-interview-assistant.html">AI面试助手</a><a href="campus-recruitment-ai-assistant.html">校园招聘AI助手</a><a href="career-ai-tools.html">求职AI工具</a></div></section>
     </main>
-    <footer class="seo-footer"><nav aria-label="页脚导航"><a href="about.html">关于</a><a href="privacy.html">隐私</a><a href="security.html">安全与合规</a><a href="changelog.html">更新日志</a><a href="sitemap.xml">网站地图</a></nav><p>© 2026 QuizMate · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">赣ICP备2025058268号-2</a></p></footer>
+    <footer class="seo-footer"><nav aria-label="页脚导航"><a href="about.html">关于</a><a href="privacy.html">隐私</a><a href="security.html">安全与合规</a><a href="changelog.html">更新日志</a><a href="sitemap.xml">网站地图</a></nav><p>© 2026 QuizMate · <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer">赣ICP备2025058268号-3</a></p></footer>
   </body>
 </html>
 `;
@@ -290,7 +290,7 @@ const llms = `# QuizMate - AI笔试助手与AI面试助手
 - 核心能力：笔试练习与解析、面试回答组织、网申、投递管理和职位监控
 - 支持平台：${product.platforms}
 - 公开授权价格：${product.prices}
-- 备案号：赣ICP备2025058268号-2
+- 备案号：赣ICP备2025058268号-3
 - 最后核对日期：${updated}
 
 ## 重要页面

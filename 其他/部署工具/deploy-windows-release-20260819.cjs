@@ -73,9 +73,8 @@ async function main() {
     await backup(cn, object);
     await put(cn, object, file, type);
   }
+  // 官网页面只部署到 quizmate-cn；quizmate-vip bucket 只保留跳转页(redirect-legacy-website.cjs)、admin-web、suite 更新文件
   for (const [object, file] of siteFiles) {
-    await backup(vip, object);
-    await put(vip, object, file, 'text/html; charset=utf-8');
     await backup(cn, object);
     await put(cn, object, file, 'text/html; charset=utf-8');
   }

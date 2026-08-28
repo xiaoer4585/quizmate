@@ -3,7 +3,9 @@ import type { PoolClient } from "pg";
 import {
   MAX_REFERRAL_COUNT,
   REFERRAL_BONUS_CREDITS,
-  REFERRAL_COMMISSION_RATE
+  REFERRAL_COMMISSION_RATE,
+  REFERRAL_TIERED_BONUSES,
+  type ReferralTieredBonus
 } from "../domain/credits.js";
 import { PublicError } from "../errors.js";
 import { hashToken } from "../security/crypto.js";
@@ -94,6 +96,42 @@ async function ensureInviteCode(client: PoolClient, accountId: string): Promise<
   throw new PublicError("邀请码生成失败，请重试。", "INVITE_CODE_GENERATION_FAILED", 500);
 }
 
+// 构造阶梯奖励进度：基于当前「已充值」邀请人数，找到已达成的最高档 + 下一档目标
+function buildTierProgress(rechargedCount: number): {
+  tiers: Array<{
+    tierKey: string;
+    invitedRechargedCount: number;
+    tierCredits: number;
+    tierPackageId: string | null;
+    badge: string;
+    description: string;
+    achieved: boolean;
+  }>;
+  currentTier: ReferralTieredBonus | null;
+  nextTier: ReferralTieredBonus | null;
+} {
+  const sorted = [...REFERRAL_TIERED_BONUSES].sort((a, b) => a.invitedRechargedCount - b.invitedRechargedCount);
+  const tiers = sorted.map((tier) => ({
+    tierKey: tier.tierKey,
+    invitedRechargedCount: tier.invitedRechargedCount,
+    tierCredits: tier.tierCredits,
+    tierPackageId: tier.tierPackageId,
+    badge: tier.badge,
+    description: tier.description,
+    achieved: rechargedCount >= tier.invitedRechargedCount
+  }));
+  let currentTier: ReferralTieredBonus | null = null;
+  for (const tier of sorted) {
+    if (rechargedCount >= tier.invitedRechargedCount) {
+      currentTier = tier;
+    } else {
+      break;
+    }
+  }
+  const nextTier = sorted.find((tier) => rechargedCount < tier.invitedRechargedCount) ?? null;
+  return { tiers, currentTier, nextTier };
+}
+
 // ============================================================================
 // 用户端 Actions
 // ============================================================================
@@ -143,11 +181,13 @@ function getReferralOverviewHandler(deps: ActionDependencies): ActionHandler {
 
       // 提成统计
       const commissionResult = await client.query<{
+        total_amount: string;
         pending_amount: string;
         cleared_amount: string;
         pending_count: string;
       }>(
         `SELECT
+           COALESCE(SUM(commission_amount), 0)::text AS total_amount,
            COALESCE(SUM(commission_amount) FILTER (WHERE status = 'pending'), 0)::text AS pending_amount,
            COALESCE(SUM(commission_amount) FILTER (WHERE status = 'cleared'), 0)::text AS cleared_amount,
            COUNT(*) FILTER (WHERE status = 'pending')::text AS pending_count
@@ -166,6 +206,31 @@ function getReferralOverviewHandler(deps: ActionDependencies): ActionHandler {
       );
       const withdrawal = withdrawalResult.rows[0];
 
+      // 阶梯奖励统计：邀请人已成功「完成首单充值」的 invitee 数（去重 invitee_account_id）
+      const rechargedCountResult = await client.query<{ recharged_count: string }>(
+        `SELECT COUNT(DISTINCT r.invitee_account_id)::text AS recharged_count
+           FROM referrals r
+           JOIN orders o ON o.account_id = r.invitee_account_id
+          WHERE r.inviter_account_id = $1
+            AND r.status IN ('registered','activated','rewarded')
+            AND o.status = 'paid'
+            AND o.order_type = 'credits'
+            AND o.amount > 0`,
+        [account.account_id]
+      );
+      const rechargedCount = Number(rechargedCountResult.rows[0]?.recharged_count ?? 0);
+
+      // 当前账户是否充值过（用于邀请代理菜单可见性）
+      const hasRechargedResult = await client.query<{ total: string }>(
+        `SELECT COALESCE(SUM(amount), 0)::text AS total
+           FROM orders
+          WHERE account_id = $1 AND status = 'paid' AND order_type = 'credits' AND amount > 0`,
+        [account.account_id]
+      );
+      const hasRecharged = Number(hasRechargedResult.rows[0]?.total ?? 0) > 0;
+
+      const tierProgress = buildTierProgress(rechargedCount);
+
       const webBaseUrl = "https://www.quizmate.vip";
       return {
         inviteCode,
@@ -179,11 +244,20 @@ function getReferralOverviewHandler(deps: ActionDependencies): ActionHandler {
           deviceBlocked: Number(stats?.device_blocked ?? 0)
         },
         commission: {
+          totalAmount: Number(commission?.total_amount ?? 0),
           pendingAmount: Number(commission?.pending_amount ?? 0),
           clearedAmount: Number(commission?.cleared_amount ?? 0),
           pendingCount: Number(commission?.pending_count ?? 0),
           pendingWithdrawal: Number(withdrawal?.pending_withdrawal ?? 0)
         },
+        creditBalance: Number(account.credits),
+        tieredBonus: {
+          rechargedCount,
+          currentTier: tierProgress.currentTier,
+          nextTier: tierProgress.nextTier,
+          tiers: tierProgress.tiers
+        },
+        hasRecharged,
         config: {
           referralBonusCredits: REFERRAL_BONUS_CREDITS,
           commissionRate: REFERRAL_COMMISSION_RATE,
@@ -873,8 +947,9 @@ export function createReferralActions(deps: ActionDependencies): Map<string, Act
   ]);
 }
 
-// 暴露内部函数供其他模块调用（注册绑定、首次使用触发、充值提成）
+// 暴露内部函数供其他模块调用（注册绑定、首次使用触发、充值提成、阶梯奖励）
 export const referralInternals = {
   ensureInviteCode,
-  generateInviteCode
+  generateInviteCode,
+  buildTierProgress
 };

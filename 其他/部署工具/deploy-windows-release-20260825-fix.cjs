@@ -8,8 +8,8 @@ process.env.QUIZMATE_RELEASE_DIR = path.join(
   __dirname,
   '../../windows客户端/QuizMate-Windows/releases/2026-08-25-fix',
 );
-process.env.QUIZMATE_UPDATE_BASE_URL = process.env.QUIZMATE_UPDATE_BASE_URL || 'https://quizmate.cn';
-process.env.QUIZMATE_PUBLIC_BASE_URL = process.env.QUIZMATE_PUBLIC_BASE_URL || 'https://quizmate.cn';
+process.env.QUIZMATE_UPDATE_BASE_URL = process.env.QUIZMATE_UPDATE_BASE_URL || 'https://www.quizmate.cn';
+process.env.QUIZMATE_PUBLIC_BASE_URL = process.env.QUIZMATE_PUBLIC_BASE_URL || 'https://www.quizmate.cn';
 
 if (!process.argv.includes('--version')) {
   process.argv.push('--version', '2026.8.25');

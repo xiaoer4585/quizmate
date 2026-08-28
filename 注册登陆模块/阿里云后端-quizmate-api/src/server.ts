@@ -8,6 +8,7 @@ import { createAnalysisModel, type ModelCallFailureRecorder, type ModelCallRecor
 import { createTtsService } from "./services/tts.js";
 import { createPaymentDependencies } from "./payments/config.js";
 import { RuntimeSettingsStore } from "./services/runtime-settings.js";
+import { getModelFailureContext } from "./services/model-failure-context.js";
 
 // 上海时区当日日期（YYYY-MM-DD），与官网访问统计保持一致
 function shanghaiDate(): string {
@@ -60,18 +61,6 @@ const recordModelCallFailure: ModelCallFailureRecorder = (info) => {
     ]
   ).catch(() => undefined);
 };
-
-// 模型调用失败时回传给 recorder 的上下文（mode / 账号 / requestId / IP）
-// 由 analyze / universal 等 action 在执行 runAnalysisModel 前设置，recorder 在 catch 路径中读取
-import type { ModelFailureContext } from "./services/model.js";
-
-let currentFailureContext: ModelFailureContext | undefined;
-export function setModelFailureContext(ctx: ModelFailureContext | undefined): void {
-  currentFailureContext = ctx;
-}
-function getModelFailureContext(): ModelFailureContext | undefined {
-  return currentFailureContext;
-}
 
 const app = await buildApp(config, {
   db: pool,

@@ -22,6 +22,95 @@
     <title>下载 - AI笔试助手_AI面试助手 - QuizMate</title>
     <link rel="icon" type="image/svg+xml" href="assets/quizmate-favicon.svg" />
     <link rel="stylesheet" href="styles.css?v=20260731-macmerge" />
+    <style>
+      .platform-notes {
+        margin: 22px 0 28px;
+      }
+
+      .platform-notes-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: 12px;
+      }
+
+      .platform-note {
+        --note-accent: #2874cf;
+        --note-soft: #edf5ff;
+        min-width: 0;
+        min-height: 126px;
+        padding: 16px;
+        border: 1px solid #dbe4ee;
+        border-top: 2px solid var(--note-accent);
+        border-radius: 6px;
+        background: #fff;
+      }
+
+      .platform-note-heading {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        margin-bottom: 10px;
+        color: #26384e;
+        font-size: 13px;
+      }
+
+      .platform-note-icon {
+        display: grid;
+        flex: 0 0 30px;
+        width: 30px;
+        height: 30px;
+        place-items: center;
+        border-radius: 6px;
+        background: var(--note-soft);
+        color: var(--note-accent);
+      }
+
+      .platform-note-icon svg {
+        width: 16px;
+        height: 16px;
+      }
+
+      .platform-note p {
+        min-width: 0;
+        margin: 0;
+        color: #536173;
+        font-size: 12px;
+        line-height: 1.72;
+        overflow-wrap: anywhere;
+      }
+
+      .platform-note-extension {
+        --note-accent: #087956;
+        --note-soft: #eef9f5;
+      }
+
+      .platform-note-macos {
+        --note-accent: #536173;
+        --note-soft: #f1f4f7;
+      }
+
+      .platform-note-android {
+        --note-accent: #a85d12;
+        --note-soft: #fff7ed;
+      }
+
+      @media (max-width: 1050px) {
+        .platform-notes-grid {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+      }
+
+      @media (max-width: 560px) {
+        .platform-notes-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .platform-note {
+          min-height: 0;
+          padding: 14px 62px 14px 14px;
+        }
+      }
+    </style>
     <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script defer src="app.js?v=20260731-macmerge"></script>
     <script defer src="credits.js?v=20260801-pkgs"></script>
@@ -67,7 +156,7 @@
               <h2>Windows 客户端</h2>
               <p>适用于 Windows 电脑，支持邮箱积分账号登录、快捷键截图和悬浮结果显示。</p>
               <ul class="file-meta">
-                <li><span>系统</span><strong>Windows 10 / 11</strong></li>
+                <li><span>系统</span><strong>Windows 11</strong></li>
                 <li><span>文件</span><strong>EXE 安装程序</strong></li>
                 <li><span>版本</span><strong>2026.8.22.1</strong></li>
                 <li><span>大小</span><strong>约 84 MB</strong></li>
@@ -98,9 +187,6 @@
               <div class="download-actions">
                 <a class="button button-card button-card-green" href="downloads/QuizMate-Career-Extension-2.2.0.zip" download data-download="browser-extension">
                   <i data-lucide="download"></i>下载求职插件
-                </a>
-                <a class="button button-card button-card-outline button-card-outline-green" href="#extension-install" data-download="extension-guide">
-                  <i data-lucide="book-open"></i>安装教程
                 </a>
               </div>
             </article>
@@ -149,15 +235,38 @@
 
           </div>
 
-          <p class="download-install-note">macOS：首次打开若提示“已损坏”，打开终端执行 <code>sudo xattr -rd com.apple.quarantine /Applications/QuizMate.app</code>，输入开机密码后再次右键 QuizMate 选择“打开”。</p>
-
-          <div class="download-help" id="extension-install">
-            <i data-lucide="chrome"></i>
-            <div>
-              <strong>浏览器插件安装</strong>
-              <p>下载 ZIP 后解压，在 Chrome 或 Edge 打开 <code>chrome://extensions</code>，开启“开发者模式”，点击“加载已解压的扩展程序”并选择解压后的文件夹。</p>
+          <section class="platform-notes" aria-label="版本说明">
+            <div class="platform-notes-grid">
+              <article class="platform-note" data-platform-note="windows">
+                <div class="platform-note-heading">
+                  <span class="platform-note-icon"><i data-lucide="monitor" aria-hidden="true"></i></span>
+                  <strong>Windows 客户端</strong>
+                </div>
+                <p>支持 X64/X32 系统（X64 位系统适配最佳，建议升级），Win11 系统（Win10 及以下不适配）</p>
+              </article>
+              <article class="platform-note platform-note-extension" data-platform-note="extension">
+                <div class="platform-note-heading">
+                  <span class="platform-note-icon"><i data-lucide="chrome" aria-hidden="true"></i></span>
+                  <strong>QuizMate 求职插件</strong>
+                </div>
+                <p>正在加急研发中，预备终身免费开放</p>
+              </article>
+              <article class="platform-note platform-note-macos" data-platform-note="macos">
+                <div class="platform-note-heading">
+                  <span class="platform-note-icon"><i data-lucide="apple" aria-hidden="true"></i></span>
+                  <strong>Mac 客户端</strong>
+                </div>
+                <p>适配多芯片版本，建议升级到 2025 以后系统版本</p>
+              </article>
+              <article class="platform-note platform-note-android" data-platform-note="android">
+                <div class="platform-note-heading">
+                  <span class="platform-note-icon"><i data-lucide="smartphone" aria-hidden="true"></i></span>
+                  <strong>安卓客户端</strong>
+                </div>
+                <p>适配学习通，秋招场景请不要下载</p>
+              </article>
             </div>
-          </div>
+          </section>
 
           <div class="download-help">
             <i data-lucide="circle-help"></i>

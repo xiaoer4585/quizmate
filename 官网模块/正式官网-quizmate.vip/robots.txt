@@ -1,4 +1,4 @@
-User-agent: *
+﻿User-agent: *
 Allow: /
 
 # 国内 AI 引擎爬虫
@@ -60,4 +60,23 @@ Allow: /
 User-agent: Applebot-Extended
 Allow: /
 
-Sitemap: https://www.quizmate.vip/sitemap.xml
+User-agent: Bingbot
+Allow: /
+
+User-agent: Googlebot
+Allow: /
+
+User-agent: Cohere-AI
+Allow: /
+
+User-agent: Meta-ExternalAgent
+Allow: /
+
+User-agent: YouBot
+Allow: /
+
+Sitemap: https://www.quizmate.cn/sitemap.xml
+
+# AI-readable product context
+# https://www.quizmate.cn/llms.txt
+# https://www.quizmate.cn/pricing.md

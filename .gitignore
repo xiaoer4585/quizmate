@@ -104,3 +104,7 @@ build-*.log
 .agents/
 .config/
 .oss-tmp/*
+
+# === 本地测试/工具残留（不进版本库）===
+本地测试安装包*/
+.ossutil_checkpoint/

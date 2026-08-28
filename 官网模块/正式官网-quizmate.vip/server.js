@@ -20,6 +20,9 @@ const server = http.createServer((req, res) => {
     case '.json':
       contentType = 'application/json';
       break;
+    case '.md':
+      contentType = 'text/markdown; charset=utf-8';
+      break;
     case '.png':
       contentType = 'image/png';
       break;

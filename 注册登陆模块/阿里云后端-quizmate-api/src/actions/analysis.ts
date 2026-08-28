@@ -11,7 +11,7 @@ import type {
   RequestContext
 } from "../types.js";
 import { normalizeDeviceId, requireActiveLicense, type LegacyLicenseRow } from "./licenses.js";
-import { setModelFailureContext } from "../server.js";
+import { setModelFailureContext } from "../services/model-failure-context.js";
 
 interface AuthAccount {
   account_id: string;
@@ -183,14 +183,15 @@ async function settleSuccess(
        VALUES ($1, NULLIF($2, ''), $3, $4, 'success', $5, $6)`,
       [account.account_id, deviceId, source, requestId, CREDIT_COST_PER_SUCCESS, false]
     );
+    // 邀请奖励：首次成功使用后触发，双方各得积分
+    const referralCreditBalance = await tryActivateReferral(client, account.account_id);
+    if (referralCreditBalance !== null) response.creditBalance = referralCreditBalance;
+
     await client.query(
       `UPDATE idempotency_keys SET status = 'completed', response_status = 200, response_body = $3,
          completed_at = now(), locked_until = NULL WHERE scope = $1 AND request_id = $2`,
       [scope, requestId, response]
     );
-
-    // 邀请奖励：首次成功使用后触发，双方各得积分
-    await tryActivateReferral(client, account.account_id);
 
     await client.query("COMMIT");
     return response;
@@ -290,7 +291,7 @@ function analyzeHandler(deps: ActionDependencies): ActionHandler {
 }
 
 // 邀请奖励激活：被邀请人首次成功使用 AI 后，双方各得积分
-async function tryActivateReferral(client: PoolClient, inviteeAccountId: string): Promise<void> {
+async function tryActivateReferral(client: PoolClient, inviteeAccountId: string): Promise<number | null> {
   // 查找该用户的邀请关系（status='registered' 才需要激活）
   const referralResult = await client.query<{
     referral_id: string;
@@ -302,7 +303,7 @@ async function tryActivateReferral(client: PoolClient, inviteeAccountId: string)
     [inviteeAccountId]
   );
   const referral = referralResult.rows[0];
-  if (!referral) return;
+  if (!referral) return null;
 
   // 检查该用户是否已有成功的 usage_logs（确保是首次使用）
   const usageCount = await client.query<{ count: string }>(
@@ -310,14 +311,14 @@ async function tryActivateReferral(client: PoolClient, inviteeAccountId: string)
     [inviteeAccountId]
   );
   // 如果不止当前这一条，说明已经激活过了
-  if (Number(usageCount.rows[0]?.count ?? 0) > 1) return;
+  if (Number(usageCount.rows[0]?.count ?? 0) > 1) return null;
 
   // 检查邀请人是否已达上限
   const countResult = await client.query<{ count: string }>(
     "SELECT COUNT(*)::text AS count FROM referrals WHERE inviter_account_id = $1 AND status = 'rewarded'",
     [referral.inviter_account_id]
   );
-  if (Number(countResult.rows[0]?.count ?? 0) >= MAX_REFERRAL_COUNT) return;
+  if (Number(countResult.rows[0]?.count ?? 0) >= MAX_REFERRAL_COUNT) return null;
 
   // 更新邀请关系状态为已激活
   await client.query(
@@ -354,6 +355,7 @@ async function tryActivateReferral(client: PoolClient, inviteeAccountId: string)
     "UPDATE referrals SET status = 'rewarded' WHERE referral_id = $1",
     [referral.referral_id]
   );
+  return inviteeAfter;
 }
 
 export function createAnalysisActions(deps: ActionDependencies): Map<string, ActionHandler> {

@@ -38,15 +38,17 @@ function requirePassword(input: ActionInput): string {
 }
 
 function publicAccount(account: AccountRow) {
+  const totalCharged = Number(account.total_charged_credits);
   return {
     accountId: account.account_id,
     email: account.email,
     credits: Number(account.credits),
-    totalChargedCredits: Number(account.total_charged_credits),
+    totalChargedCredits: totalCharged,
     totalConsumedCredits: Number(account.total_consumed_credits),
     registerBonusCredits: Number(account.register_bonus_credits),
     status: account.status,
     role: account.role || "user",
+    hasRecharged: totalCharged > 0,
     createdAt: new Date(account.created_at).toISOString(),
     updatedAt: new Date(account.updated_at).toISOString(),
     lastLoginAt: account.last_login_at ? new Date(account.last_login_at).toISOString() : ""
