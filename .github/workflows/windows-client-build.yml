@@ -84,6 +84,32 @@ jobs:
         run: |
           set -euo pipefail
           exec > >(tee -a build.log) 2>&1
+          INTERNAL_VERSION=$(node -p "require('./package.json').version")
+          BUSINESS_VERSION=$(node -e '
+            const value = require("./package.json").version;
+            const parts = value.split(".");
+            const encoded = Number(parts[2]);
+            if (parts.length !== 3 || !Number.isInteger(encoded) || encoded < 1000) process.exit(2);
+            const day = Math.floor(encoded / 1000);
+            const revision = encoded % 1000;
+            process.stdout.write(`${parts[0]}.${parts[1]}.${day}${revision ? `.${revision}` : ""}`);
+          ')
+          RAW_EXE="release/QuizMate-Windows-${INTERNAL_VERSION}.exe"
+          RAW_BLOCKMAP="${RAW_EXE}.blockmap"
+          PUBLIC_EXE="release/QuizMate-Windows-${BUSINESS_VERSION}.exe"
+          PUBLIC_BLOCKMAP="${PUBLIC_EXE}.blockmap"
+          test -f "$RAW_EXE"
+          test -f "$RAW_BLOCKMAP"
+          mv "$RAW_EXE" "$PUBLIC_EXE"
+          mv "$RAW_BLOCKMAP" "$PUBLIC_BLOCKMAP"
+          node -e '
+            const fs = require("fs");
+            const file = "release/latest.yml";
+            const internalName = `QuizMate-Windows-${process.argv[1]}.exe`;
+            const publicName = `QuizMate-Windows-${process.argv[2]}.exe`;
+            const value = fs.readFileSync(file, "utf8").split(internalName).join(publicName);
+            fs.writeFileSync(file, value);
+          ' "$INTERNAL_VERSION" "$BUSINESS_VERSION"
           EXE=$(find release -maxdepth 1 -name 'QuizMate-Windows-*.exe' -print -quit)
           BLOCKMAP=$(find release -maxdepth 1 -name 'QuizMate-Windows-*.exe.blockmap' -print -quit)
           APP_UPDATE=release/win-ia32-unpacked/resources/app-update.yml
@@ -91,6 +117,12 @@ jobs:
           test -n "$BLOCKMAP"
           test -f release/latest.yml
           test -f "$APP_UPDATE"
+          grep -q "version: ${INTERNAL_VERSION}" release/latest.yml
+          grep -q "QuizMate-Windows-${BUSINESS_VERSION}.exe" release/latest.yml
+          if [[ "${GITHUB_REF}" != refs/tags/windows-delivery-* ]]; then
+            grep -q '^url: https://quizmate.cn/suite/$' "$APP_UPDATE"
+          fi
+          cat "$APP_UPDATE"
 
           # PE 头校验：安装包与解包后的主程序必须为 32 位 (machine=0x14c)，
           # 保证单个安装包兼容 x64 与 32 位 Windows
@@ -182,6 +214,7 @@ jobs:
             "${{ steps.artifact.outputs.exe }}" \
             "${{ steps.artifact.outputs.blockmap }}" \
             release/latest.yml \
+            release/win-ia32-unpacked/resources/app-update.yml \
             sha256.txt \
             build.log
           gh release view "$TAG" --repo "${{ github.repository }}" --json url -q '.url'
