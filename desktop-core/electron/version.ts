@@ -1,3 +1,17 @@
+/** Convert the sortable SemVer build number back to the public calendar version. */
+export function toBusinessVersion(version: string): string {
+  const parts = version.trim().replace(/^v/i, '').split('.');
+  const encodedDay = Number(parts[2]);
+  if (parts.length === 3 && Number.isInteger(encodedDay) && encodedDay >= 1000) {
+    const day = Math.floor(encodedDay / 1000);
+    const revision = encodedDay % 1000;
+    return revision > 0
+      ? `${parts[0]}.${parts[1]}.${day}.${revision}`
+      : `${parts[0]}.${parts[1]}.${day}`;
+  }
+  return version;
+}
+
 export function compareVersions(left: string, right: string): number {
   const normalize = (value: string): number[] => {
     const core = value.trim().replace(/^v/i, '').split('-')[0] ?? '';

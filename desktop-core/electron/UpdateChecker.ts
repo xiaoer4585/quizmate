@@ -7,7 +7,7 @@ import { createRequire } from 'module';
 import * as https from 'https';
 import * as http from 'http';
 import { URL } from 'url';
-import { isNewerVersion } from './version';
+import { isNewerVersion, toBusinessVersion } from './version';
 const require = createRequire(import.meta.url);
 const electronUpdater = require('electron-updater');
 const { autoUpdater } = electronUpdater;
@@ -32,7 +32,7 @@ export interface UpdateStatusPayload {
 
 export class UpdateChecker {
   private mainWindow: BrowserWindow | null = null;
-  private current: UpdateStatusPayload = { status: 'idle', currentVersion: app.getVersion() };
+  private current: UpdateStatusPayload = { status: 'idle', currentVersion: toBusinessVersion(app.getVersion()) };
   private timer: NodeJS.Timeout | null = null;
   private downloaded = false; // 是否已下载完成（避免重复检测/下载, 仅 Windows 链路使用）
   private availableVersion: string | null = null; // macOS: 已检测到的新版本号
@@ -64,7 +64,7 @@ export class UpdateChecker {
       if (IS_MAC) {
         this.set({
           status: 'available',
-          version: info.version,
+          version: toBusinessVersion(info.version),
           releaseNotes: info.releaseNotes,
           downloadUrl: this.getMacDownloadUrl(info.version),
           message: '请下载对应芯片版本并覆盖安装',
@@ -73,7 +73,7 @@ export class UpdateChecker {
       }
       this.set({
         status: 'available',
-        version: info.version,
+        version: toBusinessVersion(info.version),
         releaseNotes: info.releaseNotes,
       });
       // autoDownload=true 时 electron-updater 会立即开始下载；显式同步状态便于旧客户端观察进度。
@@ -102,7 +102,7 @@ export class UpdateChecker {
         return;
       }
       this.downloaded = true;
-      this.set({ status: 'downloaded', version: info.version });
+      this.set({ status: 'downloaded', version: toBusinessVersion(info.version) });
       // 下载成功后自动关闭客户端并启动安装（留 1.5s 让 UI 展示完成状态）
       setTimeout(() => this.installUpdate(), 1500);
     });
@@ -340,7 +340,10 @@ export class UpdateChecker {
 
   /** macOS: 当前芯片架构对应的官网 DMG 下载地址 */
   private getMacDownloadUrl(version: string): string {
-    const safeVersion = /^\d+(?:\.\d+)*$/.test(version) ? version : app.getVersion();
+    const businessVersion = toBusinessVersion(version);
+    const safeVersion = /^\d+(?:\.\d+)*$/.test(businessVersion)
+      ? businessVersion
+      : toBusinessVersion(app.getVersion());
     // 与 mac客户端/QuizMate-Mac/electron-builder.yml 的
     // dmg.artifactName(QuizMate-Mac-${arch}-${version}.dmg) 保持一致
     const filename = `QuizMate-Mac-${process.arch}-${safeVersion}.dmg`;
@@ -348,7 +351,7 @@ export class UpdateChecker {
   }
 
   private set(patch: Partial<UpdateStatusPayload>): void {
-    this.current = { ...this.current, ...patch, currentVersion: app.getVersion() };
+    this.current = { ...this.current, ...patch, currentVersion: toBusinessVersion(app.getVersion()) };
     this.notify();
   }
 

@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import type { DesktopClientPlatform } from './platform';
+import { toBusinessVersion } from './electron/version';
 
 export type ApiErrorKind = 'auth' | 'credits' | 'timeout' | 'network' | 'response';
 
@@ -62,7 +63,7 @@ export function createDesktopApiClient(clientPlatform: DesktopClientPlatform): D
         method: 'POST',
         headers: {
           'Content-Type': 'application/json; charset=utf-8',
-          'X-Client-Version': app.getVersion(),
+          'X-Client-Version': toBusinessVersion(app.getVersion()),
           'X-Client-Platform': clientPlatform,
         },
         body: JSON.stringify(body),

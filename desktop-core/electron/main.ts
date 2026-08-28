@@ -27,6 +27,7 @@ import { InterviewHelper } from './helpers/InterviewHelper';
 import { OverlayManager } from './OverlayManager';
 import { UpdateChecker } from './UpdateChecker';
 import { ShortcutAction, ProcessingMode } from '../shared/shortcuts';
+import { toBusinessVersion } from './version';
 
 // ===== 平台常量（唯一的平台差异入口） =====
 const IS_MAC = process.platform === 'darwin';
@@ -190,7 +191,7 @@ function openEmbeddedWindow(kind: 'recharge' | 'register') {
     rechargeWin.webContents.session.webRequest.onBeforeSendHeaders((details, cb) => {
       const headers = { ...details.requestHeaders };
       if (token) headers['X-Account-Token'] = token;
-      headers['X-Client-Version'] = app.getVersion();
+      headers['X-Client-Version'] = toBusinessVersion(app.getVersion());
       headers['X-Client-Platform'] = CLIENT_PLATFORM;
       cb({ requestHeaders: headers });
     });
@@ -219,7 +220,7 @@ function openEmbeddedWindow(kind: 'recharge' | 'register') {
   win.webContents.session.webRequest.onBeforeSendHeaders((details, cb) => {
     const headers = { ...details.requestHeaders };
     if (token) headers['X-Account-Token'] = token;
-    headers['X-Client-Version'] = app.getVersion();
+    headers['X-Client-Version'] = toBusinessVersion(app.getVersion());
     headers['X-Client-Platform'] = CLIENT_PLATFORM;
     cb({ requestHeaders: headers });
   });

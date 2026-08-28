@@ -13,6 +13,7 @@ import { UpdateChecker } from './UpdateChecker';
 import { createCreditOrder, queryCreditOrder } from './PaymentService';
 import type { ProcessingMode } from '../shared/shortcuts';
 import { v4 as uuid } from 'uuid';
+import { toBusinessVersion } from './version';
 
 export interface AppContext {
   configHelper: ConfigHelper;
@@ -245,7 +246,7 @@ export function registerIpcHandlers(
   });
   ipcMain.handle('system:openWeb', () => shell.openExternal(ctx.configHelper.getAppConfig().webBaseUrl));
   ipcMain.handle('system:openAdmin', () => shell.openExternal(ctx.configHelper.getAppConfig().adminWebUrl || 'https://www.quizmate.vip/admin-web/index.html'));
-  ipcMain.handle('system:version', () => app.getVersion());
+  ipcMain.handle('system:version', () => toBusinessVersion(app.getVersion()));
   ipcMain.handle('system:getAIConfigs', () => ctx.configHelper.getAllAIModelConfigs());
 
   // ===== 邀请代理 / 面经图片保存分享 =====
@@ -413,7 +414,10 @@ export function registerIpcHandlers(
 
   // 应用更新检查（兼容 electronAPI.app.checkUpdate 旧接口）
   ipcMain.handle('app:check-update', async () => {
-    if (!ctx.updateChecker) return { hasUpdate: false, current: app.getVersion(), latest: app.getVersion() };
+    if (!ctx.updateChecker) {
+      const version = toBusinessVersion(app.getVersion());
+      return { hasUpdate: false, current: version, latest: version };
+    }
     const status = await ctx.updateChecker.checkForUpdates();
     return {
       hasUpdate: status.status === 'available',

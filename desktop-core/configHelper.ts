@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import Store from 'electron-store';
 import type { DesktopConfigHelperOptions } from './platform';
+import { toBusinessVersion } from './electron/version';
 
 export interface AIModelConfig {
   provider: string;
@@ -150,7 +151,7 @@ export class DesktopConfigHelper {
       adminWebUrl: 'https://www.quizmate.vip/admin-web/index.html',
       websocketUrl: '',
       environment: 'production',
-      version: app.getVersion(),
+      version: toBusinessVersion(app.getVersion()),
       registerUrl: 'https://www.quizmate.cn/#credits',
       resetPasswordUrl: 'https://www.quizmate.cn/#credits',
       rechargeUrl: 'https://www.quizmate.cn/recharge.html',
