@@ -30,6 +30,7 @@ const REGION = 'cn-beijing';
 const INSTANCE_ID = 'i-2zedgehm045w1gsarawx';
 
 const files = {
+  exe: path.join(RELEASE_DIR, EXE_NAME),
   blockmap: path.join(RELEASE_DIR, BLOCKMAP_NAME),
   latest: path.join(RELEASE_DIR, 'latest.yml'),
   appUpdate: path.join(RELEASE_DIR, 'app-update.yml'),
@@ -187,15 +188,31 @@ echo REMOTE_STAGE_OK size=$(stat -c %s "$tmp") sha256=$(sha256sum "$tmp" | awk '
 }
 
 async function fetchInstaller(storage, auth) {
-  try {
-    const task = await storage.postAsyncFetch(STAGE_EXE, EXE_URL, { ignoreSameKey: false });
-    console.log(`ASYNC_FETCH_STARTED task=${task.taskId}`);
-    await waitForAsyncFetch(storage, task.taskId);
-  } catch (error) {
-    const label = `${error.code || ''} ${error.name || ''}`.toLowerCase();
-    if (!label.includes('operationnotsupported')) throw error;
-    console.log('ASYNC_FETCH_UNSUPPORTED fallback=ECS-cloud-assistant');
-    await fetchThroughEcs(storage, auth);
+  if (fs.existsSync(files.exe) && fs.statSync(files.exe).size === EXPECTED_EXE_SIZE) {
+    const localHash = crypto.createHash('sha256');
+    for await (const chunk of fs.createReadStream(files.exe)) localHash.update(chunk);
+    const digest = localHash.digest('hex');
+    if (digest !== EXPECTED_EXE_SHA256) throw new Error(`Local EXE digest mismatch: ${digest}`);
+    await storage.multipartUpload(STAGE_EXE, files.exe, {
+      parallel: 16,
+      partSize: 1024 * 1024,
+      headers: {
+        'Content-Type': 'application/vnd.microsoft.portable-executable',
+        'Cache-Control': 'no-cache',
+      },
+    });
+    console.log(`LOCAL_STAGE_UPLOAD_OK sha256=${digest}`);
+  } else {
+    try {
+      const task = await storage.postAsyncFetch(STAGE_EXE, EXE_URL, { ignoreSameKey: false });
+      console.log(`ASYNC_FETCH_STARTED task=${task.taskId}`);
+      await waitForAsyncFetch(storage, task.taskId);
+    } catch (error) {
+      const label = `${error.code || ''} ${error.name || ''}`.toLowerCase();
+      if (!label.includes('operationnotsupported')) throw error;
+      console.log('ASYNC_FETCH_UNSUPPORTED fallback=ECS-cloud-assistant');
+      await fetchThroughEcs(storage, auth);
+    }
   }
   const head = await storage.head(STAGE_EXE);
   const size = Number(head.res.headers['content-length']);
