@@ -7,7 +7,7 @@
 - Mac internal package version: `2026.8.28001` (business version `2026.8.28.1`)
 - Windows release version remains unchanged: internal `2026.8.27002`, business `2026.8.27.2`; Windows was only used for shared-core regression and is not packaged or published by this change.
 - Production website/update manifests changed: no
-- Gitee/GitHub/OSS changed: no
+- Gitee/GitHub/OSS changed during this local preflight: no. Later isolated delivery is recorded in `mac-ci-and-oss-delivery.md`.
 
 ## Implemented reliability boundaries
 
@@ -79,12 +79,12 @@ These are Windows-host production bundles, not signed/notarized macOS DMGs and n
 
 ## Known gaps / release blockers
 
-- macOS Intel and Apple Silicon package jobs have not run for this worktree.
+- macOS Intel and Apple Silicon package jobs later passed in Actions run `33149992223`; see `mac-ci-and-oss-delivery.md` for architecture, signing, OSS and hash evidence.
 - No physical Mac has executed first-launch allow/deny/skip/restart, real speaker audio, screenshot/AI success, track end, AudioContext interruption, network reconnect, sleep/wake or 30-minute continuity tests.
 - No 20-sample production AI P50/P95 dataset exists; backend/model latency targets remain unverified.
-- Signing, notarization, Gatekeeper and architecture checks remain unverified.
+- Ad-hoc strict signing and architecture checks passed in CI. Developer ID signing, notarization and physical Gatekeeper behavior remain unverified.
 - `npm audit` reports dependency-tree vulnerabilities (Mac: 18; Windows: 19). They were not auto-fixed because `npm audit fix --force` may introduce breaking upgrades; this requires a separate dependency review.
-- Therefore the production release conclusion remains **blocked**. Only isolated OSS `temp/` test packages may be produced after CI succeeds.
+- Therefore the production release conclusion remains **blocked**. The isolated OSS `temp/` test packages were produced after CI succeeded and now await physical-Mac acceptance.
 
 ## Rollback check
 

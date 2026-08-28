@@ -75,7 +75,7 @@
   - 将命令、时间、平台、结果和失败重跑记录写入 CHG-20260828-04 证据目录和统一测试文档。
   - _Requirements: R2, R6, R7, R9, R10, R11_
 
-- [ ] 10. 提交 Gitee 并生成 Mac 双架构隔离测试包
+- [x] 10. 提交 Gitee 并生成 Mac 双架构隔离测试包
   - 提交前复核 diff 只包含本规格、共享桌面修复、Mac 壳适配、测试和证据，不带 Windows 安装包或无关用户文件。
   - 将正常代码历史推送 Gitee 分支；GitHub 仅同步同一批准构建提交/标签以运行 Mac Actions，不作为代码管理基线。
   - 在 GitHub Actions 分别构建 Intel/Apple Silicon DMG/ZIP，校验合法 SemVer、业务版本、架构、DMG 完整性和 ad-hoc/正式签名状态。
