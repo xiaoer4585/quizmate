@@ -8,4 +8,14 @@
 - 验收：正式 GitHub Actions ia32 构建、类型检查、PE/ASAR/内部版本、生产 `app-update.yml`、清单哈希和大小、OSS 回读、官网链接、公网 Range GET、旧对象保留与回滚备份均通过后才完成发布。
 - 回滚：发布脚本在 `rollback/CHG-20260828-03-WIN/` 备份被替换的更新清单和官网页面；旧版本化安装包不覆盖。恢复备份的 `suite/latest.yml`、`downloads/latest.yml` 和三个 HTML 即可停止推送并恢复旧官网下载入口。
 - 前置实机结果：用户已确认隔离测试包 Windows 安装和启动验证通过；SHA-256 `6078ff1c9a6c452344f1f895614fd9d095d9d67ac2692cbbbceda773ce29a5f0`。
-- 发布状态：执行中。
+- Gitee：发布源代码已合入并推送 `origin/main`；发布标签 `v20260828-3` 已推送。按用户最新约定，Gitee 为代码管理仓库，GitHub 仅承担安装包构建。
+- GitHub Actions：运行 `33139997303`（提交 `27b98235bb3572856cce9c60abec20f82460a797`）成功；Node/Web 类型检查、Electron build、ia32 NSIS、安装器与主程序 `0x14c`、内部版本、业务文件名和生产 `app-update.yml` 全部通过。
+- 正式产物：`QuizMate-Windows-2026.8.27.2.exe`，大小 `82,820,119` 字节；SHA-256 `0085cef218621979d7b5d9bcfd4dcd150d1cb7b6e24d386229ffc0052143bba0`；blockmap `87,797` 字节。
+- 更新清单：`suite/latest.yml` 与 `downloads/latest.yml` 均为合法内部版本 `2026.8.27002`，指向业务文件名 `QuizMate-Windows-2026.8.27.2.exe`，SHA-512 与大小来自同一 CI 正式产物。
+- 客户端更新源：CI 留档 `app-update.yml` 为 `https://quizmate.cn/suite/`，不是测试隔离通道。
+- 阿里云对象：正式 EXE/blockmap 已发布到 `suite/` 和 `downloads/`；官网 `download.html`、`index.html`、`blog/article-exam-skills.html` 已更新。
+- 公网验证：`https://www.quizmate.cn/suite/QuizMate-Windows-2026.8.27.2.exe` 与 `https://www.quizmate.cn/downloads/QuizMate-Windows-2026.8.27.2.exe` 的 `Range: bytes=0-0` 均返回 HTTP 206，Content-Range 总大小均为 `82,820,119`；首页、下载页和文章页均包含新安装包链接。
+- 回滚证据：`rollback/CHG-20260828-03-WIN/` 下的 `suite/latest.yml`、`downloads/latest.yml`、`download.html`、`index.html`、`blog/article-exam-skills.html` 均已 HEAD 验证存在；旧 `2026.8.23` 的 `suite/` 与 `downloads/` EXE 均保留，大小 `82,976,059` 字节。
+- 失败与重试：OSS 异步抓取因桶不支持而在写正式对象前停止；ECS 单连接下载因 900 秒超时在写正式对象前停止；首次 16 路 multipart 上传因连接重置在临时对象阶段停止。最终使用分段下载、GitHub SHA-256 整体验证及 4 路 OSS 上传成功，随后才备份并切换正式对象。
+- 用户验收：用户明确确认 Windows 修复包安装与启动验证通过。正式包相同修复提交，仅更新源由隔离路径改为生产 `suite/`，该差异已由 CI 和 `app-update.yml` 验证。
+- 发布状态：通过；Windows 官网下载和用户侧自动更新已上线。Mac 测试包未转正。
