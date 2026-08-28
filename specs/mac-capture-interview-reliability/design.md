@@ -228,10 +228,48 @@ interface VoiceHealthSnapshot {
 
 ### 3.9 悬浮窗输入透明与自有截图事务
 
-- Mac 保护看门狗除公开 `setContentProtection(true)` 请求外，每个周期都幂等重设 `setFocusable(false)`、`setIgnoreMouseEvents(true, { forward: true })` 和 `setSkipTaskbar(true)`。
-- 笔试与面试悬浮窗的 create/ready/show/move/resize/recovery 路径均不得关闭输入穿透；Renderer 不暴露临时解除穿透的 IPC。
-- 自有截图在一个事务中记录两类悬浮窗实际可见性，隐藏所有可见悬浮窗，等待合成器，执行捕获，并在 `finally` 仅恢复原先可见的窗口。
-- `NSWindowSharingNone`/Electron content protection 只记录请求与可读回状态。macOS 15+ 第三方 ScreenCaptureKit、硬件录制和投屏不在被捕获应用的公共控制范围，不加入私有 CGS、注入或 Hook。
+#### 固定保护策略
+
+两类悬浮窗共用 `MacProtection`，保护策略由 Main 进程固定，不向 Renderer 暴露开关：
+
+| 维度 | 固定策略 | 说明 |
+|---|---|---|
+| 内容保护 | `setContentProtection(true)` | 请求 Electron/AppKit 公开的窗口共享保护；不等同于 Windows `WDA_EXCLUDEFROMCAPTURE` 的跨版本绝对保证 |
+| 输入 | `setFocusable(false)` + `setIgnoreMouseEvents(true, { forward: true })` | 永久鼠标穿透、不抢焦点；不允许局部可交互或临时关闭 |
+| 空间 | `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })` | 在所有 Space 和全屏应用辅助层保持一致行为 |
+| 层级 | `setAlwaysOnTop(true, 'screen-saver')` | 统一使用现有屏保级置顶，不降级为普通 `floating` |
+| 外观 | `frame=false`、透明背景、无阴影、`type='panel'`、`skipTaskbar=true` | 保留现有无边框面板行为 |
+| 尺寸 | 保持 `resizable=true`、`movable=true` | 产品依赖快捷键调整位置和尺寸，不照搬参考产品的固定尺寸 |
+
+调用顺序固定为：创建 `BrowserWindow` → 在首次 `show/showInactive` 前执行 `applyAllProtections()` → 注册恢复监听与 watchdog → 加载页面 → 首次显示。这样避免窗口先显示、保护属性后补设的可见时间窗。
+
+#### 生命周期与恢复
+
+| 触发点 | 恢复动作 |
+|---|---|
+| create / ready-to-show / show | 重设全部固定策略 |
+| hide → show / 崩溃重建 | 新窗口在首次显示前重设全部固定策略 |
+| move / resize / display change | 重设输入穿透；watchdog 复核空间、层级和内容保护 |
+| `always-on-top-changed=false` | 防重入地立即恢复 `screen-saver` 置顶 |
+| Space/全屏切换、睡眠唤醒 | watchdog 幂等恢复全工作区、全屏辅助、置顶、输入穿透和内容保护请求 |
+| closed | 停止 timer，移除事件监听，禁止旧窗口回调操作新窗口 |
+
+- watchdog 除公开 `setContentProtection(true)` 请求外，每个周期幂等重设 `setFocusable(false)`、`setIgnoreMouseEvents(true, { forward: true })`、`setSkipTaskbar(true)`、全工作区/全屏辅助行为，并在 `isAlwaysOnTop()` 为 false 时恢复 `screen-saver` 置顶。
+- `always-on-top-changed` 只作为快速恢复路径，watchdog 是事件丢失后的兜底；两者必须使用窗口实例守卫和防重入标记，避免恢复动作触发自身事件循环。
+- 笔试与面试悬浮窗的 create/ready/show/move/resize/recovery 路径均不得关闭输入穿透；Renderer 不提供临时解除穿透或关闭内容保护的 IPC。
+- 自有截图在一个事务中记录两类悬浮窗实际可见性，隐藏所有可见悬浮窗，等待合成器，执行捕获，并在 `finally` 仅恢复原先可见的窗口。该路径是 QuizMate 自有 AI 输入不包含悬浮窗的确定性保证。
+
+#### 状态语义与能力边界
+
+内容保护诊断拆分为三个层次，禁止把 API 调用结果扩大解释：
+
+1. `requested`：`setContentProtection(true)` 未抛异常，只证明请求已提交。
+2. `verified`：当前 Electron 运行时确实提供读回能力且返回 true；Electron 31 无可靠公开读回时为 `unknown`，不是失败，也不是已验证。
+3. `observed`：指定 macOS 版本、架构和捕获工具的实体机实测结果；只对该组合负责。
+
+`NSWindowSharingNone`/Electron content protection 对传统 WindowServer 捕获链路通常有效，但 macOS 15+ ScreenCaptureKit 的行为由系统和捕获方决定。方案不承诺 QuickTime、OBS、会议共享、AirPlay、Sidecar、浏览器 `getDisplayMedia` 或未来 macOS 版本全部不可见，也不加入私有 CGS、Root helper、注入、Hook、进程名伪装或 Dock/进程隐藏。
+
+实体 Mac 验收按 macOS 13、14、15（设备可用范围内）× Apple Silicon/Intel × 内屏/外接屏 × 普通 Space/全屏 Space 建立矩阵。系统截图、`screencapture` 与选定 ScreenCaptureKit 应用逐项记录原始结果；不支持或未执行标记为“阻塞/未验证”，不得用代码静态检查代替。
 
 #### 截图悬浮窗
 

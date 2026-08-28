@@ -1,7 +1,7 @@
 {
   "name": "quizmate-mac",
   "productName": "QuizMate",
-  "version": "2026.8.28002",
+  "version": "2026.8.28003",
   "description": "QuizMate Mac 客户端 - 笔试与面试实时辅助（共享 desktop-core 源码，本壳仅承担构建配置）",
   "main": "out/main/index.js",
   "author": {
@@ -20,7 +20,8 @@
     "package:mac:apple": "electron-vite build && electron-builder --mac dmg --arm64",
     "typecheck:node": "node scripts/link-core-modules.cjs && tsc --noEmit -p tsconfig.node.json",
     "typecheck:web": "node scripts/link-core-modules.cjs && tsc --noEmit -p tsconfig.web.json",
-    "test:shared": "vitest run --root ../.. desktop-core/shared/__tests__"
+    "test:shared": "vitest run --root ../.. desktop-core/shared/__tests__",
+    "test:mac-protection": "vitest run --root ../.. desktop-core/electron/helpers/__tests__/MacProtection.test.ts"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",

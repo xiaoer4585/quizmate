@@ -78,6 +78,8 @@ jobs:
           {
             npm run typecheck:node
             npm run typecheck:web
+            npm run test:shared
+            npm run test:mac-protection
             # npm audit depends on the registry advisory endpoint. Keep the
             # report, but do not block an otherwise valid package build when
             # that external service is unavailable.

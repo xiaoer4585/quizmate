@@ -127,3 +127,12 @@
   - 执行新增迁移幂等、统一授权、静音音轨、鼠标穿透状态和自有截图窗口恢复自动化。
   - 实体 Mac 执行旧包覆盖、全新安装、拒绝恢复、双架构、签名公证、系统授权和底层鼠标交互验证。
   - _Requirements: R10, R12, R13_
+
+- [ ] 18. 补强 Mac 悬浮窗空间与置顶可靠性（待方案确认后实施）
+  - 新建独立 `CHG-20260828-06`，记录基线提交、关键文件哈希、受影响用例、回滚步骤和实体 Mac 阻塞项；不得改写已完成的 CHG-20260828-05 证据。
+  - 在 `MacProtection` 集中加入 `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`，并由 watchdog 幂等恢复全工作区、全屏辅助和 `screen-saver` 置顶。
+  - 增加带防重入与销毁清理的 `always-on-top-changed` 快速恢复；保持永久鼠标穿透、`resizable=true`，不新增 Renderer 保护开关。
+  - 增加静态门禁：两类窗口都只使用统一 helper；源码无 `setIgnoreMouseEvents(false)`、内容保护关闭 IPC、私有 CGS、注入、Root helper 或进程伪装路径。
+  - 运行 Mac 类型检查、共享测试和 production build；Windows 只运行共享回归，不改 Windows 代码、版本或安装包。
+  - 在实体 Mac 上记录 Space/全屏/多显示器/睡眠唤醒、置顶恢复、鼠标穿透和具体捕获工具矩阵；未验证项保持阻塞，不发布、不构建正式包、不更新官网。
+  - _Requirements: R10, R13_

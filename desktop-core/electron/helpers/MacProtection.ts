@@ -16,7 +16,7 @@
 // 说明: macOS 15+ 上使用 ScreenCaptureKit 的新采集工具可能突破 sharingType 保护,
 // 属系统级能力边界(Apple 有意变更), 已在用户手册中说明。
 
-import { BrowserWindow } from 'electron'
+import type { BrowserWindow } from 'electron'
 
 export interface ProtectionResult {
   success: boolean
@@ -29,6 +29,8 @@ export interface ProtectionResult {
     toolWindow?: boolean
     noActivate?: boolean
     emptyTitle?: boolean
+    allWorkspaces?: boolean
+    alwaysOnTop?: boolean
   }
 }
 
@@ -56,6 +58,34 @@ function applyInputTransparency(win: BrowserWindow): boolean {
     console.warn('[MacProtection] input transparency failed:', error)
     return false
   }
+}
+
+/**
+ * Keep both overlays in the same public AppKit window mode on every Space.
+ * Electron does not expose a readback API for collectionBehavior or the exact
+ * always-on-top level, so these setters are intentionally idempotent.
+ */
+function applyWindowPlacement(win: BrowserWindow): {
+  allWorkspaces: boolean
+  alwaysOnTop: boolean
+} {
+  let allWorkspaces = false
+  let alwaysOnTop = false
+  try {
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
+    allWorkspaces = true
+  } catch (error) {
+    console.warn('[MacProtection] all-workspaces/fullscreen placement failed:', error)
+  }
+  try {
+    // Always set the level, even when isAlwaysOnTop() is already true: the
+    // boolean readback cannot distinguish screen-saver from a lower level.
+    win.setAlwaysOnTop(true, 'screen-saver')
+    alwaysOnTop = win.isAlwaysOnTop()
+  } catch (error) {
+    console.warn('[MacProtection] screen-saver placement failed:', error)
+  }
+  return { allWorkspaces, alwaysOnTop }
 }
 
 export function applyAntiCapture(win: BrowserWindow): AntiCaptureResult {
@@ -88,6 +118,7 @@ export function readContentProtection(win: BrowserWindow): boolean | null {
 export function applyAllProtections(win: BrowserWindow): ProtectionResult {
   const antiCapture = applyAntiCapture(win)
   const noActivate = applyInputTransparency(win)
+  const placement = applyWindowPlacement(win)
   let toolWindow = false
   try {
     win.setSkipTaskbar(true)
@@ -103,6 +134,8 @@ export function applyAllProtections(win: BrowserWindow): ProtectionResult {
       toolWindow,
       noActivate,
       emptyTitle: true,
+      allWorkspaces: placement.allWorkspaces,
+      alwaysOnTop: placement.alwaysOnTop,
     },
   }
 }
@@ -122,16 +155,42 @@ export function startProtectionWatchdog(
   const label = opts.label || 'overlay'
   const intervalMs = Math.max(opts.intervalMs ?? 2000, 500)
   let reapplyCount = 0
+  let stopped = false
+  let restoringAlwaysOnTop = false
+
+  const restoreAlwaysOnTop = () => {
+    if (stopped || restoringAlwaysOnTop || win.isDestroyed()) return
+    restoringAlwaysOnTop = true
+    try {
+      win.setAlwaysOnTop(true, 'screen-saver')
+    } catch (error) {
+      console.warn(`[MacProtection] watchdog(${label}) always-on-top restore failed:`, error)
+    } finally {
+      restoringAlwaysOnTop = false
+    }
+  }
+
+  const onAlwaysOnTopChanged = (_event: unknown, isAlwaysOnTop: boolean) => {
+    if (!isAlwaysOnTop) restoreAlwaysOnTop()
+  }
+  win.on('always-on-top-changed', onAlwaysOnTopChanged)
+
   const timer = setInterval(() => {
     try {
       if (!win || win.isDestroyed()) {
+        stopped = true
         clearInterval(timer)
+        win.removeListener('always-on-top-changed', onAlwaysOnTopChanged)
         return
       }
       // Mouse pass-through has no public readback API. Reapply it
       // idempotently so window show/move/display changes cannot make the
       // overlay intercept clicks or focus.
       applyInputTransparency(win)
+      // There is no public readback for the exact NSWindow level or Space
+      // collection behavior. Reapply both so Space/fullscreen transitions,
+      // display changes and wake-up cannot leave the overlay at a lower level.
+      applyWindowPlacement(win)
       // Older Electron versions cannot read back NSWindow.sharingType. Reapply
       // idempotently on every tick so hide/show and display changes cannot leave
       // the overlay unprotected.
@@ -147,7 +206,16 @@ export function startProtectionWatchdog(
       console.warn(`[MacProtection] watchdog(${label}) error:`, e)
     }
   }, intervalMs)
-  return { stop: () => clearInterval(timer) }
+  return {
+    stop: () => {
+      if (stopped) return
+      stopped = true
+      clearInterval(timer)
+      try {
+        win.removeListener('always-on-top-changed', onAlwaysOnTopChanged)
+      } catch {}
+    },
+  }
 }
 
 export function removeAntiCapture(win: BrowserWindow): boolean {
