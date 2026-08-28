@@ -143,3 +143,10 @@
   - 将 Mac CI 切换到 macOS 26，增加主程序与 Electron Framework/Helpers 签名身份一致性检查，并直接启动 DMG 内应用验证进程存活。
   - 构建 Intel/Apple Silicon 隔离测试包，上传 OSS `temp/mac-os26-signing-2026.8.28.4/`，回读 SHA-256 后交由实体 M 系列 macOS 26 复测。
   - _Requirements: R10, R12_
+
+- [ ] 20. 修正 ad-hoc Hardened Runtime library validation 假阴性
+  - 保留 `2026.8.28004` 在实体 M1 Pro/macOS 26.5.2 上仍被 dyld 终止的失败证据，不再把 runner 启动存活或 `TeamIdentifier=not set` 判定为实体兼容通过。
+  - 新增 ad-hoc 专用 entitlement，对主程序和全部 Electron Helper 可执行宿主显式设置 `com.apple.security.cs.disable-library-validation=true`；正式 Developer ID 构建禁止该例外。
+  - 从最终 DMG 逐个读回 `Contents/MacOS/*` 宿主 entitlement，并保留签名、架构、macOS 26 启动存活和 dyld 日志门禁。
+  - 构建 `2026.8.28005` 双架构隔离测试包，上传 `quizmate-cn/temp/mac-os26-signing-2026.8.28.5/`；实体 M 系列复测前保持阻塞，不更新官网或自动更新通道。
+  - _Requirements: R10, R12_

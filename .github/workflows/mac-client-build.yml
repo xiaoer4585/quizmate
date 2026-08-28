@@ -197,7 +197,7 @@ jobs:
           const { signAsync } = require('@electron/osx-sign')
 
           const appPath = path.resolve(process.env.APP_PATH)
-          const entitlements = path.resolve('resources/entitlements.mac.plist')
+          const entitlements = path.resolve('resources/entitlements.mac.adhoc.plist')
           const electronVersion = require('electron/package.json').version
 
           signAsync({
@@ -210,7 +210,12 @@ jobs:
             preEmbedProvisioningProfile: false,
             optionsForFile(filePath) {
               return {
-                ...(path.resolve(filePath) === appPath ? { entitlements } : {}),
+                // An ad-hoc signature has no stable Team ID. Every executable
+                // host must therefore carry the same explicit library-
+                // validation exception; applying the plist to every nested
+                // signing target also prevents osx-sign defaults from silently
+                // dropping it on Electron Helper executables.
+                entitlements,
                 hardenedRuntime: true,
                 timestamp: 'none',
               }
@@ -263,6 +268,34 @@ jobs:
             fi
           done < <(find "$APP_PATH/Contents" -type f -print0)
           cat signature-identities.txt
+          : > ad-hoc-entitlements.txt
+          HOST_COUNT=0
+          while IFS= read -r -d '' host; do
+            if ! file "$host" | grep -q 'Mach-O'; then
+              continue
+            fi
+            HOST_COUNT=$((HOST_COUNT + 1))
+            ENTITLEMENTS_PLIST=$(mktemp "$RUNNER_TEMP/quizmate-entitlements.XXXXXX.plist")
+            codesign -d --entitlements :- "$host" > "$ENTITLEMENTS_PLIST" 2>> build.log
+            plutil -lint "$ENTITLEMENTS_PLIST"
+            LIBRARY_VALIDATION=absent
+            if value=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.cs.disable-library-validation' "$ENTITLEMENTS_PLIST" 2>/dev/null); then
+              LIBRARY_VALIDATION="$value"
+            fi
+            printf '%s\t%s\n' "$LIBRARY_VALIDATION" "$host" >> ad-hoc-entitlements.txt
+            rm -f "$ENTITLEMENTS_PLIST"
+            if [[ "${MAC_SIGNED_BUILD:-false}" == "true" ]]; then
+              if [[ "$LIBRARY_VALIDATION" == "true" ]]; then
+                echo "::error::Production Developer ID executable must not disable library validation: $host"
+                exit 1
+              fi
+            elif [[ "$LIBRARY_VALIDATION" != "true" ]]; then
+              echo "::error::Ad-hoc executable host is missing com.apple.security.cs.disable-library-validation=true: $host"
+              exit 1
+            fi
+          done < <(find "$APP_PATH" -path '*/Contents/MacOS/*' -type f -print0)
+          test "$HOST_COUNT" -gt 0
+          cat ad-hoc-entitlements.txt
           if [[ "${MAC_SIGNED_BUILD:-false}" == "true" ]]; then
             TEAM_ID=$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 | sed -n 's/^TeamIdentifier=//p')
             test -n "$TEAM_ID"
@@ -336,6 +369,7 @@ jobs:
           cp architecture.txt "architecture-${{ matrix.arch }}.txt"
           cp codesign.txt "codesign-${{ matrix.arch }}.txt"
           cp signature-identities.txt "signature-identities-${{ matrix.arch }}.txt"
+          cp ad-hoc-entitlements.txt "ad-hoc-entitlements-${{ matrix.arch }}.txt"
           cp launch-smoke.log "launch-smoke-${{ matrix.arch }}.log"
           cp build.log "build-${{ matrix.arch }}.log"
           gh release upload "$TAG" \
@@ -347,6 +381,7 @@ jobs:
             "architecture-${{ matrix.arch }}.txt" \
             "codesign-${{ matrix.arch }}.txt" \
             "signature-identities-${{ matrix.arch }}.txt" \
+            "ad-hoc-entitlements-${{ matrix.arch }}.txt" \
             "launch-smoke-${{ matrix.arch }}.log" \
             "build-${{ matrix.arch }}.log"
           gh release view "$TAG" --repo "${{ github.repository }}" --json url -q '.url'
@@ -361,6 +396,7 @@ jobs:
             mac客户端/QuizMate-Mac/architecture.txt
             mac客户端/QuizMate-Mac/codesign.txt
             mac客户端/QuizMate-Mac/signature-identities.txt
+            mac客户端/QuizMate-Mac/ad-hoc-entitlements.txt
             mac客户端/QuizMate-Mac/launch-smoke.log
             mac客户端/QuizMate-Mac/sha256.txt
           if-no-files-found: error
