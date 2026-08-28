@@ -74,3 +74,20 @@
 - 修正方案：新增 ad-hoc 专用 entitlements，并对主程序及全部 Electron Helper 显式加入 Apple 公共 entitlement `com.apple.security.cs.disable-library-validation=true`；保留 Hardened Runtime。正式 Developer ID/公证路径继续使用原 `entitlements.mac.plist`，不加入该例外。
 - 新 CI 门禁：从最终 DMG 中逐个读回所有 `Contents/MacOS/*` 可执行宿主的 entitlements，缺少 library-validation 例外即失败；随后继续执行 macOS 26 原生启动、签名、DMG、架构和 SHA-256 检查。
 - 原始报告的用户/设备标识未写入仓库。
+
+## 5. `2026.8.28005` 修正构建与阿里云回读
+
+- 修正提交：`782f94318aa557ee0ebda7a9e3f3ca8c9dcf99b8`，已同步 Gitee 分支 `codex/mac-capture-interview-20260828`。
+- GitHub Actions：run `33169916922` attempt 2；Apple Silicon job `98845955966`、Intel job `98845956112` 均为 success。
+- 两个架构的最终 DMG 均检查 5 个可执行宿主：主程序、Helper、Renderer Helper、Plugin Helper、GPU Helper；每个宿主都从实际签名读回 `com.apple.security.cs.disable-library-validation=true`。
+- Apple Silicon 最终程序为 ARM64，Intel 最终程序为 x86_64；两者均在 macOS 26 原生 runner 启动并持续存活 10 秒，日志无 `Library not loaded`、`different Team IDs`、`Namespace DYLD` 或 `dyld Code 1`。
+- 第一次 attempt 的安装包验证通过，但 OSS PUT 因生成的域名缺少 `oss-` 地域前缀而 DNS 失败；修正一次性上传标签后重跑，attempt 2 全流程成功。该失败不改写为构建或签名失败。
+- Bucket 仅 `quizmate-cn`；前缀仅 `temp/mac-os26-signing-2026.8.28.5/`。未触碰 `quizmate-vip`、官网、正式下载对象、`mac/latest-mac.yml`、Windows 或用户自动更新通道。
+
+| 架构 | 对象 | 大小 | SHA-256 | OSS ETag | 验证 |
+|---|---|---:|---|---|---|
+| Apple Silicon arm64 | `QuizMate-Mac-arm64-2026.8.28005.dmg` | `109,471,918` | `6205352cc365e4742b4cde66dedae16318092931188f1c457506990f8105cf60` | `B40146C2D2BD109B93B66B9B062B5D54` | HEAD 200、Range GET 206、完整流式回读 SHA-256 匹配 |
+| Intel x64 | `QuizMate-Mac-x64-2026.8.28005.dmg` | `117,900,005` | `95e6349e42edfe3b2bb96dc103f251f9344a55bb142d23a3b8a2a69d10d976ea` | `C7BC91F1CAFF3DF6A66F7332DD911ACD` | HEAD 200、Range GET 206、完整流式回读 SHA-256 匹配 |
+
+- 用户临时 GET 链接有效至 2026-09-04 20:50 +08:00；签名 URL 不写入 Git。
+- PK-022 自动化部分通过；实体 M1 Pro / macOS 26.5.2 对本版复测前，手工结果保持阻塞，不宣称最终解决。
