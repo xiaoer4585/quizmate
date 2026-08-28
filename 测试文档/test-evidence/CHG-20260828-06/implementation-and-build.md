@@ -73,6 +73,15 @@
 - 本次只生成 GitHub prerelease 的 Intel/Apple Silicon DMG/ZIP，不更新官网、OSS 正式对象、`latest-mac.yml` 或用户自动更新通道。
 - 交付说明必须明确：ad-hoc 包无 Apple 公证、无稳定 TeamIdentifier，Gatekeeper 与旧 TCC 权限继承不作正式保证，只用于当前实体 Mac 功能测试。
 
+### 第三次运行（安装包通过、Release 权限阻塞）
+
+- Run：`33161721985`
+- 标签：`mac-build-2026.8.28.3`
+- 提交：`02473b089d537abfecd20ce0513dc22905fcdc59`
+- Intel 与 Apple Silicon 均通过依赖、类型检查、全部测试、production build、ad-hoc 重签名、`codesign --verify --deep --strict`、DMG `hdiutil verify` 和目标架构检查。
+- 最终失败仅发生在“Create GitHub prerelease with Mac package”：GitHub Actions 内置令牌调用 Releases API 返回 HTTP 403 `Resource not accessible by integration`，导致其后的 Actions Artifact 步骤被跳过。
+- 修复：Release 步骤改为 `continue-on-error`，Actions Artifact 恢复为强制门禁；下一次构建先保留已验证产物，再由本机已认证维护账号下载 Artifact、创建 prerelease 并上传。
+
 ## 4. 实体 Mac 阻塞项
 
 - Intel 与 Apple Silicon 的 DMG 安装、Gatekeeper 首次启动和覆盖安装。

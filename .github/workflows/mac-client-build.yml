@@ -230,6 +230,10 @@ jobs:
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub prerelease with Mac package
+        # Some repositories enforce a read-only GITHUB_TOKEN regardless of the
+        # workflow-level contents permission. Preserve the verified package as
+        # an Actions artifact and let an authenticated maintainer upload it.
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -266,7 +270,6 @@ jobs:
           gh release view "$TAG" --repo "${{ github.repository }}" --json url -q '.url'
 
       - name: Upload Actions artifact
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: QuizMate-Mac-${{ matrix.label }}-${{ github.run_number }}
