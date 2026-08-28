@@ -35,6 +35,25 @@ export interface ScreenshotResult {
   stage?: string
 }
 
+export interface CompressedScreenshotResult {
+  dataUrl: string
+  originalBytes: number
+  outputBytes: number
+  originalWidth: number
+  originalHeight: number
+  outputWidth: number
+  outputHeight: number
+  quality: number | null
+  compressionMs: number
+  waitMs: number
+  cacheHit: boolean
+}
+
+interface CachedCompression {
+  fingerprint: string
+  promise: Promise<Omit<CompressedScreenshotResult, 'waitMs' | 'cacheHit'>>
+}
+
 export class ScreenshotHelper {
   private configHelper: ConfigHelper
   private screenshotsDir: string = ''
@@ -43,6 +62,7 @@ export class ScreenshotHelper {
   private lastScreenshotTime: number = 0
   private processing: LightweightProcessingHelper | null = null
   private captureInFlight = false
+  private compressionCache = new Map<string, CachedCompression>()
 
   constructor(configHelper: ConfigHelper) {
     this.configHelper = configHelper
@@ -255,6 +275,7 @@ $bmp.Dispose()
     const latest = files[files.length - 1]
     try {
       fs.unlinkSync(latest)
+      this.compressionCache.delete(latest)
       return true
     } catch {
       return false
@@ -267,7 +288,9 @@ $bmp.Dispose()
     try {
       const files = fs.readdirSync(dir)
       for (const f of files) {
-        try { fs.unlinkSync(path.join(dir, f)) } catch {}
+        const filePath = path.join(dir, f)
+        try { fs.unlinkSync(filePath) } catch {}
+        this.compressionCache.delete(filePath)
       }
     } catch {}
   }
@@ -284,6 +307,7 @@ $bmp.Dispose()
         }
       } catch {}
     }
+    this.compressionCache.clear()
   }
 
   public async fileToBase64(filePath: string): Promise<string> {
@@ -306,7 +330,40 @@ $bmp.Dispose()
    * 找到第一个 <= 380KB 的结果. 保证 base64 后 < 510KB, JSON 整体 < 550KB,
    * 也兼容旧版 1MB 入口，同时尽可能保留文字清晰度。
    */
+  /** Start CPU-heavy image preparation as soon as capture finishes. */
+  public prewarmCompressedBase64(filePath: string): void {
+    setImmediate(() => {
+      void this.getCompressedScreenshot(filePath).catch(() => {})
+    })
+  }
+
   public async fileToCompressedBase64(filePath: string): Promise<string> {
+    return (await this.getCompressedScreenshot(filePath)).dataUrl
+  }
+
+  public async getCompressedScreenshot(filePath: string): Promise<CompressedScreenshotResult> {
+    const waitStartedAt = Date.now()
+    let fingerprint = ''
+    try {
+      const stat = fs.statSync(filePath)
+      fingerprint = `${stat.size}:${stat.mtimeMs}`
+    } catch {
+      fingerprint = 'missing'
+    }
+
+    const cached = this.compressionCache.get(filePath)
+    const cacheHit = !!cached && cached.fingerprint === fingerprint
+    const entry = cacheHit ? cached : {
+      fingerprint,
+      promise: this.compressScreenshot(filePath),
+    }
+    if (!cacheHit) this.compressionCache.set(filePath, entry)
+    const result = await entry.promise
+    return { ...result, cacheHit, waitMs: Date.now() - waitStartedAt }
+  }
+
+  private async compressScreenshot(filePath: string): Promise<Omit<CompressedScreenshotResult, 'waitMs' | 'cacheHit'>> {
+    const startedAt = Date.now()
     try {
       const originalBuf = fs.readFileSync(filePath)
       const originalError = this.validateImage(originalBuf)
@@ -316,6 +373,9 @@ $bmp.Dispose()
 
       let bestBuf: Buffer | null = null
       let bestInfo = ''
+      let bestWidth = size.width
+      let bestHeight = size.height
+      let bestQuality: number | null = null
 
       // 从高到低尝试, 找到第一个达标的; 若都不达标则保留最小的一个
       outer:
@@ -334,10 +394,16 @@ $bmp.Dispose()
           if (!bestBuf || jpeg.length < bestBuf.length) {
             bestBuf = jpeg
             bestInfo = info
+            bestWidth = resized.width
+            bestHeight = resized.height
+            bestQuality = q
           }
           if (jpeg.length <= COMPRESS_TARGET_BYTES) {
             bestBuf = jpeg
             bestInfo = info
+            bestWidth = resized.width
+            bestHeight = resized.height
+            bestQuality = q
             break outer
           }
         }
@@ -346,6 +412,7 @@ $bmp.Dispose()
       if (!bestBuf) {
         bestBuf = nativeImage.createFromBuffer(originalBuf).toJPEG(30)
         bestInfo = 'fallback q30'
+        bestQuality = 30
       }
 
       if (bestBuf.length < 4 || bestBuf[0] !== 0xff || bestBuf[1] !== 0xd8 || bestBuf[2] !== 0xff) {
@@ -354,10 +421,33 @@ $bmp.Dispose()
 
       const compressedSizeKB = Math.round(bestBuf.length / 1024)
       console.log(`[ScreenshotHelper] Compressed: ${originalSizeKB}KB -> ${compressedSizeKB}KB (${bestInfo})`)
-      return `data:image/jpeg;base64,${bestBuf.toString('base64')}`
+      return {
+        dataUrl: `data:image/jpeg;base64,${bestBuf.toString('base64')}`,
+        originalBytes: originalBuf.length,
+        outputBytes: bestBuf.length,
+        originalWidth: size.width,
+        originalHeight: size.height,
+        outputWidth: bestWidth,
+        outputHeight: bestHeight,
+        quality: bestQuality,
+        compressionMs: Date.now() - startedAt,
+      }
     } catch (e) {
       console.error('[ScreenshotHelper] Compression failed, falling back to raw base64:', e)
-      return this.fileToBase64(filePath)
+      const dataUrl = await this.fileToBase64(filePath)
+      let originalBytes = 0
+      try { originalBytes = fs.statSync(filePath).size } catch {}
+      return {
+        dataUrl,
+        originalBytes,
+        outputBytes: originalBytes,
+        originalWidth: 0,
+        originalHeight: 0,
+        outputWidth: 0,
+        outputHeight: 0,
+        quality: null,
+        compressionMs: Date.now() - startedAt,
+      }
     }
   }
 
@@ -384,6 +474,7 @@ $bmp.Dispose()
         const oldest = files.shift()
         if (oldest) {
           try { fs.unlinkSync(oldest.path) } catch {}
+          this.compressionCache.delete(oldest.path)
         }
       }
     } catch {}

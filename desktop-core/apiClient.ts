@@ -26,6 +26,18 @@ export interface PostActionOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   token?: string;
+  onTiming?: (timing: ApiRequestTiming) => void;
+}
+
+export interface ApiRequestTiming {
+  totalMs: number;
+  fetchMs?: number;
+  responseBodyMs?: number;
+  parseMs?: number;
+  requestBytes: number;
+  responseBytes?: number;
+  statusCode?: number;
+  serverTiming?: string;
 }
 
 export interface DesktopApiClient {
@@ -50,14 +62,24 @@ export function createDesktopApiClient(clientPlatform: DesktopClientPlatform): D
     input: Record<string, unknown> = {},
     options: PostActionOptions = {}
   ): Promise<ActionEnvelope<T>> {
+    const startedAt = Date.now();
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort('timeout'), options.timeoutMs ?? 60000);
     const onParentAbort = () => controller.abort((options.signal?.reason as any) || 'parent-abort');
     options.signal?.addEventListener('abort', onParentAbort, { once: true });
 
+    const body: Record<string, unknown> = { action, ...input };
+    if (options.token) body.accountToken = options.token;
+    const serializedBody = JSON.stringify(body);
+    const requestBytes = new TextEncoder().encode(serializedBody).byteLength;
+    let headersAt: number | undefined;
+    let bodyAt: number | undefined;
+    let parsedAt: number | undefined;
+    let responseBytes: number | undefined;
+    let statusCode: number | undefined;
+    let serverTiming: string | undefined;
+
     try {
-      const body: Record<string, unknown> = { action, ...input };
-      if (options.token) body.accountToken = options.token;
 
       const response = await fetch(endpoint, {
         method: 'POST',
@@ -66,11 +88,23 @@ export function createDesktopApiClient(clientPlatform: DesktopClientPlatform): D
           'X-Client-Version': toBusinessVersion(app.getVersion()),
           'X-Client-Platform': clientPlatform,
         },
-        body: JSON.stringify(body),
+        body: serializedBody,
         signal: controller.signal,
       });
+      headersAt = Date.now();
+      statusCode = response.status;
+      serverTiming = response.headers.get('server-timing')?.slice(0, 256) || undefined;
 
-      const envelope = (await response.json().catch(() => ({}))) as any;
+      const responseText = await response.text();
+      bodyAt = Date.now();
+      responseBytes = new TextEncoder().encode(responseText).byteLength;
+      let envelope: any = {};
+      try {
+        envelope = responseText ? JSON.parse(responseText) : {};
+      } catch {
+        envelope = {};
+      }
+      parsedAt = Date.now();
       if (!response.ok || envelope.ok !== true || envelope.data === undefined) {
         const message =
           typeof envelope.error === 'string' && envelope.error ? envelope.error : `请求失败（${response.status}）`;
@@ -91,6 +125,18 @@ export function createDesktopApiClient(clientPlatform: DesktopClientPlatform): D
       }
       throw new ApiError('网络连接失败，请检查网络后重试。', 'NETWORK_ERROR', 0, 'network');
     } finally {
+      try {
+        options.onTiming?.({
+          totalMs: Date.now() - startedAt,
+          fetchMs: headersAt === undefined ? undefined : headersAt - startedAt,
+          responseBodyMs: headersAt === undefined || bodyAt === undefined ? undefined : bodyAt - headersAt,
+          parseMs: bodyAt === undefined || parsedAt === undefined ? undefined : parsedAt - bodyAt,
+          requestBytes,
+          responseBytes,
+          statusCode,
+          serverTiming,
+        });
+      } catch {}
       clearTimeout(timer);
       options.signal?.removeEventListener('abort', onParentAbort);
     }

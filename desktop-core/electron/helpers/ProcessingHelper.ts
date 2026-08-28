@@ -7,7 +7,7 @@ import { ConfigHelper } from '../ConfigHelper'
 import { ProcessingMode } from '../../shared/shortcuts'
 import type { AnalysisStage, DiagnosticErrorPayload } from '../../shared/reliability'
 import { detectSupportedImageMime } from '../../shared/reliability'
-import { postAction, postActionEnvelope, ApiError } from '../apiClient'
+import { postAction, postActionEnvelope, ApiError, type ApiRequestTiming } from '../apiClient'
 import { DiagnosticLogger } from './DiagnosticLogger'
 
 export interface AnalyzeOptions {
@@ -257,10 +257,16 @@ export class LightweightProcessingHelper {
     const startedAt = Date.now()
     let currentStage: AnalysisStage = 'validate-image'
     let screenshotBytes = 0
+    let decodeMs = 0
+    let uploadTicketMs = 0
+    let uploadMs = 0
+    let analyzeApiTiming: ApiRequestTiming | undefined
     try {
       // Decode is part of the operation timeline so corrupt/empty input cannot
       // bypass the structured error payload and diagnostic log.
+      const decodeStartedAt = Date.now()
       const screenshot = decodeImageData(options.images[0])
+      decodeMs = Date.now() - decodeStartedAt
       screenshotBytes = screenshot.buffer.length
       console.log('[ProcessingHelper] analyze:', {
         mode: options.mode,
@@ -291,6 +297,7 @@ export class LightweightProcessingHelper {
         // 图片较大，走 OSS 上传
         console.log('[ProcessingHelper] OSS upload (image too large):', { bytes: screenshot.buffer.length })
         currentStage = 'upload-ticket'
+        const ticketStartedAt = Date.now()
         const upload = await postAction<ScreenshotUploadTicket>(
           endpoint,
           'createScreenshotUpload',
@@ -302,17 +309,20 @@ export class LightweightProcessingHelper {
           },
           { timeoutMs: 30_000, signal: this.currentController.signal }
         )
+        uploadTicketMs = Date.now() - ticketStartedAt
         const uploadTarget = new URL(upload.uploadUrl)
         if (uploadTarget.protocol !== 'https:' || !uploadTarget.hostname.endsWith('.aliyuncs.com')) {
           throw new ApiError('截图上传地址无效，请稍后重试。', 'INVALID_UPLOAD_URL', 502, 'response')
         }
         currentStage = 'upload'
+        const uploadStartedAt = Date.now()
         const uploadResponse = await fetch(upload.uploadUrl, {
           method: 'PUT',
           headers: { 'Content-Type': screenshot.contentType, ...(upload.headers || {}) },
           body: new Uint8Array(screenshot.buffer),
           signal: this.currentController.signal,
         })
+        uploadMs = Date.now() - uploadStartedAt
         if (!uploadResponse.ok) {
           throw new ApiError(`截图上传失败（${uploadResponse.status}）。`, 'SCREENSHOT_UPLOAD_FAILED', uploadResponse.status, 'response')
         }
@@ -331,7 +341,11 @@ export class LightweightProcessingHelper {
         endpoint,
         'analyze',
         analyzeInput,
-        { timeoutMs: this.configHelper.getAppConfig().httpTimeoutMs, signal: this.currentController.signal }
+        {
+          timeoutMs: this.configHelper.getAppConfig().httpTimeoutMs,
+          signal: this.currentController.signal,
+          onTiming: (timing) => { analyzeApiTiming = timing },
+        }
       )
       // data 已经是 envelope.data 的内容 (postActionEnvelope 已解包)
       currentStage = 'parse-result'
@@ -375,11 +389,24 @@ export class LightweightProcessingHelper {
         ...diagnosticContext,
         requestId,
         imageBytes: screenshot.buffer.length,
+        decodeMs,
+        uploadTicketMs,
+        uploadMs,
+        api: analyzeApiTiming,
         totalMs: Date.now() - startedAt,
         creditCost: result.creditCost,
         creditBalance: result.creditBalance,
       })
-      this.lastDiagnostic = { ...diagnosticContext, stage: 'complete', code: 'OK', totalMs: Date.now() - startedAt }
+      this.lastDiagnostic = {
+        ...diagnosticContext,
+        stage: 'complete',
+        code: 'OK',
+        decodeMs,
+        uploadTicketMs,
+        uploadMs,
+        api: analyzeApiTiming,
+        totalMs: Date.now() - startedAt,
+      }
 
       // Notify overlay with the same payload shape the renderer expects.
       // voice 模式不发送悬浮框事件（由 main.ts 调用 TTS 播报）
@@ -420,6 +447,10 @@ export class LightweightProcessingHelper {
         stage,
         message: error.message,
         imageBytes: screenshotBytes,
+        decodeMs,
+        uploadTicketMs,
+        uploadMs,
+        api: analyzeApiTiming,
         totalMs: Date.now() - startedAt,
       })
       const common = { ...diagnosticContext, action: 'retry' as const }

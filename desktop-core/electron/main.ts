@@ -808,6 +808,10 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('screenshot-added', { ...payload, ...operation });
       });
+      // macOS Retina screenshots are often several MB. Prepare the bounded JPEG
+      // after the capture result is delivered so the later Search action can
+      // reuse an in-flight/completed result instead of starting from zero.
+      if (IS_MAC) screenshotHelper.prewarmCompressedBase64(saved);
       return;
     }
 
@@ -868,10 +872,21 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
     attempt: 1,
   };
   const compressStartedAt = Date.now();
-  const b64 = await screenshotHelper.fileToCompressedBase64(latestShot);
+  const compressed = await screenshotHelper.getCompressedScreenshot(latestShot);
+  const b64 = compressed.dataUrl;
   processingHelper.recordDiagnosticEvent(b64 ? 'compress.success' : 'compress.error', {
     ...operation,
     totalMs: Date.now() - compressStartedAt,
+    compressionMs: compressed.compressionMs,
+    waitMs: compressed.waitMs,
+    cacheHit: compressed.cacheHit,
+    originalBytes: compressed.originalBytes,
+    outputBytes: compressed.outputBytes,
+    originalWidth: compressed.originalWidth,
+    originalHeight: compressed.originalHeight,
+    outputWidth: compressed.outputWidth,
+    outputHeight: compressed.outputHeight,
+    quality: compressed.quality,
   });
   if (!b64) {
     const errMsg = '截图读取失败';

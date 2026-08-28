@@ -30,4 +30,22 @@ describe('diagnostic sanitizer', () => {
       phase: 'reconnecting',
     });
   });
+
+  it('keeps aggregate latency metrics without retaining interview content', () => {
+    const sanitized = sanitizeDiagnosticDetails({
+      questionChars: 28,
+      contextChars: 19600,
+      slotWaitMs: 0,
+      api: { fetchMs: 160, responseBodyMs: 4, parseMs: 1, requestBytes: 25000 },
+      resumeText: 'private resume',
+      jobDescription: 'private JD',
+      recentTranscript: 'private question',
+    });
+    expect(sanitized).toEqual({
+      questionChars: 28,
+      contextChars: 19600,
+      slotWaitMs: 0,
+      api: { fetchMs: 160, responseBodyMs: 4, parseMs: 1, requestBytes: 25000 },
+    });
+  });
 });

@@ -150,3 +150,12 @@
   - 从最终 DMG 逐个读回 `Contents/MacOS/*` 宿主 entitlement，并保留签名、架构、macOS 26 启动存活和 dyld 日志门禁。
   - 构建 `2026.8.28005` 双架构隔离测试包，上传 `quizmate-cn/temp/mac-os26-signing-2026.8.28.5/`；实体 M 系列复测前保持阻塞，不更新官网或自动更新通道。
   - _Requirements: R10, R12_
+
+- [x] 21. 优化 Mac AI 首响应并复核系统截图能力边界
+  - 新建 `CHG-20260828-08`，记录基线、关键文件哈希、回滚步骤、系统截图附件结论和实体 Mac 性能阻塞项。
+  - Mac 截图成功并向 Renderer 交付状态后后台预压缩，搜题复用同一路径的进行中或已完成结果；删除、清空和队列裁剪同步失效内存缓存。
+  - 面试请求仅在 macOS 对重复的 JD、简历和最近对话做保真限长，短文本保持不变，超长文本保留首尾；不改变后端动作、并发上限、积分或超时协议。
+  - API 客户端增加请求头等待、响应体、JSON 解析、请求/响应字节和 `Server-Timing` 的可选计时；截图与面试日志只记录聚合量，不写截图、问题、JD、简历、答案、令牌或 URL。
+  - 保持 QuizMate 自有截图事务确定性隐藏悬浮窗；确认 macOS 26 系统截图的 ScreenCaptureKit 排除权属于捕获方，不加入私有 CGS、Hook、注入或第三方捕获规避。
+  - 完成 Mac/Windows Node/Web 类型检查、共享/MacProtection 测试、production build、diff/凭据/隐私静态门禁；实体 Mac 的 20 次 AI P50/P95 仍归任务 11，未执行前不发布。
+  - _Requirements: R9, R10, R11, R13_

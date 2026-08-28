@@ -11,7 +11,13 @@ import {
   isPermissionTrackUsable,
   getMacTccResetArguments,
 } from '../reliability';
-import { ASR_FINAL_COMMIT_MS, ASR_SILENCE_COMMIT_MS } from '../../interviewTranscript';
+import {
+  ASR_FINAL_COMMIT_MS,
+  ASR_SILENCE_COMMIT_MS,
+  INTERVIEW_CONTEXT_LIMITS,
+  limitContextPreservingEnds,
+  limitInterviewRequestContext,
+} from '../../interviewTranscript';
 
 describe('voice reliability state', () => {
   it('does not let a stale renderer generation overwrite the current session', () => {
@@ -39,6 +45,38 @@ describe('voice reliability state', () => {
   it('dispatches finalized interview questions within the client latency budget', () => {
     expect(ASR_FINAL_COMMIT_MS).toBeLessThanOrEqual(300);
     expect(ASR_SILENCE_COMMIT_MS).toBeGreaterThan(ASR_FINAL_COMMIT_MS);
+  });
+
+  it('keeps short interview context unchanged', () => {
+    expect(limitInterviewRequestContext({
+      jobDescription: '  Java 后端工程师  ',
+      resumeText: '三年微服务经验',
+      recentConversation: '请介绍一下最近的项目',
+    })).toEqual({
+      jobDescription: 'Java 后端工程师',
+      resumeText: '三年微服务经验',
+      recentConversation: '请介绍一下最近的项目',
+    });
+  });
+
+  it('limits repeated interview context while preserving both ends', () => {
+    const longText = `HEAD-${'中'.repeat(20000)}-TAIL`;
+    const limited = limitContextPreservingEnds(longText, INTERVIEW_CONTEXT_LIMITS.jobDescription)!;
+    expect(limited.length).toBe(INTERVIEW_CONTEXT_LIMITS.jobDescription);
+    expect(limited.startsWith('HEAD-')).toBe(true);
+    expect(limited.endsWith('-TAIL')).toBe(true);
+    expect(limited).toContain('中间内容已省略以加快响应');
+  });
+
+  it('caps the combined high-volume interview fields below the server maxima', () => {
+    const limited = limitInterviewRequestContext({
+      jobDescription: 'J'.repeat(8000),
+      resumeText: 'R'.repeat(20000),
+      recentConversation: 'C'.repeat(4000),
+    });
+    expect(limited.jobDescription).toHaveLength(INTERVIEW_CONTEXT_LIMITS.jobDescription);
+    expect(limited.resumeText).toHaveLength(INTERVIEW_CONTEXT_LIMITS.resumeText);
+    expect(limited.recentConversation).toHaveLength(INTERVIEW_CONTEXT_LIMITS.recentConversation);
   });
 
   it('rejects corrupt screenshot payloads before an AI request', () => {

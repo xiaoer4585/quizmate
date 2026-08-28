@@ -9,7 +9,7 @@ import { OverlayManager } from '../OverlayManager';
 import { TtsHelper } from './TtsHelper';
 import { ByteDanceTtsHelper } from './ByteDanceTtsHelper';
 import { RealtimeVoiceHelper } from './RealtimeVoiceHelper';
-import { postAction, ApiError } from '../apiClient';
+import { postAction, ApiError, type ApiRequestTiming } from '../apiClient';
 import {
   ASR_FINAL_COMMIT_MS,
   ASR_SILENCE_COMMIT_MS,
@@ -17,12 +17,15 @@ import {
   isLikelyInterviewQuestion,
   mergeFinalTranscript,
   mergeIncrementalTranscript,
+  limitInterviewRequestContext,
   normalizeTranscript,
 } from '../../shared/interviewTranscript';
 import type { VoiceHealthSnapshot } from '../../shared/reliability';
 import { createIdleVoiceSnapshot, isVoiceSessionActive } from '../../shared/reliability';
+import { DiagnosticLogger } from './DiagnosticLogger';
 
 const ACTION_INTERVIEW = 'generateInterviewAnswer';
+const interviewDiagnostics = new DiagnosticLogger();
 
 export interface InterviewContext {
   position?: string;
@@ -440,6 +443,7 @@ export class InterviewHelper {
   }
 
   private enqueueAnswer(question: string, taskId: string): Promise<void> {
+    const queuedAt = Date.now();
     const generation = this.answerGeneration;
     const expired = () => {
       this.updateTask(taskId, { status: 'error', error: '听写已停止，未提交该问题' });
@@ -455,7 +459,7 @@ export class InterviewHelper {
         this.releaseAnswerSlot();
         return;
       }
-      return this.generateAnswer(question, taskId).finally(() => this.releaseAnswerSlot());
+      return this.generateAnswer(question, taskId, Date.now() - queuedAt).finally(() => this.releaseAnswerSlot());
     });
   }
 
@@ -481,7 +485,7 @@ export class InterviewHelper {
   }
 
   /** 调后端 AI 生成答案（结合简历+岗位+公司） */
-  async generateAnswer(question: string, taskId?: string) {
+  async generateAnswer(question: string, taskId?: string, slotWaitMs = 0) {
     const cfg = this.configHelper.getAppConfig();
     const token = this.configHelper.getAuthToken();
     if (!token) return;
@@ -496,34 +500,78 @@ export class InterviewHelper {
 
     this.updateTask(taskId, { status: 'streaming' });
 
+    const prepareStartedAt = Date.now();
+    const boundedContext = process.platform === 'darwin'
+      ? limitInterviewRequestContext({
+          jobDescription: this.context.jobDescription,
+          resumeText: this.context.resumeText,
+          recentConversation: this.conversationContext,
+        })
+      : {
+          jobDescription: this.context.jobDescription,
+          resumeText: this.context.resumeText,
+          recentConversation: this.conversationContext,
+        };
+    const requestContext = {
+      position: this.context.position,
+      company: this.context.company,
+      jobDescription: boundedContext.jobDescription,
+      resumeText: boundedContext.resumeText,
+      language: this.context.language,
+      answerStyle: this.context.answerStyle,
+      recentConversation: boundedContext.recentConversation,
+    };
+    const contextChars = Object.values(requestContext).reduce(
+      (total, value) => total + (typeof value === 'string' ? value.length : 0),
+      0,
+    );
+    const requestPrepareMs = Date.now() - prepareStartedAt;
+    const requestStartedAt = Date.now();
+    let apiTiming: ApiRequestTiming | undefined;
+
     try {
       const data = await postAction<{ answer: string; keyPoints?: string[]; creditBalance?: number }>(
         cfg.apiBaseUrl,
         ACTION_INTERVIEW,
         {
           question,
-          context: {
-            position: this.context.position,
-            company: this.context.company,
-            jobDescription: this.context.jobDescription,
-            resumeText: this.context.resumeText,
-            language: this.context.language,
-            answerStyle: this.context.answerStyle,
-            recentConversation: this.conversationContext,
-          },
+          context: requestContext,
           deviceId: this.authManager.getDeviceId(),
         },
-        { timeoutMs: cfg.httpTimeoutMs, signal: requestController.signal, token }
+        {
+          timeoutMs: cfg.httpTimeoutMs,
+          signal: requestController.signal,
+          token,
+          onTiming: (timing) => { apiTiming = timing; },
+        }
       );
       const answer = data.answer || '暂无答案';
       this.lastAnswer = answer;
       this.updateTask(taskId, { status: 'done', answer, keyPoints: data.keyPoints });
       this.broadcast('interview:answer', { question, answer, keyPoints: data.keyPoints, taskId });
       if (typeof data.creditBalance === 'number') this.broadcast('credits-updated', data.creditBalance);
+      interviewDiagnostics.append('interview-audio', 'answer.request.success', {
+        questionChars: question.length,
+        contextChars,
+        requestPrepareMs,
+        slotWaitMs,
+        api: apiTiming,
+        totalMs: Date.now() - requestStartedAt,
+      });
     } catch (e) {
       const msg = e instanceof ApiError ? e.message : '答案生成失败';
       this.updateTask(taskId, { status: 'error', error: msg });
       this.broadcast('interview:answer', { question, error: msg, taskId });
+      interviewDiagnostics.append('interview-audio', 'answer.request.error', {
+        code: e instanceof ApiError ? e.code : 'UNKNOWN',
+        kind: e instanceof ApiError ? e.kind : 'unknown',
+        questionChars: question.length,
+        contextChars,
+        requestPrepareMs,
+        slotWaitMs,
+        api: apiTiming,
+        totalMs: Date.now() - requestStartedAt,
+      });
     } finally {
       this.answerRequests.delete(taskId);
     }
