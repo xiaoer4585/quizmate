@@ -56,6 +56,16 @@
 - 日志确认 `MAC_SIGNED_BUILD=true`、`MAC_NOTARIZE=true`，失败发生在证书导入前；`MAC_CSC_LINK` 被解释为 runner 本地路径，但该路径不存在。
 - 修复：工作流增加证书输入规范化和 PKCS#12 预检，支持原始 Base64、`base64:`、PKCS#12 Data URL、HTTPS 和 runner 本地文件；Base64 解码到 `$RUNNER_TEMP`，使用 `MAC_CSC_KEY_PASSWORD` 做 `openssl pkcs12 -noout` 验证，日志不输出证书或密码。
 
+### 第二次运行（证书 Secret 内容阻塞）
+
+- Run：`33158759642`
+- 标签：`mac-release-2026.8.28.3-r2`
+- 提交：`55b0cb082a7f5525196d91797072030e128329d5`
+- 两个架构均完成 checkout、依赖、类型检查和全部测试，随后在“Configure signing and notarization gate”一致失败。
+- 明确错误：`Decoded MAC_CSC_LINK is empty`。说明 Secret 非空，但内容不是可解码的 PKCS#12 Base64/URL/runner 文件；结合首轮“路径不存在”可确定当前值不是实际 `.p12` 文件内容。
+- 所需外部修复：把包含 Developer ID Application 私钥的 `.p12` 文件完整 Base64 内容写入 `MAC_CSC_LINK`，而不是本机文件路径、证书名称或占位符；`MAC_CSC_KEY_PASSWORD` 必须是导出该 `.p12` 时设置的密码。
+- 在 Secret 修正前，不降级生成 ad-hoc 包，避免再次出现 Gatekeeper/TCC 身份不稳定问题。
+
 ## 4. 实体 Mac 阻塞项
 
 - Intel 与 Apple Silicon 的 DMG 安装、Gatekeeper 首次启动和覆盖安装。
