@@ -37,4 +37,27 @@
 
 ## 3. macOS 26 CI 与 OSS
 
-待构建后补充。实体 macOS 26 安装启动仍须以用户复测为最终 PK-022 手工结论。
+### macOS 26 双架构构建
+
+- Run：`33167171455`。
+- 构建提交：`2546c160ac41fad43209909521c167f49b94e3db`。
+- Apple Silicon job `98835237694`：success，运行于 macOS 26 ARM runner。
+- Intel job `98835237549`：success，运行于 macOS 26 Intel runner。
+- 两个 job 均通过：依赖、Node/Web 类型检查、共享 9 用例、MacProtection 4 用例、production build、逐层 ad-hoc 重签、DMG `hdiutil verify`、目标架构、全部 Mach-O 严格 codesign、Team ID 一致性、最终 DMG 内应用启动存活 10 秒、SHA-256、OSS 直传。
+- 每个架构检查 16 个主程序/嵌套签名身份；TeamIdentifier 唯一值均为 ad-hoc 预期的 `not set`，不再保留 Electron Framework 的不同 Team ID。
+- 两个最终应用在 macOS 26 原生架构直接启动并持续存活 10 秒，日志无 `Library not loaded`、`different Team IDs`、`Namespace DYLD` 或 `dyld Code 1`。
+- 临时交付标签含短期 PUT 签名，OSS 上传和回读后已从构建仓库及本地删除。
+
+### 阿里云 OSS 隔离交付
+
+- Bucket：仅 `quizmate-cn`；前缀：`temp/mac-os26-signing-2026.8.28.4/`。
+- 未触碰 `quizmate-vip`、官网、`mac/latest-mac.yml`、正式下载对象或用户自动更新通道。
+
+| 架构 | 对象 | 大小 | SHA-256 | OSS ETag | 验证 |
+|---|---|---:|---|---|---|
+| Apple Silicon arm64 | `QuizMate-Mac-arm64-2026.8.28004.dmg` | `109,465,779` | `7fe2fb194ec08aa8283448418de366fc0fb08604d3b1009385d3c0565dcf67bd` | `BB75C23381FCCCAA4610C1819AD51E2F` | HEAD 200、签名 GET 200、完整流式回读 SHA-256 匹配 |
+| Intel x64 | `QuizMate-Mac-x64-2026.8.28004.dmg` | `117,902,148` | `d8a9d057aea2b3a82ac011529d435d7281d870cc2aa7b0cac5a26734072f96e0` | `187D89E3491CEF16F3BED38932A6CCF9` | HEAD 200、签名 GET 200、完整流式回读 SHA-256 匹配 |
+
+- 用户临时 GET 链接有效至 2026-09-04 19:31 +08:00；签名 URL 不写入 Git。
+- Actions 的 Node 20 强制切换 Node 24 与 `npm audit` 注册表返回 exit 1 为非阻断警告；构建、签名、启动和上传步骤全部成功。
+- 实体 M1 Pro / macOS 26.5.2 的安装启动仍须用户用本轮 arm64 包复测，PK-022 手工结论在复测前保持阻塞。
