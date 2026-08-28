@@ -19,6 +19,8 @@ import {
   mergeIncrementalTranscript,
   normalizeTranscript,
 } from '../../shared/interviewTranscript';
+import type { VoiceHealthSnapshot } from '../../shared/reliability';
+import { createIdleVoiceSnapshot, isVoiceSessionActive } from '../../shared/reliability';
 
 const ACTION_INTERVIEW = 'generateInterviewAnswer';
 
@@ -66,6 +68,7 @@ export class InterviewHelper {
   // 等待第一题完整生成（6~15 秒）才开始请求，是面试响应变慢的主要客户端原因。
   private static readonly MAX_CONCURRENT_ANSWERS = 2;
   private listening = false;
+  private voiceState: VoiceHealthSnapshot = createIdleVoiceSnapshot();
   private context: InterviewContext = { language: 'zh', answerStyle: 'concise' };
   private lastAnswer = '';
   private answerRequests = new Map<string, AbortController>();
@@ -97,7 +100,7 @@ export class InterviewHelper {
   }
 
   isListening() {
-    return this.listening;
+    return isVoiceSessionActive(this.voiceState);
   }
 
   // ===== 简历管理 =====
@@ -191,7 +194,7 @@ export class InterviewHelper {
 
   // ===== 监听控制 =====
   async start(context?: InterviewContext) {
-    if (this.listening) return;
+    if (isVoiceSessionActive(this.voiceState)) return;
     this.ensureContextAccountScope();
     if (context) this.setContext(context);
     else this.context = { ...this.context, ...this.configHelper.getInterviewContext() };
@@ -221,7 +224,10 @@ export class InterviewHelper {
         await this.realtimeVoice.start(
           (text, isFinal) => this.handleRealtimeTranscript(text, isFinal),
           (error) => this.broadcast('interview:transcript', { error }),
-          { audioMode: this.context.audioMode || 'demo' }
+          {
+            audioMode: this.context.audioMode || 'demo',
+            onState: (snapshot) => this.handleVoiceState(snapshot),
+          }
         );
       } catch (e) {
         this.listening = false;
@@ -238,7 +244,7 @@ export class InterviewHelper {
       title: '面试助手已开启',
       content: `正在监听面试官提问…\n${resumeInfo}\n语音识别：火山引擎实时语音模型`,
     });
-    this.broadcast('interview:transcript', { status: 'started', context: this.context });
+    this.broadcast('interview:transcript', { status: 'started', context: this.context, voiceState: this.voiceState });
   }
 
   stop() {
@@ -260,6 +266,8 @@ export class InterviewHelper {
     // end-of-stream packet in that path, otherwise it can race with the new
     // WebSocket and terminate the fresh session.
     this.realtimeVoice?.stop(flushPending);
+    this.voiceState = createIdleVoiceSnapshot();
+    this.broadcast('interview:stateChanged', this.voiceState);
     this.broadcast('interview:transcript', { status: 'stopped' });
     if (pendingTranscript) void this.onTranscript(pendingTranscript);
   }
@@ -283,6 +291,30 @@ export class InterviewHelper {
 
   getRealtimeVoiceConfig() {
     return this.realtimeVoice?.getPublicConfig() ?? { provider: 'unavailable' };
+  }
+
+  getVoiceState(): VoiceHealthSnapshot {
+    return this.realtimeVoice?.getHealthSnapshot() ?? { ...this.voiceState };
+  }
+
+  async retryVoice(): Promise<VoiceHealthSnapshot> {
+    if (!this.realtimeVoice) throw new Error('实时语音模块不可用');
+    await this.realtimeVoice.retry();
+    return this.getVoiceState();
+  }
+
+  copyVoiceDiagnostic(): boolean {
+    return this.realtimeVoice?.copyDiagnosticSummary() ?? false;
+  }
+
+  openVoiceDiagnosticFolder(): Promise<boolean> {
+    return this.realtimeVoice?.openDiagnosticFolder() ?? Promise.resolve(false);
+  }
+
+  private handleVoiceState(snapshot: VoiceHealthSnapshot): void {
+    this.voiceState = { ...snapshot };
+    this.listening = isVoiceSessionActive(snapshot);
+    this.broadcast('interview:stateChanged', snapshot);
   }
 
   /** 重听上一个面试答案 */

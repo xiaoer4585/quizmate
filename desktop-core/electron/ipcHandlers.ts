@@ -10,6 +10,7 @@ import { ShortcutsHelper } from './ShortcutsHelper';
 import { TtsHelper } from './helpers/TtsHelper';
 import { InterviewHelper } from './helpers/InterviewHelper';
 import { UpdateChecker } from './UpdateChecker';
+import { PermissionOnboardingHelper } from './helpers/PermissionOnboardingHelper';
 import { createCreditOrder, queryCreditOrder } from './PaymentService';
 import type { ProcessingMode } from '../shared/shortcuts';
 import { v4 as uuid } from 'uuid';
@@ -24,6 +25,7 @@ export interface AppContext {
   tts: TtsHelper | null;
   interview: InterviewHelper | null;
   updateChecker: UpdateChecker | null;
+  permissions: PermissionOnboardingHelper | null;
 }
 
 export interface OverlayControls {
@@ -81,6 +83,12 @@ export function registerIpcHandlers(
   });
   ipcMain.handle('guide:getState', () => ctx.configHelper.getOnboardingGuideState());
   ipcMain.handle('guide:setCompleted', (_e, completed?: boolean) => ctx.configHelper.setOnboardingGuideCompleted(completed !== false));
+  ipcMain.handle('permissions:getState', () => ctx.permissions!.getState());
+  ipcMain.handle('permissions:requestMicrophone', () => ctx.permissions!.requestMicrophone());
+  ipcMain.handle('permissions:requestScreen', () => ctx.permissions!.requestScreen());
+  ipcMain.handle('permissions:testSystemAudio', () => ctx.permissions!.testSystemAudio());
+  ipcMain.handle('permissions:complete', (_e, skipped?: boolean) => ctx.permissions!.complete(skipped === true));
+  ipcMain.handle('permissions:openSettings', (_e, kind: 'microphone' | 'screen') => ctx.permissions!.openSettings(kind));
 
   // ===== 笔试助手 =====
   ipcMain.handle('exam:captureAndAnalyze', async () => {
@@ -95,6 +103,9 @@ export function registerIpcHandlers(
     ctx.configHelper.updateClientSettings({ trainingModeEnabled: enabled });
   });
   ipcMain.handle('exam:checkCredits', () => ctx.processing!.checkCredits());
+  ipcMain.handle('exam:getLastDiagnostic', () => ctx.processing!.getLastDiagnosticSummary());
+  ipcMain.handle('exam:copyDiagnostic', () => ctx.processing!.copyLastDiagnosticSummary());
+  ipcMain.handle('exam:openDiagnosticFolder', () => ctx.processing!.openDiagnosticFolder());
 
   // ===== 快捷键 =====
   ipcMain.handle('shortcuts:getBindings', () => controls.shortcutsHelper.getBindings());
@@ -219,6 +230,10 @@ export function registerIpcHandlers(
   ipcMain.handle('interview:clearTasks', () => { ctx.interview!.clearTasks(); return true; });
   // 实时语音模型配置
   ipcMain.handle('interview:getVoiceConfig', () => ctx.interview!.getRealtimeVoiceConfig());
+  ipcMain.handle('interview:getState', () => ctx.interview!.getVoiceState());
+  ipcMain.handle('interview:retry', () => ctx.interview!.retryVoice());
+  ipcMain.handle('interview:copyDiagnostic', () => ctx.interview!.copyVoiceDiagnostic());
+  ipcMain.handle('interview:openDiagnosticFolder', () => ctx.interview!.openVoiceDiagnosticFolder());
 
   // ===== 系统/外链 =====
   ipcMain.handle('system:openExternal', (_e, url: string) => {

@@ -1,17 +1,21 @@
 // Processing helper - calls the unified `analyze` action on study-auth-api.
 // Mirrors the original desktop-client: one-shot request, credits deducted server-side.
 // No SSE streaming - the server returns the full result in a single response.
-import { app, BrowserWindow } from 'electron'
+import { BrowserWindow } from 'electron'
 import crypto from 'crypto'
-import fs from 'fs'
-import path from 'path'
 import { ConfigHelper } from '../ConfigHelper'
 import { ProcessingMode } from '../../shared/shortcuts'
+import type { AnalysisStage, DiagnosticErrorPayload } from '../../shared/reliability'
+import { detectSupportedImageMime } from '../../shared/reliability'
 import { postAction, postActionEnvelope, ApiError } from '../apiClient'
+import { DiagnosticLogger } from './DiagnosticLogger'
 
 export interface AnalyzeOptions {
   images: string[] // base64 data URLs
   mode: ProcessingMode
+  operationId?: string
+  requestId?: string
+  attempt?: number
 }
 
 export interface AnalyzeResult {
@@ -37,10 +41,14 @@ export interface CreditStatus {
 
 function decodeImageData(dataUrl: string): { buffer: Buffer; contentType: string } {
   const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/is.exec(dataUrl.trim())
-  const contentType = match?.[1]?.toLowerCase() || 'image/jpeg'
+  if (dataUrl.trimStart().startsWith('data:') && !match) {
+    throw new ApiError('截图格式不受支持，请重新截图。', 'UNSUPPORTED_SCREENSHOT_FORMAT', 400, 'response')
+  }
   const base64 = (match?.[2] || dataUrl).replace(/\s+/g, '')
   const buffer = Buffer.from(base64, 'base64')
   if (!buffer.length) throw new ApiError('截图数据为空，请重新截图。', 'INVALID_SCREENSHOT', 400, 'response')
+  const contentType = detectSupportedImageMime(buffer)
+  if (!contentType) throw new ApiError('截图数据损坏，请重新截图。', 'INVALID_SCREENSHOT', 400, 'response')
   return { buffer, contentType }
 }
 
@@ -113,33 +121,26 @@ function finiteNumber(value: unknown): number | undefined {
   return Number.isFinite(num) ? num : undefined
 }
 
+const diagnostics = new DiagnosticLogger()
+
 function appendDiagnosticLog(event: string, details: Record<string, unknown>): void {
-  try {
-    const logDir = path.join(app.getPath('userData'), 'logs')
-    fs.mkdirSync(logDir, { recursive: true })
-    const safeDetails = { ...details }
-    delete safeDetails.accountToken
-    delete safeDetails.token
-    delete safeDetails.screenshot
-    delete safeDetails.screenshotUrl
-    fs.appendFileSync(
-      path.join(logDir, 'exam-analysis.log'),
-      `${new Date().toISOString()} ${event} ${JSON.stringify(safeDetails)}\n`,
-      'utf8'
-    )
-  } catch {
-    // Diagnostics must never break the user flow.
-  }
+  diagnostics.append('exam-analysis', event, details)
 }
 
-function errorPayload(error: string, code: string, stage: string): Record<string, string> {
-  return { error, code, stage }
+function errorPayload(
+  error: string,
+  code: string,
+  stage: AnalysisStage | string,
+  context: Partial<Pick<DiagnosticErrorPayload, 'action' | 'operationId' | 'requestId' | 'attempt'>> = {},
+): DiagnosticErrorPayload {
+  return { error, code, stage, ...context }
 }
 
 export class LightweightProcessingHelper {
   private configHelper: ConfigHelper
   private mainWindow: BrowserWindow | null = null
   private currentController: AbortController | null = null
+  private lastDiagnostic: Record<string, unknown> = {}
 
   constructor(configHelper: ConfigHelper) {
     this.configHelper = configHelper
@@ -228,39 +229,47 @@ export class LightweightProcessingHelper {
    * keeps working without changes.
    */
   public async analyze(options: AnalyzeOptions): Promise<AnalyzeResult> {
+    const operationId = options.operationId || crypto.randomUUID()
+    const attempt = Math.max(1, Math.trunc(options.attempt || 1))
+    const requestId = options.requestId || `desktop-${crypto.randomUUID()}`
+    const diagnosticContext = { operationId, requestId, attempt }
     const token = this.configHelper.getAuthToken()
     if (!token) {
-      const payload = errorPayload('未登录，请先登录账号。', 'AUTH_REQUIRED', 'auth')
+      const payload = errorPayload('未登录，请先登录账号。', 'AUTH_REQUIRED', 'auth', { ...diagnosticContext, action: 'none' })
       appendDiagnosticLog('analyze.reject', payload)
+      this.lastDiagnostic = payload
       this.sendEvent('processing-unauthorized', payload)
       return { success: false, error: '未登录', errorCode: 'AUTH_REQUIRED', stage: 'auth' }
     }
     if (!options.images || options.images.length === 0) {
-      const payload = errorPayload('请先截图后再搜题。', 'NO_SCREENSHOTS', 'input')
+      const payload = errorPayload('请先截图后再搜题。', 'NO_SCREENSHOTS', 'validate-image', { ...diagnosticContext, action: 'retry' })
       appendDiagnosticLog('analyze.reject', payload)
+      this.lastDiagnostic = payload
       this.sendEvent('processing-no-screenshots', payload)
       return { success: false, error: '没有截图', errorCode: 'NO_SCREENSHOTS', stage: 'input' }
     }
 
-    this.sendEvent('initial-start', { mode: options.mode, imageCount: options.images.length })
+    this.sendEvent('initial-start', { mode: options.mode, imageCount: options.images.length, ...diagnosticContext })
 
-    // Use the first screenshot; upload the binary to OSS before calling analyze.
-    const screenshot = decodeImageData(options.images[0])
     const deviceId = this.configHelper.getUserConfig().clientSettings?.deviceId || ''
 
-    console.log('[ProcessingHelper] analyze:', {
-      mode: options.mode,
-      imageCount: options.images.length,
-      imageBytes: screenshot.buffer.length,
-      hasToken: !!token,
-      deviceId: deviceId || '(empty)',
-      apiBaseUrl: this.configHelper.getAppConfig().apiBaseUrl,
-    })
-
     this.currentController = new AbortController()
-    const requestId = `desktop-${crypto.randomUUID()}`
     const startedAt = Date.now()
+    let currentStage: AnalysisStage = 'validate-image'
+    let screenshotBytes = 0
     try {
+      // Decode is part of the operation timeline so corrupt/empty input cannot
+      // bypass the structured error payload and diagnostic log.
+      const screenshot = decodeImageData(options.images[0])
+      screenshotBytes = screenshot.buffer.length
+      console.log('[ProcessingHelper] analyze:', {
+        mode: options.mode,
+        imageCount: options.images.length,
+        imageBytes: screenshotBytes,
+        hasToken: !!token,
+        deviceId: deviceId || '(empty)',
+        apiBaseUrl: this.configHelper.getAppConfig().apiBaseUrl,
+      })
       const endpoint = this.configHelper.getAppConfig().apiBaseUrl
 
       // 混合上传策略：压缩后小于 2MB 直接传 base64，跳过 OSS 中转（节省 1-4 秒）
@@ -281,6 +290,7 @@ export class LightweightProcessingHelper {
       } else {
         // 图片较大，走 OSS 上传
         console.log('[ProcessingHelper] OSS upload (image too large):', { bytes: screenshot.buffer.length })
+        currentStage = 'upload-ticket'
         const upload = await postAction<ScreenshotUploadTicket>(
           endpoint,
           'createScreenshotUpload',
@@ -296,6 +306,7 @@ export class LightweightProcessingHelper {
         if (uploadTarget.protocol !== 'https:' || !uploadTarget.hostname.endsWith('.aliyuncs.com')) {
           throw new ApiError('截图上传地址无效，请稍后重试。', 'INVALID_UPLOAD_URL', 502, 'response')
         }
+        currentStage = 'upload'
         const uploadResponse = await fetch(upload.uploadUrl, {
           method: 'PUT',
           headers: { 'Content-Type': screenshot.contentType, ...(upload.headers || {}) },
@@ -315,6 +326,7 @@ export class LightweightProcessingHelper {
         }
       }
 
+      currentStage = 'analyze-request'
       const { data, envelope } = await postActionEnvelope<Record<string, unknown>>(
         endpoint,
         'analyze',
@@ -322,13 +334,15 @@ export class LightweightProcessingHelper {
         { timeoutMs: this.configHelper.getAppConfig().httpTimeoutMs, signal: this.currentController.signal }
       )
       // data 已经是 envelope.data 的内容 (postActionEnvelope 已解包)
+      currentStage = 'parse-result'
       const structured = parseStructuredAnswer(data)
       const answer = structured.answer || (structured.code ? '参考代码' : firstText(data, ['answer', 'result', 'content', 'text', 'raw', 'note']))
       const explanation = structured.explanation || firstText(data, ['explanation', 'analysis', 'reasoning', 'detail'])
       const code = structured.code
       if (!answer && !explanation) {
-        const payload = errorPayload('模型没有返回有效结果。为避免误判，请刷新积分确认；当前请求不会在客户端重复扣分。', 'EMPTY_RESULT', 'parse')
+        const payload = errorPayload('模型没有返回有效结果。当前截图已保留，可直接重试。', 'EMPTY_RESULT', 'parse-result', { ...diagnosticContext, action: 'retry' })
         appendDiagnosticLog('analyze.error', { ...payload, requestId, imageBytes: screenshot.buffer.length, totalMs: Date.now() - startedAt })
+        this.lastDiagnostic = payload
         this.sendEvent('solution-stream-error', payload)
         return { success: false, error: '模型没有返回有效结果', errorCode: 'EMPTY_RESULT', stage: 'parse' }
       }
@@ -358,12 +372,14 @@ export class LightweightProcessingHelper {
       }
       console.log('[ProcessingHelper] analyze timing:', { requestId, imageBytes: screenshot.buffer.length, totalMs: Date.now() - startedAt })
       appendDiagnosticLog('analyze.success', {
+        ...diagnosticContext,
         requestId,
         imageBytes: screenshot.buffer.length,
         totalMs: Date.now() - startedAt,
         creditCost: result.creditCost,
         creditBalance: result.creditBalance,
       })
+      this.lastDiagnostic = { ...diagnosticContext, stage: 'complete', code: 'OK', totalMs: Date.now() - startedAt }
 
       // Notify overlay with the same payload shape the renderer expects.
       // voice 模式不发送悬浮框事件（由 main.ts 调用 TTS 播报）
@@ -380,43 +396,52 @@ export class LightweightProcessingHelper {
           creditCost: result.creditCost,
           usedKnowledge: result.usedKnowledge,
           knowledgeHits: result.knowledgeHits,
+          ...diagnosticContext,
           rawContent: JSON.stringify(data, null, 2),
           raw: data,
         })
       }
       return result
-    } catch (e: any) {
-      console.error('[ProcessingHelper] analyze error:', e?.message || e, e?.code ? `(code: ${e.code})` : '')
+    } catch (e: unknown) {
+      const error = e instanceof Error ? e : new Error(String(e))
+      console.error('[ProcessingHelper] analyze error:', error.message, e instanceof ApiError && e.code ? `(code: ${e.code})` : '')
       const code = e instanceof ApiError ? e.code : 'UNKNOWN'
-      const stage = e instanceof ApiError
+      const stage: AnalysisStage = e instanceof ApiError
         ? e.kind === 'auth' ? 'auth'
           : e.kind === 'credits' ? 'credits'
             : e.kind === 'timeout' ? 'timeout'
               : e.kind === 'network' ? 'network'
-                : 'response'
-        : 'unknown'
+                : currentStage
+        : currentStage || 'unknown'
       appendDiagnosticLog('analyze.error', {
+        ...diagnosticContext,
         requestId,
         code,
         stage,
-        message: e?.message || String(e),
-        imageBytes: screenshot.buffer.length,
+        message: error.message,
+        imageBytes: screenshotBytes,
         totalMs: Date.now() - startedAt,
       })
+      const common = { ...diagnosticContext, action: 'retry' as const }
       if (e instanceof ApiError) {
         if (e.kind === 'auth') {
-          this.sendEvent('processing-unauthorized', errorPayload(e.message, e.code, 'auth'))
+          this.lastDiagnostic = errorPayload(e.message, e.code, 'auth', { ...diagnosticContext, action: 'none' })
+          this.sendEvent('processing-unauthorized', this.lastDiagnostic)
         } else if (e.kind === 'credits') {
-          this.sendEvent('out-of-credits', errorPayload(e.message, e.code, 'credits'))
+          this.lastDiagnostic = errorPayload(e.message, e.code, 'credits', { ...diagnosticContext, action: 'none' })
+          this.sendEvent('out-of-credits', this.lastDiagnostic)
         } else if (e.kind === 'timeout') {
-          this.sendEvent('solution-stream-error', errorPayload('分析超时，未扣积分。', e.code, 'timeout'))
+          this.lastDiagnostic = errorPayload('分析超时，截图已保留且不会由客户端重复扣分。', e.code, 'timeout', common)
+          this.sendEvent('solution-stream-error', this.lastDiagnostic)
         } else {
-          this.sendEvent('solution-stream-error', errorPayload(e.message, e.code, stage))
+          this.lastDiagnostic = errorPayload(e.message, e.code, stage, common)
+          this.sendEvent('solution-stream-error', this.lastDiagnostic)
         }
         return { success: false, error: e.message, errorCode: e.code, stage }
       }
-      this.sendEvent('solution-stream-error', errorPayload(e.message || String(e), 'UNKNOWN', 'unknown'))
-      return { success: false, error: e.message || String(e), errorCode: 'UNKNOWN', stage: 'unknown' }
+      this.lastDiagnostic = errorPayload(error.message, 'UNKNOWN', stage, common)
+      this.sendEvent('solution-stream-error', this.lastDiagnostic)
+      return { success: false, error: error.message, errorCode: 'UNKNOWN', stage }
     } finally {
       this.currentController = null
     }
@@ -428,6 +453,22 @@ export class LightweightProcessingHelper {
       try { this.currentController.abort('user-cancelled') } catch {}
       this.currentController = null
     }
+  }
+
+  public getLastDiagnosticSummary(): Record<string, unknown> {
+    return { ...this.lastDiagnostic }
+  }
+
+  public copyLastDiagnosticSummary(): boolean {
+    return diagnostics.copySummary({ kind: 'exam-analysis', ...this.lastDiagnostic })
+  }
+
+  public openDiagnosticFolder(): Promise<boolean> {
+    return diagnostics.openFolder()
+  }
+
+  public recordDiagnosticEvent(event: string, details: Record<string, unknown>): void {
+    appendDiagnosticLog(event, details)
   }
 
   /** Back-compat shim: the renderer may still call createTask + startStreaming. */

@@ -6,9 +6,10 @@
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
 //   - 托盘忙碌图标 + voice 模式进度通知
 // Windows 客户端只保留笔试助手与面试助手；求职流程由免费浏览器插件提供。
-import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, Menu, session, systemPreferences, Notification } from 'electron';
+import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, Menu, session, Notification } from 'electron';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { pathToFileURL } from 'url';
 import { ConfigHelper } from './ConfigHelper';
 import { AuthManager } from './AuthManager';
@@ -22,6 +23,7 @@ import { TtsHelper } from './helpers/TtsHelper';
 import { ByteDanceTtsHelper } from './helpers/ByteDanceTtsHelper';
 import { SapiVoiceHelper } from './helpers/SapiVoiceHelper';
 import { RealtimeVoiceHelper } from './helpers/RealtimeVoiceHelper';
+import { PermissionOnboardingHelper } from './helpers/PermissionOnboardingHelper';
 import { applyAllProtections, applyAntiCapture, readContentProtection, startProtectionWatchdog, ProtectionWatchdog, ProtectionResult } from './helpers/protection';
 import { InterviewHelper } from './helpers/InterviewHelper';
 import { OverlayManager } from './OverlayManager';
@@ -92,6 +94,7 @@ let sapiVoiceHelper: SapiVoiceHelper | null = null; // Windows 专属离线识�
 let realtimeVoiceHelper: RealtimeVoiceHelper;
 let interviewHelper: InterviewHelper;
 let updateChecker: UpdateChecker;
+let permissionOnboardingHelper: PermissionOnboardingHelper;
 let trayManager: TrayManager | null = null;
 
 // 共享上下文
@@ -104,6 +107,7 @@ export const ctx = {
   tts: null as TtsHelper | null,
   interview: null as InterviewHelper | null,
   updateChecker: null as UpdateChecker | null,
+  permissions: null as PermissionOnboardingHelper | null,
 };
 
 // ===== 工具函数 =====
@@ -247,11 +251,8 @@ async function configurePlatformPermissions(): Promise<void> {
   const iconPath = getAppIconPath();
   if (iconPath && app.dock) app.dock.setIcon(iconPath);
 
-  try {
-    await systemPreferences.askForMediaAccess('microphone');
-  } catch (error) {
-    console.warn('[Main] Microphone permission request failed:', error);
-  }
+  // Do not trigger a context-free TCC prompt here. The first-launch wizard
+  // explains each capability and runs a real input/capture probe immediately.
 }
 
 // ===== 主窗口（配置/控制台，等同于原考试的 configWindow） =====
@@ -323,6 +324,8 @@ function createMainWindow() {
 let overlayProtectionWatchdog: ProtectionWatchdog | null = null;
 let interviewProtectionWatchdog: ProtectionWatchdog | null = null;
 let screenshotInFlight = false;
+interface AnalysisOperationState { operationId: string; requestId: string; attempt: number }
+let pendingAnalysisOperation: AnalysisOperationState | null = null;
 
 function createOverlayWindow() {
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
@@ -724,6 +727,12 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
 
 // ===== 截图→分析编排（完全沿用原考试插件流程） =====
 async function handleScreenshot(isExtra: boolean): Promise<void> {
+  const operation: AnalysisOperationState = {
+    operationId: crypto.randomUUID(),
+    requestId: `desktop-${crypto.randomUUID()}`,
+    attempt: 1,
+  };
+  const captureStartedAt = Date.now();
   if (screenshotInFlight) {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('screenshot-error', { error: '截图正在处理中，请稍候', code: 'CAPTURE_IN_FLIGHT', stage: 'capture' });
@@ -734,8 +743,9 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
   try {
     const appConfig = configHelper.getAppConfig();
     BrowserWindow.getAllWindows().forEach((win) => {
-      if (!win.isDestroyed()) win.webContents.send('screenshot-started', { isExtra });
+      if (!win.isDestroyed()) win.webContents.send('screenshot-started', { isExtra, ...operation });
     });
+    processingHelper.recordDiagnosticEvent('capture.start', { ...operation, isExtra });
 
     // 截图前隐藏悬浮窗(以窗口实际可见性为准, 不依赖模式与状态标志)，
     // 确保自身截图在任何情况下都不包含悬浮框--即使防捕获亲和性失效也兜底
@@ -747,10 +757,10 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     const overlayProtectionState = state.overlayWindow && !state.overlayWindow.isDestroyed()
       ? readContentProtection(state.overlayWindow)
       : null;
-    const needsTemporaryHide = overlayWasVisible && overlayProtectionState !== true;
+    const needsTemporaryHide = overlayWasVisible;
     if (needsTemporaryHide) {
       hideOverlay();
-      await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 500)));
+      await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 180)));
     }
 
     let result: ScreenshotResult;
@@ -776,13 +786,23 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
         throw new Error('截图已保存，但读取失败');
       }
       const payload = { path: saved, base64, isExtra };
+      pendingAnalysisOperation = operation;
+      processingHelper.recordDiagnosticEvent('capture.success', {
+        ...operation,
+        isExtra,
+        totalMs: Date.now() - captureStartedAt,
+        overlayWasVisible,
+        overlayTemporarilyHidden: needsTemporaryHide,
+        contentProtectionReported: overlayProtectionState,
+      });
       BrowserWindow.getAllWindows().forEach((win) => {
-        if (!win.isDestroyed()) win.webContents.send('screenshot-added', payload);
+        if (!win.isDestroyed()) win.webContents.send('screenshot-added', { ...payload, ...operation });
       });
       return;
     }
 
-    const payload = { error: result.error || '截图失败，请稍后重试', code: result.code || 'CAPTURE_FAILED', stage: result.stage || 'capture' };
+    const payload = { error: result.error || '截图失败，请稍后重试', code: result.code || 'CAPTURE_FAILED', stage: result.stage || 'capture', action: 'retry', ...operation };
+    processingHelper.recordDiagnosticEvent('capture.error', { ...payload, totalMs: Date.now() - captureStartedAt });
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('screenshot-error', payload);
     });
@@ -795,7 +815,8 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    const payload = { error: message || '截图失败，请稍后重试', code: 'SCREENSHOT_PIPELINE_FAILED', stage: 'save' };
+    const payload = { error: message || '截图失败，请稍后重试', code: 'SCREENSHOT_PIPELINE_FAILED', stage: 'save-queue', action: 'retry', ...operation };
+    processingHelper.recordDiagnosticEvent('capture.error', { ...payload, totalMs: Date.now() - captureStartedAt });
     console.error('[Main] Screenshot pipeline failed:', error);
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('screenshot-error', payload);
@@ -831,7 +852,17 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
 
   // 只取最新一张截图发给 AI
   const latestShot = queue[queue.length - 1];
+  const operation = pendingAnalysisOperation ?? {
+    operationId: crypto.randomUUID(),
+    requestId: `desktop-${crypto.randomUUID()}`,
+    attempt: 1,
+  };
+  const compressStartedAt = Date.now();
   const b64 = await screenshotHelper.fileToCompressedBase64(latestShot);
+  processingHelper.recordDiagnosticEvent(b64 ? 'compress.success' : 'compress.error', {
+    ...operation,
+    totalMs: Date.now() - compressStartedAt,
+  });
   if (!b64) {
     const errMsg = '截图读取失败';
     if (procMode === 'voice') {
@@ -849,12 +880,19 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   setTrayBusy(true);
 
   // 直接调用 analyze 获取完整结果
-  const result = await processingHelper.analyze({ images: [b64], mode });
+  const result = await processingHelper.analyze({ images: [b64], mode, ...operation });
   if (result.success) {
     // 仅在成功后清空历史截图队列；失败时保留截图，允许用户直接重试并便于诊断。
     screenshotHelper.clearAll();
     state.overlayWindow?.webContents.send('screenshots-cleared');
+    pendingAnalysisOperation = null;
   } else {
+    const outcomeUnknown = result.stage === 'timeout' || result.stage === 'network';
+    pendingAnalysisOperation = {
+      ...operation,
+      requestId: outcomeUnknown ? operation.requestId : `desktop-${crypto.randomUUID()}`,
+      attempt: operation.attempt + 1,
+    };
     console.warn('[Main] analyze failed, keeping screenshot queue for retry:', {
       code: result.errorCode,
       stage: result.stage,
@@ -1266,6 +1304,9 @@ async function initializeApp(): Promise<void> {
 
   realtimeVoiceHelper = new RealtimeVoiceHelper(configHelper);
 
+  permissionOnboardingHelper = new PermissionOnboardingHelper(configHelper);
+  ctx.permissions = permissionOnboardingHelper;
+
   interviewHelper = new InterviewHelper(configHelper, authManager, overlayAdapter as unknown as OverlayManager, ttsHelper, byteDanceTtsHelper, realtimeVoiceHelper);
   ctx.interview = interviewHelper;
 
@@ -1350,7 +1391,11 @@ async function initializeApp(): Promise<void> {
 }
 
 // ===== 单实例 + 生命周期 =====
-const gotLock = app.requestSingleInstanceLock();
+// Local smoke tests may run beside an already installed stable client. Keep
+// production single-instance behavior unchanged and allow only an explicit
+// unpackaged test process to use an isolated user-data directory.
+const gotLock = (!app.isPackaged && process.env.QUIZMATE_ALLOW_MULTI_INSTANCE === '1')
+  || app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {

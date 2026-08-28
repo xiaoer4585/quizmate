@@ -13,8 +13,15 @@
     "baseUrl": "../../desktop-core",
     "paths": {
       "@/*": ["src/*"],
-      "@shared/*": ["shared/*"]
+      "@shared/*": ["shared/*"],
+      "react": ["../mac客户端/QuizMate-Mac/node_modules/@types/react/index.d.ts"],
+      "react/*": ["../mac客户端/QuizMate-Mac/node_modules/@types/react/*"],
+      "react-dom": ["../mac客户端/QuizMate-Mac/node_modules/@types/react-dom/index.d.ts"],
+      "react-dom/*": ["../mac客户端/QuizMate-Mac/node_modules/@types/react-dom/*"],
+      "qrcode": ["../mac客户端/QuizMate-Mac/node_modules/@types/qrcode/index.d.ts"],
+      "*": ["node_modules/*", "../mac客户端/QuizMate-Mac/node_modules/*"]
     }
   },
-  "include": ["../../desktop-core/src", "../../desktop-core/shared", "../../desktop-core/interviewTranscript.ts"]
+  "include": ["../../desktop-core/src", "../../desktop-core/shared", "../../desktop-core/interviewTranscript.ts"],
+  "exclude": ["../../desktop-core/shared/__tests__"]
 }

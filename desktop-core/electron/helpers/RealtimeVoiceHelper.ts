@@ -10,6 +10,9 @@ import os from 'os';
 import path from 'path';
 import { ConfigHelper } from '../ConfigHelper';
 import { postAction } from '../apiClient';
+import type { VoiceHealthSnapshot } from '../../shared/reliability';
+import { createIdleVoiceSnapshot, isVoiceHealthSnapshot, mergeVoiceHealthSnapshot } from '../../shared/reliability';
+import { DiagnosticLogger } from './DiagnosticLogger';
 
 // 火山引擎语音服务认证信息 - 默认值（可被 OSS 配置覆盖）
 const DEFAULT_ASR_WSS_URL = 'wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async';
@@ -29,7 +32,15 @@ export class RealtimeVoiceHelper {
   private onTextCallback: ((text: string, isFinal: boolean) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
-  private running = false;
+  private desiredRunning = false;
+  private generation = 0;
+  private healthSnapshot: VoiceHealthSnapshot = createIdleVoiceSnapshot();
+  private onStateCallback: ((snapshot: VoiceHealthSnapshot) => void) | null = null;
+  private pollFailures = 0;
+  private diagnostics = new DiagnosticLogger();
+  private lastHealthLogAt = 0;
+  private hiddenWindowRecoveryCount = 0;
+  private recoveryInFlight = false;
   private initialized = false;
   private initializing: Promise<void> | null = null;
   private asrConfig: AsrConfig = {
@@ -123,6 +134,13 @@ export class RealtimeVoiceHelper {
       },
     });
 
+    this.audioWindow.webContents.on('render-process-gone', (_event, details) => {
+      this.failHiddenWindow('AUDIO_RENDERER_GONE', `音频采集进程异常退出（${details.reason}）`);
+    });
+    this.audioWindow.webContents.on('did-fail-load', (_event, code, description) => {
+      this.failHiddenWindow('AUDIO_WINDOW_LOAD_FAILED', `音频采集窗口加载失败（${code}: ${description}）`);
+    });
+
     // 注入 ASR 配置到隐藏窗口，写入临时文件用 file:// 加载
     // data: URL 不是安全上下文，navigator.mediaDevices 为 undefined 会导致麦克风采集失败
     const configScript = `window.__ASR_CONFIG__ = ${JSON.stringify({ wsUrl: this.asrConfig.wsUrl, model: this.asrConfig.model })};`;
@@ -136,21 +154,44 @@ export class RealtimeVoiceHelper {
   async start(
     onText: (text: string, isFinal: boolean) => void,
     onError?: (error: string) => void,
-    options: { audioMode?: 'demo' | 'formal' } = {}
+    options: { audioMode?: 'demo' | 'formal'; onState?: (snapshot: VoiceHealthSnapshot) => void; recovery?: boolean } = {}
   ): Promise<void> {
     await this.init();
     if (!this.audioWindow || this.audioWindow.isDestroyed()) {
       throw new Error('实时语音识别窗口未准备完成');
     }
-    if (this.running) return;
+    if (this.desiredRunning) return;
     this.onTextCallback = onText;
     this.onErrorCallback = onError ?? null;
-    this.running = true;
+    this.onStateCallback = options.onState ?? null;
+    if (!options.recovery) this.hiddenWindowRecoveryCount = 0;
+    this.desiredRunning = true;
+    this.generation += 1;
+    const sessionId = crypto.randomUUID();
 
     // 启动隐藏窗口中的识别
     const audioMode = options.audioMode === 'formal' ? 'formal' : 'demo';
-    await this.audioWindow.webContents.executeJavaScript(`void startListening(${JSON.stringify(audioMode)}); true`, true).catch((e) => {
-      this.running = false;
+    this.updateHealth({
+      sessionId,
+      generation: this.generation,
+      desiredRunning: true,
+      phase: 'authorizing',
+      audioMode,
+      systemAudio: 'starting',
+      microphone: audioMode === 'demo' ? 'starting' : 'not-used',
+      audioGraph: 'starting',
+      asrSocket: 'starting',
+      reconnectAttempt: 0,
+      code: undefined,
+      message: '正在请求音频权限',
+      action: 'none',
+    });
+    this.diagnostics.append('interview-audio', 'session.start', { sessionId, generation: this.generation, audioMode });
+    await this.audioWindow.webContents.executeJavaScript(
+      `void startListening(${JSON.stringify(audioMode)}, ${JSON.stringify(sessionId)}, ${this.generation}); true`,
+      true,
+    ).catch((e) => {
+      this.desiredRunning = false;
       console.error('[RealtimeVoice] start error:', e);
       throw new Error(e?.message || '启动语音识别失败');
     });
@@ -161,21 +202,23 @@ export class RealtimeVoiceHelper {
         state: string;
         stage: string;
         error: string;
+        health?: unknown;
       };
-      if (startup.state === 'open') break;
+      if (isVoiceHealthSnapshot(startup.health)) this.updateHealth(startup.health);
+      if (this.healthSnapshot.phase === 'listening') break;
       if (startup.error) {
-        this.running = false;
+        this.desiredRunning = false;
         await this.audioWindow.webContents.executeJavaScript('stopListening(false)', true).catch(() => {});
         throw new Error(startup.error);
       }
       if (startup.state === 'closed' || startup.state === 'error') {
-        this.running = false;
+        this.desiredRunning = false;
         throw new Error('火山引擎实时语音连接被拒绝，请检查专属 API Key、Resource-Id 和模型授权');
       }
       await new Promise((resolve) => setTimeout(resolve, 100));
     }
-    if (!this.running || Date.now() >= deadline) {
-      this.running = false;
+    if (!this.desiredRunning || Date.now() >= deadline) {
+      this.desiredRunning = false;
       this.audioWindow.webContents.executeJavaScript('stopListening()', true).catch(() => {});
       const startup = await this.audioWindow.webContents.executeJavaScript('getStartupState()', true).catch(() => null);
       const stage = startup && startup.stage ? startup.stage : 'connect-asr';
@@ -190,10 +233,13 @@ export class RealtimeVoiceHelper {
 
     // 轮询获取识别结果
     this.pollTimer = setInterval(() => {
-      if (!this.running || !this.audioWindow || this.audioWindow.isDestroyed()) return;
+      if (!this.desiredRunning || !this.audioWindow || this.audioWindow.isDestroyed()) return;
       this.audioWindow.webContents
-        .executeJavaScript('getPendingResults()', true)
-        .then((results: Array<{ text: string; isFinal: boolean; error?: string }> | null) => {
+        .executeJavaScript('({ results: getPendingResults(), health: getVoiceHealthSnapshot() })', true)
+        .then((payload: { results?: Array<{ text: string; isFinal: boolean; error?: string }>; health?: unknown } | null) => {
+          this.pollFailures = 0;
+          if (isVoiceHealthSnapshot(payload?.health)) this.updateHealth(payload.health);
+          const results = payload?.results;
           if (!results || results.length === 0) return;
           for (const r of results) {
             if (r.error) {
@@ -203,24 +249,65 @@ export class RealtimeVoiceHelper {
             }
           }
         })
-        .catch(() => {});
+        .catch((error) => {
+          this.pollFailures += 1;
+          this.diagnostics.append('interview-audio', 'poll.error', {
+            sessionId: this.healthSnapshot.sessionId,
+            generation: this.generation,
+            pollFailures: this.pollFailures,
+            message: error instanceof Error ? error.message : String(error),
+          });
+          if (this.pollFailures >= 3) {
+            this.failHiddenWindow('AUDIO_WINDOW_UNRESPONSIVE', '音频采集窗口无响应，请点击重试');
+          }
+        });
     }, 200);
   }
 
   /** 停止识别 */
   stop(graceful = true): void {
-    this.running = false;
+    this.desiredRunning = false;
+    this.updateHealth({ desiredRunning: false, phase: 'stopping', message: '正在停止听写', action: 'none' });
     if (this.pollTimer) {
       clearInterval(this.pollTimer);
       this.pollTimer = null;
     }
-    this.audioWindow?.webContents.executeJavaScript(`stopListening(${graceful ? 'true' : 'false'})`, true).catch(() => {});
+    this.audioWindow?.webContents.executeJavaScript(`stopListening(${graceful ? 'true' : 'false'})`, true)
+      .catch(() => {})
+      .finally(() => this.updateHealth(createIdleVoiceSnapshot()));
     this.onTextCallback = null;
     this.onErrorCallback = null;
+    this.onStateCallback = null;
   }
 
   isRunning(): boolean {
-    return this.running;
+    return this.desiredRunning;
+  }
+
+  getHealthSnapshot(): VoiceHealthSnapshot {
+    return { ...this.healthSnapshot };
+  }
+
+  async retry(): Promise<void> {
+    if (!this.onTextCallback) throw new Error('当前没有可恢复的听写会话');
+    const onText = this.onTextCallback;
+    const onError = this.onErrorCallback ?? undefined;
+    const onState = this.onStateCallback ?? undefined;
+    const audioMode = this.healthSnapshot.audioMode;
+    this.stop(false);
+    if (this.audioWindow?.isDestroyed()) {
+      this.audioWindow = null;
+      this.initialized = false;
+    }
+    await this.start(onText, onError, { audioMode, onState });
+  }
+
+  copyDiagnosticSummary(): boolean {
+    return this.diagnostics.copySummary({ kind: 'interview-audio', ...this.healthSnapshot });
+  }
+
+  openDiagnosticFolder(): Promise<boolean> {
+    return this.diagnostics.openFolder();
   }
 
   /** 获取面试系统提示词（从 OSS 配置读取） */
@@ -240,6 +327,99 @@ export class RealtimeVoiceHelper {
     }
     this.audioWindow = null;
     this.initialized = false;
+  }
+
+  private updateHealth(next: VoiceHealthSnapshot | Partial<VoiceHealthSnapshot>): void {
+    const previous = this.healthSnapshot;
+    const candidate = mergeVoiceHealthSnapshot(this.healthSnapshot, next, this.generation);
+    if (candidate === this.healthSnapshot) return;
+    const changed = JSON.stringify(candidate) !== JSON.stringify(this.healthSnapshot);
+    this.healthSnapshot = candidate;
+    if (!changed) return;
+    this.onStateCallback?.({ ...candidate });
+    const materialChange = previous.sessionId !== candidate.sessionId
+      || previous.phase !== candidate.phase
+      || previous.systemAudio !== candidate.systemAudio
+      || previous.microphone !== candidate.microphone
+      || previous.audioGraph !== candidate.audioGraph
+      || previous.asrSocket !== candidate.asrSocket
+      || previous.reconnectAttempt !== candidate.reconnectAttempt
+      || previous.code !== candidate.code
+      || previous.action !== candidate.action;
+    if (!materialChange && Date.now() - this.lastHealthLogAt < 10_000) return;
+    this.lastHealthLogAt = Date.now();
+    this.diagnostics.append('interview-audio', 'state.changed', {
+      sessionId: candidate.sessionId,
+      generation: candidate.generation,
+      phase: candidate.phase,
+      systemAudio: candidate.systemAudio,
+      microphone: candidate.microphone,
+      audioGraph: candidate.audioGraph,
+      asrSocket: candidate.asrSocket,
+      reconnectAttempt: candidate.reconnectAttempt,
+      code: candidate.code,
+      message: candidate.message,
+    });
+  }
+
+  private failHiddenWindow(code: string, message: string): void {
+    if (!this.desiredRunning) return;
+    if (this.hiddenWindowRecoveryCount < 1 && !this.recoveryInFlight && this.onTextCallback) {
+      this.hiddenWindowRecoveryCount += 1;
+      this.updateHealth({
+        phase: 'recovering',
+        audioGraph: 'recovering',
+        asrSocket: 'recovering',
+        code,
+        message: '音频采集窗口异常，正在自动重建…',
+        action: 'none',
+      });
+      void this.recoverHiddenWindow();
+      return;
+    }
+    this.updateHealth({
+      phase: 'action-required',
+      audioGraph: 'failed',
+      asrSocket: 'failed',
+      code,
+      message,
+      action: 'retry',
+    });
+    this.onErrorCallback?.(message);
+  }
+
+  private async recoverHiddenWindow(): Promise<void> {
+    if (this.recoveryInFlight || !this.onTextCallback) return;
+    this.recoveryInFlight = true;
+    const onText = this.onTextCallback;
+    const onError = this.onErrorCallback ?? undefined;
+    const onState = this.onStateCallback ?? undefined;
+    const audioMode = this.healthSnapshot.audioMode;
+    this.desiredRunning = false;
+    if (this.pollTimer) {
+      clearInterval(this.pollTimer);
+      this.pollTimer = null;
+    }
+    if (this.audioWindow && !this.audioWindow.isDestroyed()) this.audioWindow.destroy();
+    this.audioWindow = null;
+    this.initialized = false;
+    try {
+      await this.start(onText, onError, { audioMode, onState, recovery: true });
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      this.updateHealth({
+        desiredRunning: true,
+        phase: 'action-required',
+        audioGraph: 'failed',
+        asrSocket: 'failed',
+        code: 'AUDIO_WINDOW_RECOVERY_FAILED',
+        message: detail,
+        action: 'retry',
+      });
+      onError?.(detail);
+    } finally {
+      this.recoveryInFlight = false;
+    }
   }
 }
 
@@ -267,8 +447,47 @@ let needsWavHeader = true;
 let keepSession = false;
 let reconnectTimer = null;
 let reconnectDelay = 500;
+let reconnectAttempt = 0;
+let socketGeneration = 0;
 let startupStage = 'idle';
 let startupError = '';
+let currentSessionId = '';
+let currentGeneration = 0;
+let currentAudioMode = 'demo';
+let audioLevelTimer = null;
+let sourceAnalysers = [];
+let healthState = {
+  sessionId: '', generation: 0, desiredRunning: false, phase: 'idle', audioMode: 'demo',
+  systemAudio: 'unavailable', microphone: 'unavailable', audioGraph: 'unavailable',
+  asrSocket: 'unavailable', reconnectAttempt: 0, action: 'none', updatedAt: Date.now()
+};
+
+function updateHealth(patch) {
+  healthState = { ...healthState, ...patch, updatedAt: Date.now() };
+}
+
+function getVoiceHealthSnapshot() {
+  return { ...healthState };
+}
+
+function trackHealth(track, kind) {
+  track.addEventListener('ended', () => {
+    if (!keepSession) return;
+    updateHealth({
+      phase: 'action-required',
+      [kind]: 'failed',
+      code: kind === 'systemAudio' ? 'SYSTEM_AUDIO_TRACK_ENDED' : 'MICROPHONE_TRACK_ENDED',
+      message: kind === 'systemAudio' ? '系统音频共享已结束，请重新选择共享源' : '麦克风音轨已结束，请检查权限后重试',
+      action: kind === 'systemAudio' ? 'reselect-source' : 'retry'
+    });
+  });
+  track.addEventListener('mute', () => {
+    if (keepSession) updateHealth({ [kind]: 'degraded', message: '音轨暂时静音，仍在保持会话' });
+  });
+  track.addEventListener('unmute', () => {
+    if (keepSession) updateHealth({ [kind]: 'healthy', message: '音轨已恢复' });
+  });
+}
 
 // ===== 二进制协议构造 =====
 function makeHeader(msgType, flags, serialization, compression) {
@@ -477,14 +696,23 @@ async function parseResponse(data) {
 // user is not asked for microphone/screen permission again.
 function scheduleSocketReconnect() {
   if (!keepSession || reconnectTimer || !audioContext || !processorNode) return;
+  if (reconnectAttempt >= 6) {
+    startupError = '语音识别连续重连失败，请检查网络后点击重试';
+    updateHealth({ phase: 'action-required', asrSocket: 'failed', reconnectAttempt, code: 'ASR_RECONNECT_EXHAUSTED', message: startupError, action: 'retry' });
+    pendingResults.push({ text: '', isFinal: false, error: startupError });
+    return;
+  }
   const delay = reconnectDelay;
   reconnectDelay = Math.min(reconnectDelay * 2, 5000);
+  reconnectAttempt += 1;
+  updateHealth({ phase: 'reconnecting', asrSocket: 'recovering', reconnectAttempt, message: '语音识别连接中断，正在自动重连…', action: 'none' });
   reconnectTimer = setTimeout(async () => {
     reconnectTimer = null;
     if (!keepSession || !audioContext || !processorNode) return;
     const asrWsUrl = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.wsUrl) || 'wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async';
     const asrModel = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.model) || 'bigmodel';
     const reconnectWs = new WebSocket(asrWsUrl);
+    const reconnectGeneration = ++socketGeneration;
     reconnectWs.binaryType = 'arraybuffer';
     ws = reconnectWs;
     seqNum = 1;
@@ -492,35 +720,40 @@ function scheduleSocketReconnect() {
     audioSendQueue = Promise.resolve();
 
     reconnectWs.onopen = async () => {
-      if (ws !== reconnectWs || !keepSession) return;
+      if (ws !== reconnectWs || reconnectGeneration !== socketGeneration || !keepSession) return;
       try {
         await sendFullClientRequest({
           user: { uid: 'interview_helper' },
           audio: { format: 'wav', codec: 'raw', rate: 16000, bits: 16, channel: 1 },
           request: { model_name: asrModel || 'bigmodel', enable_itn: true, enable_punc: true, enable_ddc: true, show_utterances: true, enable_nonstream: false },
         });
-        reconnectDelay = 500;
         isListening = true;
+        updateHealth({ phase: 'reconnecting', asrSocket: 'recovering', message: '语音识别已重新连接，正在确认数据通道…', action: 'none' });
       } catch (error) {
         console.error('[ASR] Reconnect full request error:', error);
         try { reconnectWs.close(); } catch {}
       }
     };
     reconnectWs.onmessage = async (e) => {
-      if (ws !== reconnectWs) return;
+      if (ws !== reconnectWs || reconnectGeneration !== socketGeneration) return;
       const result = await parseResponse(e.data);
       if (!result) return;
       if (result.type === 'error') {
         pendingResults.push({ text: '', isFinal: false, error: result.error });
-      } else if (result.type === 'response' && result.text) {
-        pendingResults.push({ text: result.text, isFinal: result.isFinal });
+      } else if (result.type === 'response') {
+        reconnectDelay = 500;
+        reconnectAttempt = 0;
+        updateHealth({ phase: 'listening', asrSocket: 'healthy', reconnectAttempt: 0, code: undefined, message: '听写已恢复', action: 'none' });
+        if (result.text) pendingResults.push({ text: result.text, isFinal: result.isFinal });
       }
     };
     reconnectWs.onerror = () => {
-      if (ws === reconnectWs) pendingResults.push({ text: '', isFinal: false, error: '语音识别服务连接失败，正在重连…' });
+      if (ws === reconnectWs && reconnectGeneration === socketGeneration) {
+        updateHealth({ phase: 'reconnecting', asrSocket: 'recovering', message: '语音识别服务连接失败，正在重连…' });
+      }
     };
     reconnectWs.onclose = () => {
-      if (ws !== reconnectWs) return;
+      if (ws !== reconnectWs || reconnectGeneration !== socketGeneration) return;
       isListening = false;
       if (keepSession) scheduleSocketReconnect();
     };
@@ -528,31 +761,40 @@ function scheduleSocketReconnect() {
 }
 
 // ===== 麦克风采集 + WebSocket ASR =====
-async function startListening(audioMode = 'demo') {
-  if (isListening) return;
+async function startListening(audioMode = 'demo', sessionId = '', generation = 0) {
+  if (keepSession) return;
   keepSession = true;
+  currentSessionId = sessionId;
+  currentGeneration = generation;
+  currentAudioMode = audioMode;
   reconnectDelay = 500;
+  reconnectAttempt = 0;
   pendingResults = [];
   startupStage = 'capture-system';
   startupError = '';
   seqNum = 1;
   audioSendQueue = Promise.resolve();
   needsWavHeader = true;
+  updateHealth({
+    sessionId, generation, desiredRunning: true, phase: 'authorizing', audioMode,
+    systemAudio: 'starting', microphone: audioMode === 'demo' ? 'starting' : 'not-used',
+    audioGraph: 'starting', asrSocket: 'starting', reconnectAttempt: 0,
+    code: undefined, message: '正在请求音频权限', action: 'none'
+  });
 
   try {
     // Formal mode captures only meeting/speaker audio. Demo mode mixes microphone and speaker audio.
     captureStreams = [];
     let systemCaptureError = '';
     try {
-      // Chromium requires a display video source to establish loopback audio.
-      // The main process selects it automatically; discard the video track immediately.
+      // Chromium/macOS may bind loopback audio lifetime to the display carrier
+      // video track. Keep every carrier track alive until stopListening().
       const systemStream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true });
-      systemStream.getVideoTracks().forEach(track => {
-        systemStream.removeTrack(track);
-        track.stop();
-      });
       if (systemStream.getAudioTracks().length > 0) {
+        systemStream.getAudioTracks().forEach(track => trackHealth(track, 'systemAudio'));
+        systemStream.getVideoTracks().forEach(track => trackHealth(track, 'systemAudio'));
         captureStreams.push(systemStream);
+        updateHealth({ systemAudio: 'healthy', phase: 'preparing', message: '系统音频轨已建立' });
       } else {
         systemStream.getTracks().forEach(track => track.stop());
         systemCaptureError = '未获取到电脑声音，请在系统设置中允许 QuizMate 录制系统音频';
@@ -568,7 +810,9 @@ async function startListening(audioMode = 'demo') {
       const microphoneStream = await navigator.mediaDevices.getUserMedia({
         audio: { channelCount: 1, echoCancellation: true, noiseSuppression: true, autoGainControl: true }
       });
+      microphoneStream.getAudioTracks().forEach(track => trackHealth(track, 'microphone'));
       captureStreams.push(microphoneStream);
+      updateHealth({ microphone: 'healthy', phase: 'preparing', message: '麦克风音轨已建立' });
       if (systemCaptureError) {
         pendingResults.push({ text: '', isFinal: false, error: '未能采集系统音频，演示模式已自动改用麦克风：' + systemCaptureError });
       }
@@ -577,6 +821,20 @@ async function startListening(audioMode = 'demo') {
     startupStage = 'prepare-audio';
     // 2. 创建 AudioContext (浏览器实际采样率可能是48k，我们做重采样)
     audioContext = new AudioContext();
+    audioContext.onstatechange = async () => {
+      if (!keepSession || !audioContext) return;
+      if (audioContext.state === 'running') {
+        updateHealth({ audioGraph: 'healthy', phase: ws && ws.readyState === WebSocket.OPEN ? 'listening' : healthState.phase, message: '音频处理已恢复' });
+        return;
+      }
+      updateHealth({ phase: 'recovering', audioGraph: 'recovering', code: 'AUDIO_CONTEXT_' + String(audioContext.state).toUpperCase(), message: '音频处理被系统暂停，正在恢复…', action: 'none' });
+      try {
+        await audioContext.resume();
+        if (audioContext.state === 'running') updateHealth({ audioGraph: 'healthy', code: undefined, message: '音频处理已恢复', action: 'none' });
+      } catch (error) {
+        updateHealth({ phase: 'action-required', audioGraph: 'failed', code: 'AUDIO_CONTEXT_RESUME_FAILED', message: '音频处理恢复失败，请点击重试', action: 'retry' });
+      }
+    };
     const actualSampleRate = audioContext.sampleRate;
     console.log('[ASR] AudioContext sample rate:', actualSampleRate);
 
@@ -594,6 +852,30 @@ async function startListening(audioMode = 'demo') {
       mediaStream = mixedDestination.stream;
       sourceNode = audioContext.createMediaStreamSource(mediaStream);
     }
+    sourceAnalysers = sourceNodes.map((node) => {
+      const analyser = audioContext.createAnalyser();
+      analyser.fftSize = 256;
+      node.connect(analyser);
+      return analyser;
+    });
+    audioLevelTimer = setInterval(() => {
+      if (!keepSession || sourceAnalysers.length === 0) return;
+      const levels = sourceAnalysers.map((analyser) => {
+        const bins = new Uint8Array(analyser.fftSize);
+        analyser.getByteTimeDomainData(bins);
+        let sum = 0;
+        for (const value of bins) { const normalized = (value - 128) / 128; sum += normalized * normalized; }
+        return Math.sqrt(sum / bins.length);
+      });
+      const systemLevel = levels[0] || 0;
+      const microphoneLevel = audioMode === 'demo' ? (levels[1] || 0) : 0;
+      const active = Math.max(systemLevel, microphoneLevel) > 0.004;
+      updateHealth({
+        lastSystemAudioLevel: systemLevel,
+        lastMicrophoneLevel: microphoneLevel,
+        ...(active ? { lastAudioFrameAt: Date.now() } : {})
+      });
+    }, 500);
     // 4096 samples buffer
     processorNode = audioContext.createScriptProcessor(4096, 1, 1);
 
@@ -601,12 +883,14 @@ async function startListening(audioMode = 'demo') {
     const asrWsUrl = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.wsUrl) || 'wss://openspeech.bytedance.com/api/v3/plan/sauc/bigmodel_async';
     const asrModel = (window.__ASR_CONFIG__ && window.__ASR_CONFIG__.model) || 'bigmodel';
     startupStage = 'connect-asr';
+    updateHealth({ phase: 'connecting', audioGraph: 'healthy', asrSocket: 'starting', message: '正在连接语音识别服务' });
     ws = new WebSocket(asrWsUrl);
     const initialWs = ws;
+    const initialGeneration = ++socketGeneration;
     initialWs.binaryType = 'arraybuffer';
 
     initialWs.onopen = async () => {
-      if (ws !== initialWs || !keepSession) return;
+      if (ws !== initialWs || initialGeneration !== socketGeneration || !keepSession) return;
       console.log('[ASR] WebSocket connected to:', asrWsUrl);
       try {
         await sendFullClientRequest({
@@ -629,6 +913,7 @@ async function startListening(audioMode = 'demo') {
         });
         isListening = true;
         startupStage = 'open';
+        updateHealth({ phase: 'listening', audioGraph: 'healthy', asrSocket: 'healthy', reconnectAttempt: 0, code: undefined, message: '正在听写', action: 'none' });
       } catch (error) {
         console.error('[ASR] Full request error:', error);
         pendingResults.push({ text: '', isFinal: false, error: '语音识别初始化请求发送失败' });
@@ -672,7 +957,7 @@ async function startListening(audioMode = 'demo') {
     };
 
     initialWs.onmessage = async (e) => {
-      if (ws !== initialWs) return;
+      if (ws !== initialWs || initialGeneration !== socketGeneration) return;
       const result = await parseResponse(e.data);
       if (!result) return;
       if (result.type === 'error') {
@@ -687,14 +972,14 @@ async function startListening(audioMode = 'demo') {
     };
 
     initialWs.onerror = (e) => {
-      if (ws !== initialWs) return;
+      if (ws !== initialWs || initialGeneration !== socketGeneration) return;
       console.error('[ASR] WebSocket error:', e);
       startupError = '语音识别服务连接失败，请检查网络和后台模型配置';
-      pendingResults.push({ text: '', isFinal: false, error: startupError });
+      updateHealth({ phase: 'reconnecting', asrSocket: 'recovering', message: startupError, action: 'none' });
     };
 
     initialWs.onclose = (e) => {
-      if (ws !== initialWs) return;
+      if (ws !== initialWs || initialGeneration !== socketGeneration) return;
       console.log('[ASR] WebSocket closed:', e.code, e.reason);
       if (keepSession) scheduleSocketReconnect();
       isListening = false;
@@ -711,17 +996,31 @@ async function startListening(audioMode = 'demo') {
       startupError = '实时语音启动失败：' + detail;
     }
     keepSession = false;
+    updateHealth({
+      desiredRunning: false, phase: 'action-required',
+      systemAudio: healthState.systemAudio === 'starting' ? 'failed' : healthState.systemAudio,
+      microphone: healthState.microphone === 'starting' ? 'failed' : healthState.microphone,
+      audioGraph: 'failed', asrSocket: 'failed', code: 'VOICE_START_FAILED',
+      message: startupError, action: startupStage === 'capture-system' ? 'reselect-source' : 'retry'
+    });
     pendingResults.push({ text: '', isFinal: false, error: startupError });
   }
 }
 
 async function stopListening(graceful = true) {
   keepSession = false;
+  updateHealth({ desiredRunning: false, phase: 'stopping', message: '正在停止听写', action: 'none' });
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
   }
   isListening = false;
+  if (audioLevelTimer) {
+    clearInterval(audioLevelTimer);
+    audioLevelTimer = null;
+  }
+  sourceAnalysers.forEach(analyser => { try { analyser.disconnect(); } catch {} });
+  sourceAnalysers = [];
 
   // 发送最后一包（负包，标记结束）
   if (graceful && ws && ws.readyState === WebSocket.OPEN) {
@@ -751,6 +1050,7 @@ async function stopListening(graceful = true) {
   captureStreams.forEach(stream => stream.getTracks().forEach(track => track.stop()));
   captureStreams = [];
   if (audioContext) {
+    audioContext.onstatechange = null;
     try { audioContext.close(); } catch {}
     audioContext = null;
   }
@@ -763,6 +1063,13 @@ async function stopListening(graceful = true) {
       ws = null;
     }
   }, 1500);
+  updateHealth({
+    sessionId: '', generation: currentGeneration, desiredRunning: false, phase: 'idle', audioMode: currentAudioMode,
+    systemAudio: 'unavailable', microphone: 'unavailable', audioGraph: 'unavailable',
+    asrSocket: 'unavailable', reconnectAttempt: 0, lastAudioFrameAt: undefined,
+    lastSystemAudioLevel: undefined, lastMicrophoneLevel: undefined,
+    code: undefined, message: undefined, action: 'none'
+  });
 }
 
 function getPendingResults() {
@@ -783,6 +1090,7 @@ function getStartupState() {
     state: getConnectionState(),
     stage: startupStage,
     error: startupError,
+    health: getVoiceHealthSnapshot(),
   };
 }
 </script>

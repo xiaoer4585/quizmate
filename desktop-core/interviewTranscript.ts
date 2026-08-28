@@ -1,5 +1,7 @@
-export const ASR_SILENCE_COMMIT_MS = 1200;
-export const ASR_FINAL_COMMIT_MS = 900;
+// A finalized utterance should dispatch to the interview model within 300ms.
+// Interim text still uses a longer silence window to avoid splitting a question.
+export const ASR_SILENCE_COMMIT_MS = 900;
+export const ASR_FINAL_COMMIT_MS = 180;
 
 export function normalizeTranscript(text: string): string {
   return text.replace(/::__id__\d+$/, '').replace(/\s+/g, ' ').trim();

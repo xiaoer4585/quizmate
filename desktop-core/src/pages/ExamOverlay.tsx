@@ -33,8 +33,17 @@ function formatErrorMessage(data: any, fallback: string): string {
   const message = String(data?.error || fallback).trim()
   const code = String(data?.code || '').trim()
   const stage = String(data?.stage || '').trim()
-  const suffix = [code && `错误码 ${code}`, stage && `阶段 ${stage}`].filter(Boolean).join(' · ')
-  return suffix ? `${message}\n${suffix}` : message
+  const requestId = String(data?.requestId || data?.operationId || '').replace(/[^a-zA-Z0-9_-]/g, '')
+  const shortId = requestId.length > 12 ? `${requestId.slice(0, 6)}…${requestId.slice(-4)}` : requestId
+  const action = data?.action === 'open-settings'
+    ? '请打开系统设置完成授权后重试'
+    : data?.action === 'reselect-source'
+      ? '请重新选择屏幕/声音共享源'
+      : data?.action === 'retry'
+        ? '当前截图已保留，可直接重试'
+        : ''
+  const suffix = [code && `错误码 ${code}`, stage && `阶段 ${stage}`, shortId && `请求 ${shortId}`].filter(Boolean).join(' · ')
+  return [message, suffix, action].filter(Boolean).join('\n')
 }
 
 export default function OverlayPage() {
@@ -277,7 +286,7 @@ export default function OverlayPage() {
     : status === 'completed'
       ? '答案已生成'
       : status === 'error'
-        ? '本次处理失败'
+        ? (errorMessage.split('\n')[0] || '本次处理失败')
         : mainShots.length > 0
           ? '截图已就绪'
           : '等待截图'
@@ -352,7 +361,7 @@ export default function OverlayPage() {
 
         <footer className="h-7 flex items-center justify-between px-3 border-t border-white/10 text-[9px] opacity-60 shrink-0">
           <span>题目截图 {mainShots.length} · 补充截图 {extraShots.length}</span>
-          <span>{status === 'processing' ? `生成进度 ${Math.round(progress)}%` : status === 'completed' ? '本次解题已完成' : status === 'error' ? '可重新截图后重试' : '快捷键全局可用'}</span>
+          <span>{status === 'processing' ? `生成进度 ${Math.round(progress)}%` : status === 'completed' ? '本次解题已完成' : status === 'error' ? '截图已保留，可直接重试；诊断信息见错误详情' : '快捷键全局可用'}</span>
         </footer>
       </div>
     </div>

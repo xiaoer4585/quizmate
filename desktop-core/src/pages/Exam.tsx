@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Play, Square, RefreshCw, ExternalLink, Info, Eye, EyeOff,
   Volume2, Loader2,
+  AlertCircle, Copy, FolderOpen,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { defaultShortcutBindings, examOverlayShortcutActions, examVoiceShortcutActions, formatAccelerator, isMacPlatform } from '../../shared/shortcuts';
@@ -11,6 +12,14 @@ import ShortcutSettings from '../components/ShortcutSettings';
 import FeatureGuide, { type FeatureGuideStep } from '../components/FeatureGuide';
 
 type ProcessingMode = 'overlay' | 'voice';
+interface ExamDiagnosticError {
+  error?: string;
+  code?: string;
+  stage?: string;
+  requestId?: string;
+  operationId?: string;
+  action?: string;
+}
 
 export default function Exam() {
   // 通过 preload 暴露的 electronAPI 兼容层调用后端（与原考试插件接口一致）
@@ -35,6 +44,7 @@ export default function Exam() {
   const [shortcutBindings, setShortcutBindings] = useState<Record<string, string>>(defaultShortcutBindings);
   const [ttsTesting, setTtsTesting] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
+  const [diagnosticError, setDiagnosticError] = useState<ExamDiagnosticError | null>(null);
 
   // 加载初始配置数据
   const loadData = useCallback(async () => {
@@ -79,6 +89,11 @@ export default function Exam() {
     unsubs.push(api?.on('processing-mode-changed', (data: any) => {
       setProcessingMode(data.mode);
     }));
+    for (const channel of ['screenshot-error', 'solution-stream-error', 'solution-error', 'processing-unauthorized', 'processing-no-screenshots', 'out-of-credits']) {
+      unsubs.push(api?.on(channel, (data: ExamDiagnosticError) => setDiagnosticError(data || { error: '处理失败' })));
+    }
+    unsubs.push(api?.on('solution-stream-complete', () => setDiagnosticError(null)));
+    unsubs.push(api?.on('screenshot-added', () => setDiagnosticError(null)));
     return () => {
       unsubs.forEach((u) => u && u());
     };
@@ -215,6 +230,25 @@ export default function Exam() {
           </div>
         )}
       </div>
+
+      {diagnosticError && (
+        <div className="card border-rose-500/30 bg-rose-500/5">
+          <div className="flex items-start gap-3">
+            <AlertCircle size={18} className="mt-0.5 shrink-0 text-rose-400" />
+            <div className="min-w-0 flex-1">
+              <div className="text-sm font-semibold text-rose-200">{diagnosticError.error || '处理失败'}</div>
+              <div className="mt-1 text-xs text-slate-400">
+                {[diagnosticError.code && `错误码 ${diagnosticError.code}`, diagnosticError.stage && `阶段 ${diagnosticError.stage}`, (diagnosticError.requestId || diagnosticError.operationId) && `请求 ${String(diagnosticError.requestId || diagnosticError.operationId).slice(0, 8)}`].filter(Boolean).join(' · ')}
+              </div>
+              <div className="mt-1 text-xs text-slate-500">截图会保留在队列中；修复权限或网络后可直接再次搜题。</div>
+            </div>
+            <div className="flex shrink-0 gap-2">
+              <button className="btn-outline text-xs" onClick={() => api.screenshot.copyDiagnostic()}><Copy size={12} />复制诊断</button>
+              <button className="btn-ghost text-xs" onClick={() => api.screenshot.openDiagnosticFolder()}><FolderOpen size={12} />日志目录</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* 工作模式选择 */}
       <div className="card" data-guide-target="exam-mode">

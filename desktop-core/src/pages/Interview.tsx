@@ -2,12 +2,14 @@
 // 功能：配置面试上下文、上传简历、启动悬浮窗、查看历史 QA 记录
 // 语音识别通过主进程连接后台配置的实时语音模型
 import { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Loader2, ShieldCheck, Trash2, Sparkles, FileText, CheckCircle2, Circle, Monitor, Share2, History, Send, Keyboard, Save, RefreshCw, Edit3, Plus, HelpCircle, Bold, Italic, List, ListOrdered } from 'lucide-react';
+import { Mic, MicOff, Loader2, ShieldCheck, Trash2, Sparkles, FileText, CheckCircle2, Circle, Monitor, Share2, History, Send, Keyboard, Save, RefreshCw, Edit3, Plus, HelpCircle, Bold, Italic, List, ListOrdered, Copy, FolderOpen } from 'lucide-react';
 import { api, useProfile } from '../lib/ipc';
 import ShareInterviewModal from '../components/ShareInterviewModal';
 import ShortcutSettings from '../components/ShortcutSettings';
 import FeatureGuide, { type FeatureGuideStep } from '../components/FeatureGuide';
 import { defaultShortcutBindings, interviewShortcutActions } from '../../shared/shortcuts';
+import type { ComponentHealth, VoiceHealthSnapshot } from '../../shared/reliability';
+import { createIdleVoiceSnapshot, isVoiceSessionActive } from '../../shared/reliability';
 
 interface HistoryTask {
   id: string;
@@ -39,6 +41,26 @@ const emptyContext: InterviewContextDraft = {
   position: '', company: '', jobDescription: '', jobDescriptionHtml: '', answerStyle: 'concise', audioMode: 'demo',
 };
 
+const healthClass: Record<ComponentHealth, string> = {
+  unavailable: 'border-slate-700 text-slate-500',
+  'not-used': 'border-slate-700 text-slate-500',
+  starting: 'border-amber-500/40 text-amber-300',
+  healthy: 'border-emerald-500/40 text-emerald-300',
+  degraded: 'border-amber-500/40 text-amber-300',
+  recovering: 'border-amber-500/40 text-amber-300',
+  failed: 'border-rose-500/50 text-rose-300',
+};
+
+const healthText: Record<ComponentHealth, string> = {
+  unavailable: '未启动',
+  'not-used': '当前模式不使用',
+  starting: '准备中',
+  healthy: '正常',
+  degraded: '暂时静音',
+  recovering: '恢复中',
+  failed: '需要处理',
+};
+
 function sanitizeRichText(html: string): string {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const allowed = new Set(['B', 'STRONG', 'I', 'EM', 'U', 'BR', 'P', 'UL', 'OL', 'LI']);
@@ -68,7 +90,8 @@ function richTextToPlainText(html: string): string {
 
 export default function Interview() {
   const { data: profile } = useProfile();
-  const [listening, setListening] = useState(false);
+  const [voiceState, setVoiceState] = useState<VoiceHealthSnapshot>(createIdleVoiceSnapshot());
+  const listening = isVoiceSessionActive(voiceState);
   const [context, setContext] = useState<InterviewContextDraft>(emptyContext);
   const [contextEditing, setContextEditing] = useState(false);
   const [draftContext, setDraftContext] = useState<InterviewContextDraft>(emptyContext);
@@ -160,6 +183,9 @@ export default function Interview() {
         setDraftContext(next);
       }
     }).catch(() => {});
+    api.interview.getState().then((state: unknown) => {
+      if (state && typeof state === 'object') setVoiceState(state as VoiceHealthSnapshot);
+    }).catch(() => {});
     api.exam.getShortcutBindings().then(setShortcutBindings).catch(() => {});
     const offShortcuts = (window as any).electronAPI?.on('shortcuts:updated', (next: Record<string, string>) => setShortcutBindings(next));
     return () => { offShortcuts?.(); api.interview.deactivateShortcuts().catch(() => {}); };
@@ -177,15 +203,15 @@ export default function Interview() {
   useEffect(() => {
     const off = api.interview.onTranscript((data: any) => {
       if (data?.status === 'started') {
-        setListening(true);
         setError('');
-      } else if (data?.status === 'stopped') {
-        setListening(false);
       } else if (data?.error) {
         setError(data.error);
       }
     });
-    return () => { off?.(); };
+    const offState = api.interview.onStateChanged((state: unknown) => {
+      if (state && typeof state === 'object') setVoiceState(state as VoiceHealthSnapshot);
+    });
+    return () => { off?.(); offState?.(); };
   }, []);
 
   // 启动/关闭面试悬浮窗
@@ -204,7 +230,7 @@ export default function Interview() {
   // 点击停止面试：自动停止听写 + 关闭悬浮框；
   // 内部任一动作失败时尝试回滚另一边，并恢复 UI 状态。
   const [interviewStarting, setInterviewStarting] = useState(false);
-  const interviewRunning = overlayActive || listening;
+  const interviewRunning = listening;
 
   const startInterview = async () => {
     if (interviewStarting) return;
@@ -212,7 +238,6 @@ export default function Interview() {
     setInterviewStarting(true);
     // 标记前置状态以便失败时回滚
     const prevOverlay = overlayActive;
-    const prevListening = listening;
     try {
       if (!overlayActive) {
         await api.interview.createOverlay();
@@ -220,7 +245,6 @@ export default function Interview() {
       }
       try {
         await api.interview.startListening(context);
-        setListening(true);
       } catch (e: any) {
         // 听写启动失败，回滚悬浮框
         try {
@@ -233,7 +257,6 @@ export default function Interview() {
       }
     } catch (e: any) {
       setOverlayActive(prevOverlay);
-      setListening(prevListening);
       setError(e?.message || '启动面试失败');
     } finally {
       setInterviewStarting(false);
@@ -245,13 +268,11 @@ export default function Interview() {
     setError('');
     setInterviewStarting(true);
     const prevOverlay = overlayActive;
-    const prevListening = listening;
     try {
       if (listening) {
         try {
           await api.interview.stopListening();
         } catch {}
-        setListening(false);
       }
       if (overlayActive) {
         try {
@@ -262,7 +283,6 @@ export default function Interview() {
     } catch (e: any) {
       // 出现异常时尽量恢复前置状态，避免 UI 与实际窗口不一致
       setOverlayActive(prevOverlay);
-      setListening(prevListening);
       setError(e?.message || '停止面试失败');
     } finally {
       setInterviewStarting(false);
@@ -322,7 +342,6 @@ export default function Interview() {
     setError('');
     try {
       await api.interview.startListening(context);
-      setListening(true);
     } catch (e: any) {
       setError(e?.message || '启动语音识别失败');
     }
@@ -332,7 +351,6 @@ export default function Interview() {
     try {
       await api.interview.stopListening();
     } catch {}
-    setListening(false);
   };
 
   const saveInterviewContext = async () => {
@@ -374,7 +392,6 @@ export default function Interview() {
       }
       if (listening) {
         await api.interview.restartListening(next);
-        setListening(true);
       }
       setContextStatus(audioMode === 'formal' ? '已切换为正式面试模式' : '已切换为演示模式');
     } catch (e: any) {
@@ -399,12 +416,8 @@ export default function Interview() {
     if (!q || q.length < 4) return;
     setManualSending(true);
     try {
-      // 确保面试助手已启动（设置上下文）
-      if (!listening) {
-        await api.interview.startListening(context);
-        setListening(true);
-      }
-      api.interview.setContext(context);
+      // 手动提问不启动麦克风或系统音频，避免无关授权和等待。
+      await api.interview.setContext(context);
       await api.interview.transcript(q);
       setManualQuestion('');
     } catch (e: any) {
@@ -432,7 +445,7 @@ export default function Interview() {
           <h1 className="text-xl font-bold flex items-center gap-2">
             <Mic size={22} className="text-rose-400" /> 面试助手
           </h1>
-          <p className="text-sm text-slate-400 mt-1">实时听写面试官问题 · AI 秒出参考答案 · 结合简历作答 · 窗口隐身防录屏</p>
+          <p className="text-sm text-slate-400 mt-1">实时听写面试官问题 · AI 快速生成参考答案 · 结合简历作答</p>
         </div>
         <div className="flex items-center gap-2" data-guide-target="interview-overlay">
           <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs">
@@ -598,7 +611,7 @@ export default function Interview() {
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-rose-400 opacity-75"></span>
                 <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-rose-500"></span>
               </span>
-              面试进行中… 实时答案在悬浮窗中显示
+              {voiceState.phase === 'listening' ? '面试进行中… 实时答案在悬浮窗中显示' : (voiceState.message || '正在恢复听写…')}
             </div>
           )}
           {historyTasks.length > 0 && (
@@ -612,6 +625,40 @@ export default function Interview() {
             </button>
           )}
         </div>
+
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" aria-label="面试听写健康状态">
+          {([
+            ['系统声音', voiceState.systemAudio],
+            ['麦克风', voiceState.microphone],
+            ['音频处理', voiceState.audioGraph],
+            ['语音识别', voiceState.asrSocket],
+          ] as Array<[string, ComponentHealth]>).map(([label, health]) => (
+            <div key={label} className={`rounded-lg border bg-slate-950/35 px-3 py-2 ${healthClass[health]}`}>
+              <div className="text-[11px] text-slate-500">{label}</div>
+              <div className="mt-1 flex items-center gap-1.5 text-xs font-medium">
+                {health === 'starting' || health === 'recovering'
+                  ? <Loader2 size={12} className="animate-spin" />
+                  : <Circle size={10} fill="currentColor" />}
+                {healthText[health]}
+              </div>
+            </div>
+          ))}
+        </div>
+        {(voiceState.message || voiceState.code) && (
+          <div className={`rounded-lg border px-3 py-2 text-xs ${voiceState.phase === 'action-required' ? 'border-rose-500/30 bg-rose-500/5 text-rose-200' : 'border-slate-700 bg-slate-950/30 text-slate-400'}`}>
+            <div>{voiceState.message || '听写状态已更新'}</div>
+            {voiceState.code && <div className="mt-1 text-[10px] text-slate-500">错误码 {voiceState.code} · 会话 {voiceState.sessionId.slice(0, 8) || '未启动'}</div>}
+            <div className="mt-2 flex flex-wrap gap-2">
+              {voiceState.phase === 'action-required' && (
+                <button type="button" className="btn-outline text-xs" onClick={() => api.interview.retry().catch((cause: unknown) => setError(cause instanceof Error ? cause.message : '重试失败'))}>
+                  <RefreshCw size={12} /> 重试听写
+                </button>
+              )}
+              <button type="button" className="btn-ghost text-xs" onClick={() => api.interview.copyDiagnostic()}><Copy size={12} /> 复制诊断</button>
+              <button type="button" className="btn-ghost text-xs" onClick={() => api.interview.openDiagnosticFolder()}><FolderOpen size={12} /> 打开日志目录</button>
+            </div>
+          </div>
+        )}
 
         {/* 手动输入问题 - 不依赖语音识别 */}
         <div className="flex items-center gap-2 pt-2 border-t border-slate-800">
@@ -640,10 +687,10 @@ export default function Interview() {
         />
       </div>
 
-      {/* 隐身提示 */}
+      {/* QuizMate 自身截图的输入边界说明 */}
       <div className="card bg-emerald-500/5 border-emerald-500/20 flex items-center gap-2">
         <ShieldCheck size={16} className="text-emerald-400" />
-        <span className="text-xs text-emerald-300">隐身保护已启用：悬浮窗对屏幕共享、录屏软件、远程桌面不可见，可放心使用。</span>
+        <span className="text-xs text-emerald-300">QuizMate 自己执行题目截图时会临时排除悬浮窗，保证送给 AI 的图片不含界面遮挡。</span>
       </div>
 
       {error && (

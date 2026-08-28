@@ -204,7 +204,8 @@ $bmp.Dispose()
 `
         await this.runPowerShell(psScript)
       }
-      if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0) {
+      if (fs.existsSync(tempPath) && fs.statSync(tempPath).size > 0
+        && !this.validateImage(fs.readFileSync(tempPath))) {
         this.lastScreenshotTime = Date.now()
         return { success: true, filePath: tempPath }
       }
@@ -308,6 +309,8 @@ $bmp.Dispose()
   public async fileToCompressedBase64(filePath: string): Promise<string> {
     try {
       const originalBuf = fs.readFileSync(filePath)
+      const originalError = this.validateImage(originalBuf)
+      if (originalError) throw new Error(`截图无效：${originalError}`)
       const originalSizeKB = Math.round(originalBuf.length / 1024)
       const size = nativeImage.createFromBuffer(originalBuf).getSize()
 
@@ -343,6 +346,10 @@ $bmp.Dispose()
       if (!bestBuf) {
         bestBuf = nativeImage.createFromBuffer(originalBuf).toJPEG(30)
         bestInfo = 'fallback q30'
+      }
+
+      if (bestBuf.length < 4 || bestBuf[0] !== 0xff || bestBuf[1] !== 0xd8 || bestBuf[2] !== 0xff) {
+        throw new Error('JPEG 压缩结果为空或格式无效')
       }
 
       const compressedSizeKB = Math.round(bestBuf.length / 1024)
