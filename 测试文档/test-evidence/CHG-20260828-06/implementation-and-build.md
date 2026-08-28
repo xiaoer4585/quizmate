@@ -88,6 +88,27 @@
 - 为避免约 440MB 产物下载到 Windows 后再次上传，使用当前已认证维护账号创建临时 Actions Secret `MAC_RELEASE_TOKEN`，仅供 Release API 上传。
 - 工作流在该 Secret 缺失时仍保留 Actions Artifact，Release 步骤继续非阻断；本轮上传完成后立即删除临时 Secret，不改变 Apple 证书相关 Secrets。
 
+### 最终成功运行与交付
+
+- Run：`33162927619`（Intel/Apple Silicon 两个 job 均 success）
+- 标签：`mac-build-2026.8.28.3-r3`
+- 构建提交：`6ee4e30865ce963ea66cba76de7532f87b2d00e8`
+- GitHub prerelease：`https://github.com/xiaoer4585/quizmate/releases/tag/mac-build-2026.8.28.3-r3`
+- 两架构均通过：Node/Web 类型检查、共享 9 用例、MacProtection 4 用例、production build、ad-hoc 重签名、`codesign --verify --deep --strict`、DMG `hdiutil verify`、可执行文件架构检查、SHA-256 生成与 Actions Artifact 上传。
+- Release 共上传 12 个资产：两套 DMG、两套 ZIP、两份 SHA-256、两份架构证据、两份 codesign 证据和两份构建日志。
+- GitHub Release 资产 digest 与 runner `sha256-*.txt` 完全一致；两个 DMG 公网 HEAD 均为 HTTP 200，Content-Length 与 Release 记录一致。
+- 临时 `MAC_RELEASE_TOKEN` 已在资产核验后删除；Apple 相关 Secrets 未修改。
+
+| 架构 | DMG | 大小 | SHA-256 |
+|---|---|---:|---|
+| Apple Silicon arm64 | `QuizMate-Mac-arm64-2026.8.28003.dmg` | `110,407,625` | `d4cc5c675fe18e331ceb8c73c08ae6daabb932542fd2757e160866e1d39b2729` |
+| Intel x64 | `QuizMate-Mac-x64-2026.8.28003.dmg` | `117,840,447` | `2945b3b2565140b53f7d55a2fdf0ee608f95bf6954e1bcc46a58ac3d5f4a3a29` |
+
+| 架构 | ZIP | 大小 | SHA-256 |
+|---|---|---:|---|
+| Apple Silicon arm64 | `QuizMate-2026.8.28003-arm64-mac.zip` | `106,274,898` | `9883b888af653f3679ff302f1c28cfddd55a409d6bd73e8d00c2fd31a9bfbd63` |
+| Intel x64 | `QuizMate-2026.8.28003-mac.zip` | `112,308,863` | `ff27d4aec49d6dcce59f7a70e1e05c50cd420cf9a6cae79faed73fc02e50aaab` |
+
 ## 4. 实体 Mac 阻塞项
 
 - Intel 与 Apple Silicon 的 DMG 安装、Gatekeeper 首次启动和覆盖安装。
