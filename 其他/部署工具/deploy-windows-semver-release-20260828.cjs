@@ -26,6 +26,8 @@ const EXE_URL = `https://github.com/xiaoer4585/quizmate/releases/download/${RELE
 const EXPECTED_EXE_SIZE = 82820119;
 const EXPECTED_EXE_SHA256 = '0085cef218621979d7b5d9bcfd4dcd150d1cb7b6e24d386229ffc0052143bba0';
 const STAGE_EXE = `temp/${CHANGE_ID}/${EXE_NAME}`;
+const REGION = 'cn-beijing';
+const INSTANCE_ID = 'i-2zedgehm045w1gsarawx';
 
 const files = {
   blockmap: path.join(RELEASE_DIR, BLOCKMAP_NAME),
@@ -92,10 +94,109 @@ async function waitForAsyncFetch(storage, taskId) {
   throw new Error('OSS async fetch timed out');
 }
 
-async function fetchInstaller(storage) {
-  const task = await storage.postAsyncFetch(STAGE_EXE, EXE_URL, { ignoreSameKey: false });
-  console.log(`ASYNC_FETCH_STARTED task=${task.taskId}`);
-  await waitForAsyncFetch(storage, task.taskId);
+function pctEncode(value) {
+  return encodeURIComponent(value)
+    .replace(/'/g, '%27')
+    .replace(/\(/g, '%28')
+    .replace(/\)/g, '%29')
+    .replace(/\*/g, '%2A');
+}
+
+function ecsSign(query, secret) {
+  return crypto.createHmac('sha1', `${secret}&`)
+    .update(`GET&${pctEncode('/')}&${pctEncode(query)}`)
+    .digest('base64');
+}
+
+async function callEcs(auth, params) {
+  const common = {
+    Format: 'JSON',
+    Version: '2014-05-26',
+    AccessKeyId: auth.access_key_id,
+    SignatureMethod: 'HMAC-SHA1',
+    SignatureVersion: '1.0',
+    SignatureNonce: crypto.randomUUID(),
+    Timestamp: new Date().toISOString().replace(/\.\d+Z$/, 'Z'),
+    RegionId: REGION,
+    ...(auth.sts_token ? { SecurityToken: auth.sts_token } : {}),
+    ...params,
+  };
+  const query = Object.keys(common).sort().map((key) => `${pctEncode(key)}=${pctEncode(common[key])}`).join('&');
+  const response = await fetch(
+    `https://ecs.${REGION}.aliyuncs.com/?${query}&Signature=${pctEncode(ecsSign(query, auth.access_key_secret))}`,
+  );
+  const body = await response.text();
+  if (!response.ok) throw new Error(`ECS API ${response.status}: ${body}`);
+  return JSON.parse(body);
+}
+
+async function runRemoteCommand(auth, command) {
+  const started = await callEcs(auth, {
+    Action: 'RunCommand',
+    Type: 'RunShellScript',
+    'InstanceId.1': INSTANCE_ID,
+    CommandContent: command,
+    Timeout: '900',
+    ContentType: 'text/plain',
+    EnableParameter: 'false',
+    WorkingDir: '/root',
+  });
+  const deadline = Date.now() + 960_000;
+  while (Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+    const statusResult = await callEcs(auth, { Action: 'DescribeInvocations', InvokeId: started.InvokeId });
+    const invocation = statusResult.Invocations?.Invocation?.[0];
+    const instance = invocation?.InvokeInstances?.InvokeInstance?.[0];
+    const status = instance?.InstanceInvokeStatus || invocation?.InvokeStatus;
+    if (!status || ['Running', 'Pending'].includes(status)) continue;
+    const result = await callEcs(auth, {
+      Action: 'DescribeInvocationResults',
+      InvokeId: started.InvokeId,
+      InstanceId: INSTANCE_ID,
+    });
+    const row = result.Invocation?.InvocationResults?.InvocationResult?.[0];
+    const output = row?.Output ? Buffer.from(row.Output, 'base64').toString('utf8') : '';
+    process.stdout.write(output);
+    if (!row || status === 'Failed' || (row.ExitCode != null && Number(row.ExitCode) !== 0)) {
+      throw new Error(`Remote installer staging failed: ${status}`);
+    }
+    return;
+  }
+  throw new Error('Remote installer staging timed out');
+}
+
+async function fetchThroughEcs(storage, auth) {
+  const contentType = 'application/vnd.microsoft.portable-executable';
+  const putUrl = storage.signatureUrl(STAGE_EXE, {
+    expires: 3600,
+    method: 'PUT',
+    'Content-Type': contentType,
+  });
+  const sourceB64 = Buffer.from(EXE_URL).toString('base64');
+  const targetB64 = Buffer.from(putUrl).toString('base64');
+  await runRemoteCommand(auth, `set -Eeuo pipefail
+src=$(printf '%s' '${sourceB64}' | base64 -d)
+dst=$(printf '%s' '${targetB64}' | base64 -d)
+tmp=$(mktemp /tmp/quizmate-windows-XXXXXX.exe)
+trap 'rm -f "$tmp"' EXIT
+curl --fail --location --retry 5 --connect-timeout 30 --output "$tmp" "$src"
+test "$(stat -c %s "$tmp")" = '${EXPECTED_EXE_SIZE}'
+test "$(sha256sum "$tmp" | awk '{print $1}')" = '${EXPECTED_EXE_SHA256}'
+curl --fail --silent --show-error --retry 5 -X PUT -H 'Content-Type: ${contentType}' --upload-file "$tmp" "$dst"
+echo REMOTE_STAGE_OK size=$(stat -c %s "$tmp") sha256=$(sha256sum "$tmp" | awk '{print $1}')`);
+}
+
+async function fetchInstaller(storage, auth) {
+  try {
+    const task = await storage.postAsyncFetch(STAGE_EXE, EXE_URL, { ignoreSameKey: false });
+    console.log(`ASYNC_FETCH_STARTED task=${task.taskId}`);
+    await waitForAsyncFetch(storage, task.taskId);
+  } catch (error) {
+    const label = `${error.code || ''} ${error.name || ''}`.toLowerCase();
+    if (!label.includes('operationnotsupported')) throw error;
+    console.log('ASYNC_FETCH_UNSUPPORTED fallback=ECS-cloud-assistant');
+    await fetchThroughEcs(storage, auth);
+  }
   const head = await storage.head(STAGE_EXE);
   const size = Number(head.res.headers['content-length']);
   if (size !== EXPECTED_EXE_SIZE) throw new Error(`Staged EXE size mismatch: ${size}`);
@@ -182,8 +283,9 @@ async function verify(storage) {
 
 async function main() {
   assertLocalInputs();
-  const storage = client(profile());
-  await fetchInstaller(storage);
+  const auth = profile();
+  const storage = client(auth);
+  await fetchInstaller(storage, auth);
   try {
     await publish(storage);
     await verify(storage);
