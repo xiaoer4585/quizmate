@@ -82,6 +82,12 @@
 - 最终失败仅发生在“Create GitHub prerelease with Mac package”：GitHub Actions 内置令牌调用 Releases API 返回 HTTP 403 `Resource not accessible by integration`，导致其后的 Actions Artifact 步骤被跳过。
 - 修复：Release 步骤改为 `continue-on-error`，Actions Artifact 恢复为强制门禁；下一次构建先保留已验证产物，再由本机已认证维护账号下载 Artifact、创建 prerelease 并上传。
 
+### 第四次运行准备（临时最小化上传凭据）
+
+- Run `33162006501` 已成功保留两套 Actions Artifact：Apple Silicon `214,307,285` 字节，Intel `227,763,303` 字节；两个 job 均为 success。
+- 为避免约 440MB 产物下载到 Windows 后再次上传，使用当前已认证维护账号创建临时 Actions Secret `MAC_RELEASE_TOKEN`，仅供 Release API 上传。
+- 工作流在该 Secret 缺失时仍保留 Actions Artifact，Release 步骤继续非阻断；本轮上传完成后立即删除临时 Secret，不改变 Apple 证书相关 Secrets。
+
 ## 4. 实体 Mac 阻塞项
 
 - Intel 与 Apple Silicon 的 DMG 安装、Gatekeeper 首次启动和覆盖安装。

@@ -235,7 +235,10 @@ jobs:
         # an Actions artifact and let an authenticated maintainer upload it.
         continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Optional maintainer token is used only when repository policy makes
+          # the built-in GITHUB_TOKEN read-only. The package still remains in
+          # Actions Artifact when this secret is absent.
+          GH_TOKEN: ${{ secrets.MAC_RELEASE_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
