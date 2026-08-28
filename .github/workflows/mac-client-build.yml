@@ -14,25 +14,30 @@ on:
     tags:
       - mac-build-*
       - mac-delivery-*
+      - mac-release-*
 permissions:
   contents: write
 
 jobs:
   build:
     name: macOS ${{ matrix.label }}
-    runs-on: macos-14
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: x64
             label: Intel
+            publicLabel: Intel
+            runner: macos-26-intel
             expected: x86_64
             uploadKey: intel
             zipUploadKey: intelZip
             logUploadKey: intelLog
           - arch: arm64
             label: Apple-Silicon
+            publicLabel: Apple-Silicon
+            runner: macos-26
             expected: arm64
             uploadKey: apple
             zipUploadKey: appleZip
@@ -77,6 +82,8 @@ jobs:
           {
             npm run typecheck:node
             npm run typecheck:web
+            npm run test:shared
+            npm run test:mac-protection
             # npm audit depends on the registry advisory endpoint. Keep the
             # report, but do not block an otherwise valid package build when
             # that external service is unavailable.
@@ -86,9 +93,82 @@ jobs:
             }
           } 2>&1 | tee -a build.log
 
+      - name: Configure signing and notarization gate
+        shell: bash
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ "$GITHUB_REF" != refs/tags/mac-release-* ]]; then
+            # mac-build/mac-delivery are isolated test packages. Keep them
+            # reproducibly ad-hoc even when repository secrets contain an
+            # unusable placeholder; only mac-release may consume Developer ID.
+            echo "MAC_SIGNED_BUILD=false" >> "$GITHUB_ENV"
+            echo "MAC_NOTARIZE=false" >> "$GITHUB_ENV"
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "::warning::Building an ad-hoc Mac test package; Gatekeeper, stable TCC identity and automatic update eligibility are not claimed"
+            exit 0
+          fi
+
+          test -n "${MAC_CSC_LINK:-}" || { echo "::error::MAC_CSC_LINK is required for a production Mac release"; exit 1; }
+          test -n "${MAC_CSC_KEY_PASSWORD:-}" || { echo "::error::MAC_CSC_KEY_PASSWORD is required for a production Mac release"; exit 1; }
+          test -n "${APPLE_ID:-}" || { echo "::error::APPLE_ID is required for notarization"; exit 1; }
+          test -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" || { echo "::error::APPLE_APP_SPECIFIC_PASSWORD is required for notarization"; exit 1; }
+          test -n "${APPLE_TEAM_ID:-}" || { echo "::error::APPLE_TEAM_ID is required for notarization"; exit 1; }
+
+          CERT_PATH="$RUNNER_TEMP/quizmate-developer-id.p12"
+          case "$MAC_CSC_LINK" in
+            https://*|http://*)
+              printf 'CSC_LINK=%s\n' "$MAC_CSC_LINK" >> "$GITHUB_ENV"
+              ;;
+            file://*)
+              LOCAL_CERT_PATH="${MAC_CSC_LINK#file://}"
+              test -f "$LOCAL_CERT_PATH" || {
+                echo "::error::MAC_CSC_LINK file URL does not exist on the GitHub runner; store the .p12 file as Base64 instead"
+                exit 1
+              }
+              printf 'CSC_LINK=%s\n' "$MAC_CSC_LINK" >> "$GITHUB_ENV"
+              ;;
+            /*)
+              test -f "$MAC_CSC_LINK" || {
+                echo "::error::MAC_CSC_LINK path does not exist on the GitHub runner; store the .p12 file as Base64 instead"
+                exit 1
+              }
+              printf 'CSC_LINK=file://%s\n' "$MAC_CSC_LINK" >> "$GITHUB_ENV"
+              ;;
+            *)
+              CERT_BASE64="$MAC_CSC_LINK"
+              CERT_BASE64="${CERT_BASE64#base64:}"
+              CERT_BASE64="${CERT_BASE64#data:application/x-pkcs12;base64,}"
+              if ! printf '%s' "$CERT_BASE64" \
+                | tr -d '[:space:]' \
+                | openssl base64 -d -A -out "$CERT_PATH"; then
+                echo "::error::MAC_CSC_LINK is neither a runner file/URL nor valid Base64"
+                exit 1
+              fi
+              test -s "$CERT_PATH" || { echo "::error::Decoded MAC_CSC_LINK is empty"; exit 1; }
+              if ! openssl pkcs12 -in "$CERT_PATH" -passin env:MAC_CSC_KEY_PASSWORD -noout >/dev/null 2>&1; then
+                echo "::error::Decoded MAC_CSC_LINK is not a valid PKCS#12 file or MAC_CSC_KEY_PASSWORD is incorrect"
+                exit 1
+              fi
+              chmod 600 "$CERT_PATH"
+              printf 'CSC_LINK=file://%s\n' "$CERT_PATH" >> "$GITHUB_ENV"
+              ;;
+          esac
+          printf 'CSC_KEY_PASSWORD=%s\n' "$MAC_CSC_KEY_PASSWORD" >> "$GITHUB_ENV"
+          echo "CSC_IDENTITY_AUTO_DISCOVERY=true" >> "$GITHUB_ENV"
+          echo "MAC_SIGNED_BUILD=true" >> "$GITHUB_ENV"
+          echo "MAC_NOTARIZE=true" >> "$GITHUB_ENV"
+
       - name: Build DMG
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # delivery 测试包使用独立空更新通道，不读取正式 mac/latest-mac.yml。
           QUIZMATE_UPDATE_BASE_URL: ${{ startsWith(github.ref, 'refs/tags/mac-delivery-') && format('https://quizmate.cn/temp/{0}', github.ref_name) || 'https://quizmate.cn' }}
         run: |
@@ -99,6 +179,7 @@ jobs:
           } 2>&1 | tee -a build.log
 
       - name: Re-sign app for local distribution
+        if: env.MAC_SIGNED_BUILD != 'true'
         shell: bash
         env:
           QUIZMATE_UPDATE_BASE_URL: ${{ startsWith(github.ref, 'refs/tags/mac-delivery-') && format('https://quizmate.cn/temp/{0}', github.ref_name) || 'https://quizmate.cn' }}
@@ -107,7 +188,45 @@ jobs:
           exec > >(tee -a build.log) 2>&1
           APP_PATH=$(find release -maxdepth 2 -name 'QuizMate.app' -type d -print -quit)
           test -d "$APP_PATH"
-          codesign --force --deep --sign - --timestamp=none "$APP_PATH"
+          export APP_PATH
+          # macOS 26 enforces Hardened Runtime library validation before the
+          # Electron main process starts. A single `codesign --deep` can leave
+          # Electron Framework/Helpers with their upstream Team ID while the
+          # top-level app becomes ad-hoc, which dyld rejects. Electron's signer
+          # walks every nested Mach-O/framework/helper from the inside out.
+          node <<'NODE'
+          const path = require('path')
+          const { signAsync } = require('@electron/osx-sign')
+
+          const appPath = path.resolve(process.env.APP_PATH)
+          const entitlements = path.resolve('resources/entitlements.mac.adhoc.plist')
+          const electronVersion = require('electron/package.json').version
+
+          signAsync({
+            app: appPath,
+            identity: '-',
+            identityValidation: false,
+            platform: 'darwin',
+            version: electronVersion,
+            preAutoEntitlements: false,
+            preEmbedProvisioningProfile: false,
+            optionsForFile(filePath) {
+              return {
+                // An ad-hoc signature has no stable Team ID. Every executable
+                // host must therefore carry the same explicit library-
+                // validation exception; applying the plist to every nested
+                // signing target also prevents osx-sign defaults from silently
+                // dropping it on Electron Helper executables.
+                entitlements,
+                hardenedRuntime: true,
+                timestamp: 'none',
+              }
+            },
+          }).catch((error) => {
+            console.error(error)
+            process.exit(1)
+          })
+          NODE
           codesign --verify --deep --strict --verbose=4 "$APP_PATH"
           rm -f release/QuizMate-Mac-${{ matrix.arch }}-*.dmg
           rm -f release/QuizMate-*-${{ matrix.arch }}-mac.zip
@@ -132,17 +251,126 @@ jobs:
           test -n "$APP_PATH"
           codesign --verify --deep --strict --verbose=4 "$APP_PATH"
           codesign -dv --verbose=4 "$APP_PATH" 2>&1 | tee codesign.txt
+          signature_team() {
+            local value
+            value=$(codesign -dv --verbose=4 "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p' | tail -n 1)
+            printf '%s' "${value:-not set}"
+          }
+          MAIN_TEAM=$(signature_team "$APP_BIN")
+          printf 'main\t%s\t%s\n' "$MAIN_TEAM" "$APP_BIN" > signature-identities.txt
+          while IFS= read -r -d '' candidate; do
+            if file "$candidate" | grep -q 'Mach-O'; then
+              codesign --verify --strict --verbose=2 "$candidate"
+              CANDIDATE_TEAM=$(signature_team "$candidate")
+              printf 'nested\t%s\t%s\n' "$CANDIDATE_TEAM" "$candidate" >> signature-identities.txt
+              if [[ "$CANDIDATE_TEAM" != "$MAIN_TEAM" ]]; then
+                echo "::error::macOS 26 library validation would reject Team ID mismatch: main=$MAIN_TEAM nested=$CANDIDATE_TEAM file=$candidate"
+                exit 1
+              fi
+            fi
+          done < <(find "$APP_PATH/Contents" -type f -print0)
+          cat signature-identities.txt
+          : > ad-hoc-entitlements.txt
+          HOST_COUNT=0
+          while IFS= read -r -d '' host; do
+            if ! file "$host" | grep -q 'Mach-O'; then
+              continue
+            fi
+            HOST_COUNT=$((HOST_COUNT + 1))
+            ENTITLEMENTS_PLIST=$(mktemp "$RUNNER_TEMP/quizmate-entitlements.XXXXXX.plist")
+            codesign -d --entitlements :- "$host" > "$ENTITLEMENTS_PLIST" 2>> build.log
+            plutil -lint "$ENTITLEMENTS_PLIST"
+            LIBRARY_VALIDATION=absent
+            if value=$(/usr/libexec/PlistBuddy -c 'Print :com.apple.security.cs.disable-library-validation' "$ENTITLEMENTS_PLIST" 2>/dev/null); then
+              LIBRARY_VALIDATION="$value"
+            fi
+            printf '%s\t%s\n' "$LIBRARY_VALIDATION" "$host" >> ad-hoc-entitlements.txt
+            rm -f "$ENTITLEMENTS_PLIST"
+            if [[ "${MAC_SIGNED_BUILD:-false}" == "true" ]]; then
+              if [[ "$LIBRARY_VALIDATION" == "true" ]]; then
+                echo "::error::Production Developer ID executable must not disable library validation: $host"
+                exit 1
+              fi
+            elif [[ "$LIBRARY_VALIDATION" != "true" ]]; then
+              echo "::error::Ad-hoc executable host is missing com.apple.security.cs.disable-library-validation=true: $host"
+              exit 1
+            fi
+          done < <(find "$APP_PATH" -path '*/Contents/MacOS/*' -type f -print0)
+          test "$HOST_COUNT" -gt 0
+          cat ad-hoc-entitlements.txt
+          if [[ "${MAC_SIGNED_BUILD:-false}" == "true" ]]; then
+            TEAM_ID=$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+            test -n "$TEAM_ID"
+            test "$TEAM_ID" != "not set"
+            spctl --assess --type execute --verbose=4 "$APP_PATH"
+            if [[ "${MAC_NOTARIZE:-false}" == "true" ]]; then
+              xcrun stapler validate "$APP_PATH"
+            fi
+          elif [[ "$GITHUB_REF" == refs/tags/mac-release-* ]]; then
+            echo "::error::Production release cannot use ad-hoc signing"
+            exit 1
+          fi
           file "$APP_BIN" | tee architecture.txt
           grep -q "${{ matrix.expected }}" architecture.txt
+          SMOKE_DATA=$(mktemp -d "$RUNNER_TEMP/quizmate-launch-smoke-${{ matrix.arch }}.XXXXXX")
+          "$APP_BIN" --user-data-dir="$SMOKE_DATA" > launch-smoke.log 2>&1 &
+          APP_PID=$!
+          sleep 10
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            set +e
+            wait "$APP_PID"
+            APP_STATUS=$?
+            set -e
+            cat launch-smoke.log
+            echo "::error::QuizMate exited during macOS 26 launch smoke (status $APP_STATUS)"
+            exit 1
+          fi
+          kill "$APP_PID" 2>/dev/null || true
+          wait "$APP_PID" 2>/dev/null || true
+          if grep -Eiq 'Library not loaded|different Team IDs|Namespace DYLD|dyld.*Code 1' launch-smoke.log; then
+            cat launch-smoke.log
+            echo "::error::QuizMate macOS 26 launch log contains a dyld/signing failure"
+            exit 1
+          fi
+          echo "macOS 26 launch smoke stayed alive for 10 seconds" | tee -a launch-smoke.log
           hdiutil detach "$MOUNT_DIR"
+          INTERNAL_VERSION=$(node -p "require('./package.json').version")
+          PUBLIC_VERSION=$(node -e '
+            const value = require("./package.json").version;
+            const configured = require("./resources/config.json").version;
+            const parts = value.split(".");
+            const encoded = Number(parts[2]);
+            if (parts.length !== 3 || !Number.isInteger(encoded) || encoded < 1000) process.exit(2);
+            const day = Math.floor(encoded / 1000);
+            const revision = encoded % 1000;
+            const expected = `${parts[0]}.${String(parts[1]).padStart(2, "0")}.${String(day).padStart(2, "0")}${revision ? `.${revision}` : ""}`;
+            if (configured !== expected) {
+              console.error(`public version mismatch: config=${configured} expected=${expected}`);
+              process.exit(3);
+            }
+            process.stdout.write(configured);
+          ')
+          PUBLIC_DMG="release/QuizMate-Mac-${{ matrix.publicLabel }}-${PUBLIC_VERSION}.dmg"
+          PUBLIC_ZIP="release/QuizMate-Mac-${{ matrix.arch }}-${PUBLIC_VERSION}.zip"
+          mv "$DMG" "$PUBLIC_DMG"
+          mv "$ZIP" "$PUBLIC_ZIP"
+          DMG="$PUBLIC_DMG"
+          ZIP="$PUBLIC_ZIP"
           shasum -a 256 "$DMG" | tee sha256.txt
           shasum -a 256 "$ZIP" | tee -a sha256.txt
           echo "dmg=$DMG" >> "$GITHUB_OUTPUT"
           echo "zip=$ZIP" >> "$GITHUB_OUTPUT"
 
       - name: Create GitHub prerelease with Mac package
+        # Some repositories enforce a read-only GITHUB_TOKEN regardless of the
+        # workflow-level contents permission. Preserve the verified package as
+        # an Actions artifact and let an authenticated maintainer upload it.
+        continue-on-error: true
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Optional maintainer token is used only when repository policy makes
+          # the built-in GITHUB_TOKEN read-only. The package still remains in
+          # Actions Artifact when this secret is absent.
+          GH_TOKEN: ${{ secrets.MAC_RELEASE_TOKEN }}
         shell: bash
         run: |
           set -euo pipefail
@@ -164,6 +392,9 @@ jobs:
           cp sha256.txt "sha256-${{ matrix.arch }}.txt"
           cp architecture.txt "architecture-${{ matrix.arch }}.txt"
           cp codesign.txt "codesign-${{ matrix.arch }}.txt"
+          cp signature-identities.txt "signature-identities-${{ matrix.arch }}.txt"
+          cp ad-hoc-entitlements.txt "ad-hoc-entitlements-${{ matrix.arch }}.txt"
+          cp launch-smoke.log "launch-smoke-${{ matrix.arch }}.log"
           cp build.log "build-${{ matrix.arch }}.log"
           gh release upload "$TAG" \
             --repo "${{ github.repository }}" \
@@ -173,11 +404,13 @@ jobs:
             "sha256-${{ matrix.arch }}.txt" \
             "architecture-${{ matrix.arch }}.txt" \
             "codesign-${{ matrix.arch }}.txt" \
+            "signature-identities-${{ matrix.arch }}.txt" \
+            "ad-hoc-entitlements-${{ matrix.arch }}.txt" \
+            "launch-smoke-${{ matrix.arch }}.log" \
             "build-${{ matrix.arch }}.log"
           gh release view "$TAG" --repo "${{ github.repository }}" --json url -q '.url'
 
       - name: Upload Actions artifact
-        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           name: QuizMate-Mac-${{ matrix.label }}-${{ github.run_number }}
@@ -186,6 +419,9 @@ jobs:
             mac客户端/QuizMate-Mac/${{ steps.artifact.outputs.zip }}
             mac客户端/QuizMate-Mac/architecture.txt
             mac客户端/QuizMate-Mac/codesign.txt
+            mac客户端/QuizMate-Mac/signature-identities.txt
+            mac客户端/QuizMate-Mac/ad-hoc-entitlements.txt
+            mac客户端/QuizMate-Mac/launch-smoke.log
             mac客户端/QuizMate-Mac/sha256.txt
           if-no-files-found: error
           retention-days: 1

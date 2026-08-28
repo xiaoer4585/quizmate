@@ -11,10 +11,12 @@ import Extension from './pages/Extension';
 import Profile from './pages/Profile';
 import Overlay from './pages/Overlay';
 import ExamOverlay from './pages/ExamOverlay';
+import PermissionOnboarding from './components/PermissionOnboarding';
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [forceLogin, setForceLogin] = useState(false);
+  const [permissionOnboardingRequired, setPermissionOnboardingRequired] = useState(false);
   const location = useLocation();
 
   // 悬浮窗视图：单独渲染，不走登录守卫与主框架
@@ -29,7 +31,11 @@ export default function App() {
         const ok = await api.auth.isAuthenticated();
         if (mounted) {
           setAuthed(!!ok);
-          if (ok) await api.auth.getProfile().catch(() => {});
+          if (ok) {
+            await api.auth.getProfile().catch(() => {});
+            const permissionState = await api.permissions.getState().catch(() => null) as { platform?: string; completed?: boolean } | null;
+            setPermissionOnboardingRequired(permissionState?.platform === 'darwin' && permissionState.completed !== true);
+          }
         }
       } catch {
         if (mounted) setAuthed(false);
@@ -87,9 +93,15 @@ export default function App() {
           setForceLogin(false);
           setAuthed(true);
           await api.auth.getProfile().catch(() => {});
+          const permissionState = await api.permissions.getState().catch(() => null) as { platform?: string; completed?: boolean } | null;
+          setPermissionOnboardingRequired(permissionState?.platform === 'darwin' && permissionState.completed !== true);
         }}
       />
     );
+  }
+
+  if (permissionOnboardingRequired) {
+    return <PermissionOnboarding onComplete={() => setPermissionOnboardingRequired(false)} />;
   }
 
   return (

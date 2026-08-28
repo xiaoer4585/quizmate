@@ -1,7 +1,7 @@
 {
   "name": "quizmate-windows",
   "productName": "QuizMate",
-  "version": "2026.8.27002",
+  "version": "2026.8.29000",
   "description": "QuizMate Windows 客户端 - 笔试与面试实时辅助（共享 desktop-core 源码，本壳仅承担构建配置）",
   "main": "out/main/index.js",
   "author": {
@@ -20,7 +20,8 @@
     "verify:win-package": "node scripts/verify-packaged-app.cjs release/win-unpacked",
     "package:store": "electron-vite build && electron-builder --win appx --x64",
     "typecheck:node": "node scripts/link-core-modules.cjs && tsc --noEmit -p tsconfig.node.json",
-    "typecheck:web": "node scripts/link-core-modules.cjs && tsc --noEmit -p tsconfig.web.json"
+    "typecheck:web": "node scripts/link-core-modules.cjs && tsc --noEmit -p tsconfig.web.json",
+    "test:shared": "vitest run --root ../.. desktop-core/shared/__tests__"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.2",
@@ -60,6 +61,7 @@
     "postcss": "^8.4.32",
     "tailwindcss": "^3.4.0",
     "typescript": "^5.3.3",
-    "vite": "^5.4.0"
+    "vite": "^5.4.0",
+    "vitest": "^2.1.9"
   }
 }

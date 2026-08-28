@@ -1,0 +1,144 @@
+# CHG-20260828-06 实施与构建证据
+
+## 1. 实施结果
+
+- `MacProtection.applyAllProtections()` 在窗口首次显示前统一应用：
+  - `setContentProtection(true)`；
+  - `setFocusable(false)`；
+  - `setIgnoreMouseEvents(true, { forward: true })`；
+  - `setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })`；
+  - `setAlwaysOnTop(true, 'screen-saver')`；
+  - `setSkipTaskbar(true)`。
+- watchdog 每个周期幂等恢复输入穿透、全工作区/全屏辅助、屏保级置顶和内容保护请求。
+- `always-on-top-changed=false` 触发带防重入守卫的立即恢复。
+- stop 或窗口销毁后清理 timer 和 listener。
+- Renderer 未增加关闭内容保护或鼠标穿透的 IPC；保留现有 `resizable=true` / `movable=true`。
+- 版本：内部 `2026.8.28003`，业务 `2026.8.28.3`。
+
+## 2. 本地自动化
+
+执行环境：Windows 11 x64 代码工作站，2026-08-28 17:04～17:09 +08:00。
+
+| 检查 | 结果 |
+|---|---|
+| `npm run typecheck:node` | 通过，0 错误 |
+| `npm run typecheck:web` | 通过，0 错误 |
+| `npm run test:shared` | 通过，2 文件 9 用例 |
+| `npm run test:mac-protection` | 通过，1 文件 4 用例 |
+| `npm run build` | 通过，main 30 / preload 1 / renderer 1723 模块 |
+| GitHub Actions workflow YAML | 通过，`js-yaml` 可解析 |
+| entitlements plist XML | 通过 |
+| 版本一致性 | 通过，package/lock `2026.8.28003`，业务配置 `2026.8.28.3` |
+| 禁止路径扫描 | 通过；无 `setIgnoreMouseEvents(false)`、保护关闭 IPC、私有 CGS、注入或 Dock 隐藏路径 |
+| 变更文件凭据扫描 | 通过 |
+| `git diff --check` | 通过 |
+
+修改后关键文件 SHA-256：
+
+| 文件 | SHA-256 |
+|---|---|
+| `desktop-core/electron/helpers/MacProtection.ts` | `CB981DE9F6FA482122CEA0828580B3C7A0286380E82F1ED4C8B9BB131DB927F7` |
+| `desktop-core/electron/helpers/__tests__/MacProtection.test.ts` | `86F50632BAEEA8C3B2E16D23B457CB51ADBD4E62AD35CDEFD7A17DF3DB093B15` |
+| `mac客户端/QuizMate-Mac/package.json` | `4D2FED32ACA33317F29CBBE0CBCBAD893FC5039F415D2AFD4564634E73D63123` |
+| `mac客户端/QuizMate-Mac/package-lock.json` | `06C6590736C0D1CFBE8828FA526566611FA0EA7372F8FA812FAD0A979B573D21` |
+| `mac客户端/QuizMate-Mac/resources/config.json` | `ADF1084E756AFFB24BC0ABC5102C968E5B35C9696F9075E277E31F213B7B321F` |
+| `.github/workflows/mac-client-build.yml` | `BA097DBA5397018A996A56CAEA591E9D6AE3ABEBD59D50BC3ACBDED05AA43017` |
+
+## 3. GitHub Actions 双架构安装包
+
+### 首次运行（保留失败证据）
+
+- Run：`33158395543`
+- 标签：`mac-release-2026.8.28.3`
+- 提交：`a1869e3489c2c0c6414eb35233a362c17616f37d`
+- Intel/Apple Silicon 的 checkout、依赖、类型检查和全部测试均通过。
+- 两个架构均在 electron-builder 打包阶段失败：`QuizMate-Mac/*** doesn't exist`。
+- 日志确认 `MAC_SIGNED_BUILD=true`、`MAC_NOTARIZE=true`，失败发生在证书导入前；`MAC_CSC_LINK` 被解释为 runner 本地路径，但该路径不存在。
+- 修复：工作流增加证书输入规范化和 PKCS#12 预检，支持原始 Base64、`base64:`、PKCS#12 Data URL、HTTPS 和 runner 本地文件；Base64 解码到 `$RUNNER_TEMP`，使用 `MAC_CSC_KEY_PASSWORD` 做 `openssl pkcs12 -noout` 验证，日志不输出证书或密码。
+
+### 第二次运行（证书 Secret 内容阻塞）
+
+- Run：`33158759642`
+- 标签：`mac-release-2026.8.28.3-r2`
+- 提交：`55b0cb082a7f5525196d91797072030e128329d5`
+- 两个架构均完成 checkout、依赖、类型检查和全部测试，随后在“Configure signing and notarization gate”一致失败。
+- 明确错误：`Decoded MAC_CSC_LINK is empty`。说明 Secret 非空，但内容不是可解码的 PKCS#12 Base64/URL/runner 文件；结合首轮“路径不存在”可确定当前值不是实际 `.p12` 文件内容。
+- 所需外部修复：把包含 Developer ID Application 私钥的 `.p12` 文件完整 Base64 内容写入 `MAC_CSC_LINK`，而不是本机文件路径、证书名称或占位符；`MAC_CSC_KEY_PASSWORD` 必须是导出该 `.p12` 时设置的密码。
+- 在 Secret 修正前，不降级生成 ad-hoc 包，避免再次出现 Gatekeeper/TCC 身份不稳定问题。
+
+### 用户批准 ad-hoc 测试构建
+
+- 2026-08-28 用户明确说明没有 Developer ID 证书，并要求沿用上午/昨日 Codex 的构建方式继续生成 Mac 安装包。
+- 工作流将 `mac-build-*` / `mac-delivery-*` 固定为 ad-hoc 隔离测试构建，即使仓库中存在无效签名 Secret 也不尝试导入；`mac-release-*` 继续强制 Developer ID、Team ID 和公证凭据，不能降级。
+- 本次只生成 GitHub prerelease 的 Intel/Apple Silicon DMG/ZIP，不更新官网、OSS 正式对象、`latest-mac.yml` 或用户自动更新通道。
+- 交付说明必须明确：ad-hoc 包无 Apple 公证、无稳定 TeamIdentifier，Gatekeeper 与旧 TCC 权限继承不作正式保证，只用于当前实体 Mac 功能测试。
+
+### 第三次运行（安装包通过、Release 权限阻塞）
+
+- Run：`33161721985`
+- 标签：`mac-build-2026.8.28.3`
+- 提交：`02473b089d537abfecd20ce0513dc22905fcdc59`
+- Intel 与 Apple Silicon 均通过依赖、类型检查、全部测试、production build、ad-hoc 重签名、`codesign --verify --deep --strict`、DMG `hdiutil verify` 和目标架构检查。
+- 最终失败仅发生在“Create GitHub prerelease with Mac package”：GitHub Actions 内置令牌调用 Releases API 返回 HTTP 403 `Resource not accessible by integration`，导致其后的 Actions Artifact 步骤被跳过。
+- 修复：Release 步骤改为 `continue-on-error`，Actions Artifact 恢复为强制门禁；下一次构建先保留已验证产物，再由本机已认证维护账号下载 Artifact、创建 prerelease 并上传。
+
+### 第四次运行准备（临时最小化上传凭据）
+
+- Run `33162006501` 已成功保留两套 Actions Artifact：Apple Silicon `214,307,285` 字节，Intel `227,763,303` 字节；两个 job 均为 success。
+- 为避免约 440MB 产物下载到 Windows 后再次上传，使用当前已认证维护账号创建临时 Actions Secret `MAC_RELEASE_TOKEN`，仅供 Release API 上传。
+- 工作流在该 Secret 缺失时仍保留 Actions Artifact，Release 步骤继续非阻断；本轮上传完成后立即删除临时 Secret，不改变 Apple 证书相关 Secrets。
+
+### 最终成功运行与交付
+
+- Run：`33162927619`（Intel/Apple Silicon 两个 job 均 success）
+- 标签：`mac-build-2026.8.28.3-r3`
+- 构建提交：`6ee4e30865ce963ea66cba76de7532f87b2d00e8`
+- GitHub prerelease：`https://github.com/xiaoer4585/quizmate/releases/tag/mac-build-2026.8.28.3-r3`
+- 两架构均通过：Node/Web 类型检查、共享 9 用例、MacProtection 4 用例、production build、ad-hoc 重签名、`codesign --verify --deep --strict`、DMG `hdiutil verify`、可执行文件架构检查、SHA-256 生成与 Actions Artifact 上传。
+- Release 共上传 12 个资产：两套 DMG、两套 ZIP、两份 SHA-256、两份架构证据、两份 codesign 证据和两份构建日志。
+- GitHub Release 资产 digest 与 runner `sha256-*.txt` 完全一致；两个 DMG 公网 HEAD 均为 HTTP 200，Content-Length 与 Release 记录一致。
+- 临时 `MAC_RELEASE_TOKEN` 已在资产核验后删除；Apple 相关 Secrets 未修改。
+
+| 架构 | DMG | 大小 | SHA-256 |
+|---|---|---:|---|
+| Apple Silicon arm64 | `QuizMate-Mac-arm64-2026.8.28003.dmg` | `110,407,625` | `d4cc5c675fe18e331ceb8c73c08ae6daabb932542fd2757e160866e1d39b2729` |
+| Intel x64 | `QuizMate-Mac-x64-2026.8.28003.dmg` | `117,840,447` | `2945b3b2565140b53f7d55a2fdf0ee608f95bf6954e1bcc46a58ac3d5f4a3a29` |
+
+| 架构 | ZIP | 大小 | SHA-256 |
+|---|---|---:|---|
+| Apple Silicon arm64 | `QuizMate-2026.8.28003-arm64-mac.zip` | `106,274,898` | `9883b888af653f3679ff302f1c28cfddd55a409d6bd73e8d00c2fd31a9bfbd63` |
+| Intel x64 | `QuizMate-2026.8.28003-mac.zip` | `112,308,863` | `ff27d4aec49d6dcce59f7a70e1e05c50cd420cf9a6cae79faed73fc02e50aaab` |
+
+## 4. 阿里云 OSS 临时交付
+
+- 交付时间：2026-08-28 18:36～18:42 +08:00。
+- 构建与直传任务：`33163980676`；Intel、Apple Silicon 两个 job 均成功，包含双架构构建、ad-hoc 重签名、DMG 校验、架构校验、Actions Artifact、OSS 直传和诊断日志上传。
+- 构建提交：`6ee4e30865ce963ea66cba76de7532f87b2d00e8`。
+- OSS 桶：仅 `quizmate-cn`；未触碰 `quizmate-vip`。
+- 隔离前缀：`temp/mac-overlay-2026.8.28.3/`。
+- 官网、`mac/latest-mac.yml`、正式下载对象和用户自动更新通道：均未修改。
+- 含短期 OSS PUT 签名的临时 `mac-delivery-20260828-overlay-3-r1` 标签已在上传与回读验证后删除。
+
+| 架构 | OSS 对象 | 大小 | SHA-256 | OSS ETag | 验证 |
+|---|---|---:|---|---|---|
+| Apple Silicon arm64 | `temp/mac-overlay-2026.8.28.3/QuizMate-Mac-arm64-2026.8.28003.dmg` | `110,407,686` | `197abd7795fc67e5a3157cf5944fbb86082b413c3e34181ef03835292119b55e` | `C2E55FF4A7CC2B4555E84AA029D41A31` | OSS HEAD 200；签名 GET 200；流式回读字节数与 SHA-256 完全匹配 |
+| Intel x64 | `temp/mac-overlay-2026.8.28.3/QuizMate-Mac-x64-2026.8.28003.dmg` | `117,839,707` | `34e278be4d61f9467f8904b0f3e2b506d3c4688e5a52112cbb01075745f47e39` | `E3269A8D9B1CACB4D3494D1C849230F5` | OSS HEAD 200；签名 GET 200；流式回读字节数与 SHA-256 完全匹配 |
+
+- 两个临时下载链接有效至 2026-09-04 18:39 +08:00；签名 URL 只在用户交付消息中提供，不写入 Git 或证据文件。
+- 本轮重新打包产生的 DMG 容器字节与上一轮 prerelease 略有差异，因此没有沿用旧哈希；已使用本轮 runner 日志中的 SHA-256 对 OSS 对象做完整流式回读复核。
+- 这是无 Developer ID、未公证的 ad-hoc 实体 Mac 测试包，不作为正式生产安装包或自动更新包。
+
+## 5. 实体 Mac 阻塞项
+
+- Intel 与 Apple Silicon 的 DMG 安装、Gatekeeper 首次启动和覆盖安装。
+- Space/全屏/多显示器/睡眠唤醒后的窗口行为。
+- 底层应用点击、滚动和移动的永久穿透。
+- 系统截图、命令行截图与指定 ScreenCaptureKit 工具的组合矩阵。
+- TCC 一次性迁移、统一授权、真实截图/AI、真实扬声器和持续面试回归。
+
+## 6. 回滚检查
+
+- 基线提交：`034c721a75383b3c87a1b81c1bae8a513431d08a`。
+- 本次无数据库、后端、账号、积分或 TCC 标记迁移。
+- 代码使用 Git revert 回滚；测试安装包可删除 GitHub prerelease/标签，并删除 OSS `temp/mac-overlay-2026.8.28.3/` 前缀撤回。
+- 官网、OSS 正式对象、`mac/latest-mac.yml` 和用户更新通道未修改。

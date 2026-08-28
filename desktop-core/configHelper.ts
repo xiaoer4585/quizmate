@@ -4,6 +4,7 @@ import fs from 'fs';
 import Store from 'electron-store';
 import type { DesktopConfigHelperOptions } from './platform';
 import { toBusinessVersion } from './electron/version';
+import type { MacPermissionMigrationRecord, PermissionOnboardingState } from './shared/reliability';
 
 export interface AIModelConfig {
   provider: string;
@@ -99,6 +100,8 @@ interface StoreSchema {
   theme?: 'dark' | 'light';
   interviewContexts?: Record<string, SavedInterviewContext>;
   onboardingGuideStates?: Record<string, boolean>;
+  permissionOnboardingStates?: Record<string, PermissionOnboardingState>;
+  macPermissionMigration?: MacPermissionMigrationRecord;
 }
 
 export class DesktopConfigHelper {
@@ -240,6 +243,29 @@ export class DesktopConfigHelper {
     const states = this.store.get('onboardingGuideStates') || {};
     this.store.set('onboardingGuideStates', { ...states, [this.getInterviewAccountScope()]: Boolean(completed) });
     return this.getOnboardingGuideState();
+  }
+  getPermissionOnboardingState(): PermissionOnboardingState | undefined {
+    const states = this.store.get('permissionOnboardingStates') || {};
+    const state = states[this.getInterviewAccountScope()];
+    return state ? { ...state } : undefined;
+  }
+  setPermissionOnboardingState(state: PermissionOnboardingState): PermissionOnboardingState {
+    const states = this.store.get('permissionOnboardingStates') || {};
+    const next = { ...state, updatedAt: Date.now() };
+    this.store.set('permissionOnboardingStates', { ...states, [this.getInterviewAccountScope()]: next });
+    return next;
+  }
+  resetPermissionOnboardingStates(): void {
+    this.store.set('permissionOnboardingStates', {});
+  }
+  getMacPermissionMigration(): MacPermissionMigrationRecord | undefined {
+    const record = this.store.get('macPermissionMigration');
+    return record ? { ...record } : undefined;
+  }
+  setMacPermissionMigration(record: MacPermissionMigrationRecord): MacPermissionMigrationRecord {
+    const next = { ...record, updatedAt: Date.now() };
+    this.store.set('macPermissionMigration', next);
+    return next;
   }
   getUserConfig(): UserConfig {
     const cs = this.getClientSettings();

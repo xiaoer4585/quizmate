@@ -31,6 +31,17 @@ const api = {
     getState: () => invoke('guide:getState'),
     setCompleted: (completed = true) => invoke('guide:setCompleted', completed),
   },
+  permissions: {
+    getState: () => invoke('permissions:getState'),
+    authorizeAll: () => invoke('permissions:authorizeAll'),
+    requestMicrophone: () => invoke('permissions:requestMicrophone'),
+    requestScreen: () => invoke('permissions:requestScreen'),
+    testSystemAudio: () => invoke('permissions:testSystemAudio'),
+    complete: (skipped = false) => invoke('permissions:complete', skipped),
+    openSettings: (kind: 'microphone' | 'screen') => invoke('permissions:openSettings', kind),
+    installToApplications: () => invoke('permissions:installToApplications'),
+    relaunch: () => invoke('permissions:relaunch'),
+  },
   // 笔试助手（完全沿用原考试插件方案）
   exam: {
     // 截图 + 搜题（兼容旧接口）
@@ -40,6 +51,9 @@ const api = {
     stopAnalyze: () => invoke('exam:stopAnalyze'),
     setTrainingMode: (enabled: boolean) => invoke('exam:setTrainingMode', enabled),
     checkCredits: () => invoke('exam:checkCredits'),
+    getLastDiagnostic: () => invoke('exam:getLastDiagnostic'),
+    copyDiagnostic: () => invoke('exam:copyDiagnostic'),
+    openDiagnosticFolder: () => invoke('exam:openDiagnosticFolder'),
     // 考试客户端生命周期（沿用原考试插件）
     launch: () => invoke('exam:launch'),
     close: () => invoke('exam:close'),
@@ -91,6 +105,10 @@ const api = {
     generateAnswer: (question: string) => invoke('interview:generateAnswer', question),
     // 实时语音模型配置
     getVoiceConfig: () => invoke('interview:getVoiceConfig'),
+    getState: () => invoke('interview:getState'),
+    retry: () => invoke('interview:retry'),
+    copyDiagnostic: () => invoke('interview:copyDiagnostic'),
+    openDiagnosticFolder: () => invoke('interview:openDiagnosticFolder'),
     // 面试悬浮窗控制（独立于笔试悬浮窗）
     createOverlay: () => invoke('interview-overlay:create'),
     showOverlay: () => invoke('interview-overlay:show'),
@@ -105,6 +123,7 @@ const api = {
     onTaskAdded: (cb: (data: unknown) => void) => on('interview:taskAdded', cb),
     onTaskUpdated: (cb: (data: unknown) => void) => on('interview:taskUpdated', cb),
     onTasksCleared: (cb: (data: unknown) => void) => on('interview:tasksCleared', cb),
+    onStateChanged: (cb: (data: unknown) => void) => on('interview:stateChanged', cb),
   },
   // 系统/外链
   system: {
@@ -193,6 +212,8 @@ const electronAPI = {
     deleteLatest: (isExtra?: boolean) => invoke('screenshot:delete-latest', isExtra),
     clearAll: () => invoke('screenshot:clear-all'),
     fileToBase64: (filePath: string) => invoke('screenshot:file-to-base64', filePath),
+    copyDiagnostic: () => invoke('exam:copyDiagnostic'),
+    openDiagnosticFolder: () => invoke('exam:openDiagnosticFolder'),
   },
   // Window（悬浮窗控制）
   window: {

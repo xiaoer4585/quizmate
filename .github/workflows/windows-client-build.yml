@@ -87,12 +87,18 @@ jobs:
           INTERNAL_VERSION=$(node -p "require('./package.json').version")
           BUSINESS_VERSION=$(node -e '
             const value = require("./package.json").version;
+            const configured = require("./resources/config.json").version;
             const parts = value.split(".");
             const encoded = Number(parts[2]);
             if (parts.length !== 3 || !Number.isInteger(encoded) || encoded < 1000) process.exit(2);
             const day = Math.floor(encoded / 1000);
             const revision = encoded % 1000;
-            process.stdout.write(`${parts[0]}.${parts[1]}.${day}${revision ? `.${revision}` : ""}`);
+            const expected = `${parts[0]}.${String(parts[1]).padStart(2, "0")}.${String(day).padStart(2, "0")}${revision ? `.${revision}` : ""}`;
+            if (configured !== expected) {
+              console.error(`public version mismatch: config=${configured} expected=${expected}`);
+              process.exit(3);
+            }
+            process.stdout.write(configured);
           ')
           RAW_EXE="release/QuizMate-Windows-${INTERNAL_VERSION}.exe"
           RAW_BLOCKMAP="${RAW_EXE}.blockmap"

@@ -14,5 +14,6 @@
       "*": ["node_modules/*", "../windows客户端/QuizMate-Windows/node_modules/*"]
     }
   },
-  "include": ["../../desktop-core/electron", "../../desktop-core/shared", "../../desktop-core/types", "../../desktop-core/*.ts"]
+  "include": ["../../desktop-core/electron", "../../desktop-core/shared", "../../desktop-core/types", "../../desktop-core/*.ts"],
+  "exclude": ["../../desktop-core/shared/__tests__"]
 }

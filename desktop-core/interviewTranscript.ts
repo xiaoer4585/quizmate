@@ -1,5 +1,50 @@
-export const ASR_SILENCE_COMMIT_MS = 1200;
-export const ASR_FINAL_COMMIT_MS = 900;
+// A finalized utterance should dispatch to the interview model within 300ms.
+// Interim text still uses a longer silence window to avoid splitting a question.
+export const ASR_SILENCE_COMMIT_MS = 900;
+export const ASR_FINAL_COMMIT_MS = 180;
+
+export const INTERVIEW_CONTEXT_LIMITS = {
+  // Keep the client request at or below the deployed service limits so the
+  // backend can forward it without a second compaction pass.
+  jobDescription: 4000,
+  resumeText: 8000,
+  recentConversation: 2000,
+} as const;
+
+const CONTEXT_OMISSION_MARKER = '\n…[中间内容已省略以加快响应]…\n';
+
+/**
+ * Limit repeated interview context without turning a long document into a
+ * low-signal hard cut. The beginning normally contains the profile/summary,
+ * while the end commonly contains recent projects, skills or conversation.
+ */
+export function limitContextPreservingEnds(value: string | undefined, maxChars: number): string | undefined {
+  const normalized = value?.trim();
+  if (!normalized) return undefined;
+  if (normalized.length <= maxChars) return normalized;
+  if (maxChars <= CONTEXT_OMISSION_MARKER.length) return normalized.slice(0, Math.max(0, maxChars));
+
+  const available = maxChars - CONTEXT_OMISSION_MARKER.length;
+  const headChars = Math.ceil(available * 0.72);
+  const tailChars = available - headChars;
+  return `${normalized.slice(0, headChars)}${CONTEXT_OMISSION_MARKER}${normalized.slice(-tailChars)}`;
+}
+
+export function limitInterviewRequestContext(context: {
+  jobDescription?: string;
+  resumeText?: string;
+  recentConversation?: string;
+}): {
+  jobDescription?: string;
+  resumeText?: string;
+  recentConversation?: string;
+} {
+  return {
+    jobDescription: limitContextPreservingEnds(context.jobDescription, INTERVIEW_CONTEXT_LIMITS.jobDescription),
+    resumeText: limitContextPreservingEnds(context.resumeText, INTERVIEW_CONTEXT_LIMITS.resumeText),
+    recentConversation: limitContextPreservingEnds(context.recentConversation, INTERVIEW_CONTEXT_LIMITS.recentConversation),
+  };
+}
 
 export function normalizeTranscript(text: string): string {
   return text.replace(/::__id__\d+$/, '').replace(/\s+/g, ' ').trim();

@@ -35,6 +35,9 @@ function collectFiles() {
       const full = path.join(dir, name);
       const rel = path.relative(SITE_ROOT, full).split(path.sep).join('/');
       if (rel === 'admin-web' || rel.startsWith('admin-web/')) continue;
+      // Client update manifests are release-state objects. A static website
+      // sync must never replace them with a checked-in historical snapshot.
+      if (rel === 'mac/latest-mac.yml' || rel === 'downloads/latest.yml' || rel === 'suite/latest.yml') continue;
       const stat = fs.statSync(full);
       if (stat.isDirectory()) walk(full);
       else if (rel.startsWith('assets/') || rel.startsWith('downloads/') || rel.startsWith('mac/') || rootAllow.has(rel) || (rel.startsWith('blog/') && rel.endsWith('.html'))) files.push([rel, full]);
