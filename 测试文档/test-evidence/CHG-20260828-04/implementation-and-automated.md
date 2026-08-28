@@ -4,7 +4,8 @@
 - Host: Windows 11 x64
 - Branch: `codex/mac-capture-interview-20260828`
 - Baseline commit: `6b6cf928176ee3963a1f7ecc53de6aaa0d719b90`
-- Internal package version: `2026.8.28001` (business version `2026.8.28.1`)
+- Mac internal package version: `2026.8.28001` (business version `2026.8.28.1`)
+- Windows release version remains unchanged: internal `2026.8.27002`, business `2026.8.27.2`; Windows was only used for shared-core regression and is not packaged or published by this change.
 - Production website/update manifests changed: no
 - Gitee/GitHub/OSS changed: no
 
