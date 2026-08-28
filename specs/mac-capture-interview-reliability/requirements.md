@@ -137,6 +137,7 @@ Mac 客户端当前存在两个 P0/P1 级问题：
 - 当实现开始前，项目应在统一测试文档新增独立变更编号，并补充截图阶段错误、音轨结束、AudioContext 挂起、WebSocket 重连、状态一致性和日志脱敏用例。
 - 当共享 `desktop-core` 被修改时，系统应通过 Windows Node/Web 类型检查、单元测试和受影响的桌面回归，确保已验证的 Windows 版本不回归。
 - 当生成 Mac 测试包时，CI 应分别构建 Intel 和 Apple Silicon 产物，校验架构、版本、DMG 完整性和当前签名状态。
+- 当 macOS 26 为当前主流目标系统时，CI 应在 macOS 26 runner 上实际启动挂载 DMG 内的应用并确认进程持续存活；应验证主程序与 Electron Framework/Helpers 的签名身份一致，禁止仅用 `codesign --deep --strict` 代替动态加载验证。
 - 当没有 Apple Developer ID 正式签名/公证时，测试结论应明确标记限制，不得把 ad-hoc 签名等同于 Gatekeeper 正式通过。
 - 当实体 Apple Silicon 与 Intel Mac 尚未完成权限、截图、真实扬声器、30 分钟持续听写、断网恢复、睡眠唤醒和回滚验证时，Mac 正式发布状态应为“阻塞”。
 - 当测试包需要交付时，只能上传到 OSS `temp/` 隔离路径；不得修改官网、生产下载对象或 `mac/latest-mac.yml`。

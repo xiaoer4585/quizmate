@@ -136,3 +136,10 @@
   - 运行 Mac 类型检查、共享测试和 production build；Windows 只运行共享回归，不改 Windows 代码、版本或安装包。
   - 在实体 Mac 上记录 Space/全屏/多显示器/睡眠唤醒、置顶恢复、鼠标穿透和具体捕获工具矩阵；未验证项保持阻塞，不发布、不构建正式包、不更新官网。
   - _Requirements: R10, R13_
+
+- [ ] 19. 修复 macOS 26 ad-hoc 嵌套签名启动崩溃
+  - 新建 `CHG-20260828-07`，保留实体 M1 Pro/macOS 26.5.2 的脱敏 dyld 失败证据、基线提交和关键文件哈希。
+  - 使用 Electron 签名工具从内到外统一重签所有 Mach-O、Framework 和 Helper，禁止依赖单次 `codesign --deep`。
+  - 将 Mac CI 切换到 macOS 26，增加主程序与 Electron Framework/Helpers 签名身份一致性检查，并直接启动 DMG 内应用验证进程存活。
+  - 构建 Intel/Apple Silicon 隔离测试包，上传 OSS `temp/mac-os26-signing-2026.8.28.4/`，回读 SHA-256 后交由实体 M 系列 macOS 26 复测。
+  - _Requirements: R10, R12_

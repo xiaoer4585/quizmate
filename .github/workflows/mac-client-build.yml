@@ -21,19 +21,21 @@ permissions:
 jobs:
   build:
     name: macOS ${{ matrix.label }}
-    runs-on: macos-14
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - arch: x64
             label: Intel
+            runner: macos-26-intel
             expected: x86_64
             uploadKey: intel
             zipUploadKey: intelZip
             logUploadKey: intelLog
           - arch: arm64
             label: Apple-Silicon
+            runner: macos-26
             expected: arm64
             uploadKey: apple
             zipUploadKey: appleZip
@@ -184,7 +186,40 @@ jobs:
           exec > >(tee -a build.log) 2>&1
           APP_PATH=$(find release -maxdepth 2 -name 'QuizMate.app' -type d -print -quit)
           test -d "$APP_PATH"
-          codesign --force --deep --options runtime --entitlements resources/entitlements.mac.plist --sign - --timestamp=none "$APP_PATH"
+          export APP_PATH
+          # macOS 26 enforces Hardened Runtime library validation before the
+          # Electron main process starts. A single `codesign --deep` can leave
+          # Electron Framework/Helpers with their upstream Team ID while the
+          # top-level app becomes ad-hoc, which dyld rejects. Electron's signer
+          # walks every nested Mach-O/framework/helper from the inside out.
+          node <<'NODE'
+          const path = require('path')
+          const { signAsync } = require('@electron/osx-sign')
+
+          const appPath = path.resolve(process.env.APP_PATH)
+          const entitlements = path.resolve('resources/entitlements.mac.plist')
+          const electronVersion = require('electron/package.json').version
+
+          signAsync({
+            app: appPath,
+            identity: '-',
+            identityValidation: false,
+            platform: 'darwin',
+            version: electronVersion,
+            preAutoEntitlements: false,
+            preEmbedProvisioningProfile: false,
+            optionsForFile(filePath) {
+              return {
+                ...(path.resolve(filePath) === appPath ? { entitlements } : {}),
+                hardenedRuntime: true,
+                timestamp: 'none',
+              }
+            },
+          }).catch((error) => {
+            console.error(error)
+            process.exit(1)
+          })
+          NODE
           codesign --verify --deep --strict --verbose=4 "$APP_PATH"
           rm -f release/QuizMate-Mac-${{ matrix.arch }}-*.dmg
           rm -f release/QuizMate-*-${{ matrix.arch }}-mac.zip
@@ -209,6 +244,25 @@ jobs:
           test -n "$APP_PATH"
           codesign --verify --deep --strict --verbose=4 "$APP_PATH"
           codesign -dv --verbose=4 "$APP_PATH" 2>&1 | tee codesign.txt
+          signature_team() {
+            local value
+            value=$(codesign -dv --verbose=4 "$1" 2>&1 | sed -n 's/^TeamIdentifier=//p' | tail -n 1)
+            printf '%s' "${value:-not set}"
+          }
+          MAIN_TEAM=$(signature_team "$APP_BIN")
+          printf 'main\t%s\t%s\n' "$MAIN_TEAM" "$APP_BIN" > signature-identities.txt
+          while IFS= read -r -d '' candidate; do
+            if file "$candidate" | grep -q 'Mach-O'; then
+              codesign --verify --strict --verbose=2 "$candidate"
+              CANDIDATE_TEAM=$(signature_team "$candidate")
+              printf 'nested\t%s\t%s\n' "$CANDIDATE_TEAM" "$candidate" >> signature-identities.txt
+              if [[ "$CANDIDATE_TEAM" != "$MAIN_TEAM" ]]; then
+                echo "::error::macOS 26 library validation would reject Team ID mismatch: main=$MAIN_TEAM nested=$CANDIDATE_TEAM file=$candidate"
+                exit 1
+              fi
+            fi
+          done < <(find "$APP_PATH/Contents" -type f -print0)
+          cat signature-identities.txt
           if [[ "${MAC_SIGNED_BUILD:-false}" == "true" ]]; then
             TEAM_ID=$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 | sed -n 's/^TeamIdentifier=//p')
             test -n "$TEAM_ID"
@@ -223,6 +277,27 @@ jobs:
           fi
           file "$APP_BIN" | tee architecture.txt
           grep -q "${{ matrix.expected }}" architecture.txt
+          SMOKE_DATA=$(mktemp -d "$RUNNER_TEMP/quizmate-launch-smoke-${{ matrix.arch }}.XXXXXX")
+          "$APP_BIN" --user-data-dir="$SMOKE_DATA" > launch-smoke.log 2>&1 &
+          APP_PID=$!
+          sleep 10
+          if ! kill -0 "$APP_PID" 2>/dev/null; then
+            set +e
+            wait "$APP_PID"
+            APP_STATUS=$?
+            set -e
+            cat launch-smoke.log
+            echo "::error::QuizMate exited during macOS 26 launch smoke (status $APP_STATUS)"
+            exit 1
+          fi
+          kill "$APP_PID" 2>/dev/null || true
+          wait "$APP_PID" 2>/dev/null || true
+          if grep -Eiq 'Library not loaded|different Team IDs|Namespace DYLD|dyld.*Code 1' launch-smoke.log; then
+            cat launch-smoke.log
+            echo "::error::QuizMate macOS 26 launch log contains a dyld/signing failure"
+            exit 1
+          fi
+          echo "macOS 26 launch smoke stayed alive for 10 seconds" | tee -a launch-smoke.log
           hdiutil detach "$MOUNT_DIR"
           shasum -a 256 "$DMG" | tee sha256.txt
           shasum -a 256 "$ZIP" | tee -a sha256.txt
@@ -260,6 +335,8 @@ jobs:
           cp sha256.txt "sha256-${{ matrix.arch }}.txt"
           cp architecture.txt "architecture-${{ matrix.arch }}.txt"
           cp codesign.txt "codesign-${{ matrix.arch }}.txt"
+          cp signature-identities.txt "signature-identities-${{ matrix.arch }}.txt"
+          cp launch-smoke.log "launch-smoke-${{ matrix.arch }}.log"
           cp build.log "build-${{ matrix.arch }}.log"
           gh release upload "$TAG" \
             --repo "${{ github.repository }}" \
@@ -269,6 +346,8 @@ jobs:
             "sha256-${{ matrix.arch }}.txt" \
             "architecture-${{ matrix.arch }}.txt" \
             "codesign-${{ matrix.arch }}.txt" \
+            "signature-identities-${{ matrix.arch }}.txt" \
+            "launch-smoke-${{ matrix.arch }}.log" \
             "build-${{ matrix.arch }}.log"
           gh release view "$TAG" --repo "${{ github.repository }}" --json url -q '.url'
 
@@ -281,6 +360,8 @@ jobs:
             mac客户端/QuizMate-Mac/${{ steps.artifact.outputs.zip }}
             mac客户端/QuizMate-Mac/architecture.txt
             mac客户端/QuizMate-Mac/codesign.txt
+            mac客户端/QuizMate-Mac/signature-identities.txt
+            mac客户端/QuizMate-Mac/launch-smoke.log
             mac客户端/QuizMate-Mac/sha256.txt
           if-no-files-found: error
           retention-days: 1

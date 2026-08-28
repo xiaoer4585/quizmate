@@ -390,6 +390,7 @@ event, stage/phase, code, durationMs, attempt
 - 未收到明确上线指令前，不修改 `quizmate.cn` 官网、正式下载对象、`mac/latest-mac.yml` 或用户自动更新通道。
 - Mac builder 开启 Hardened Runtime 和固定 entitlements；`afterSign` 仅在 `MAC_NOTARIZE=true` 时调用 `@electron/notarize`。
 - `mac-release-*` 正式标签必须同时具备 Developer ID Application 证书、证书密码、Apple ID 应用专用密码和 Team ID；任一缺失直接失败。`mac-build-*`/`mac-delivery-*` 可保留明确标注的隔离测试构建，但无 TeamIdentifier 时不得正式发布。
+- ad-hoc 测试包不得使用单次 `codesign --deep` 覆盖整个应用；必须由 Electron 签名工具按 Mach-O、Framework、Helper、主应用从内到外逐层使用同一 ad-hoc 身份签名。CI 在 macOS 26 runner 上对主程序、Electron Framework 和 Helpers 读取 TeamIdentifier/CDHash，并直接启动 DMG 内应用执行存活检查，以捕获 dyld 的 Team ID 映射限制。
 
 ## 9. 回滚设计
 
