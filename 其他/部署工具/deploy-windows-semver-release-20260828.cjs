@@ -194,8 +194,8 @@ async function fetchInstaller(storage, auth) {
     const digest = localHash.digest('hex');
     if (digest !== EXPECTED_EXE_SHA256) throw new Error(`Local EXE digest mismatch: ${digest}`);
     await storage.multipartUpload(STAGE_EXE, files.exe, {
-      parallel: 16,
-      partSize: 1024 * 1024,
+      parallel: 4,
+      partSize: 4 * 1024 * 1024,
       headers: {
         'Content-Type': 'application/vnd.microsoft.portable-executable',
         'Cache-Control': 'no-cache',
