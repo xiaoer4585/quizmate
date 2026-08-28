@@ -273,6 +273,15 @@ function normalizeApiFormat(value: unknown): "openai" | "anthropic" {
   return String(value ?? "openai").toLowerCase() === "anthropic" ? "anthropic" : "openai";
 }
 
+function estimateContentChars(value: unknown): number {
+  if (typeof value === "string") return value.length;
+  if (Array.isArray(value)) return value.reduce((total, item) => total + estimateContentChars(item), 0);
+  if (value && typeof value === "object") {
+    return Object.entries(value).reduce((total, [key, item]) => total + key.length + estimateContentChars(item), 0);
+  }
+  return 0;
+}
+
 async function callChatModel(
   resolved: ResolvedModel,
   userContent: unknown,
@@ -280,6 +289,7 @@ async function callChatModel(
   options: { disableThinking?: boolean } = {}
 ): Promise<string> {
   if (!resolved.baseUrl || !resolved.apiKey || !resolved.model) throw new PublicError("后端模型配置不完整。", "MODEL_NOT_CONFIGURED", 503);
+  const startedAt = performance.now();
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 60_000);
   try {
@@ -312,7 +322,7 @@ async function callChatModel(
     }
     const response = await fetch(url, {
       method: "POST",
-      headers,
+      headers: { ...headers, accept: "application/json", "accept-encoding": "gzip, br" },
       body,
       signal: controller.signal
     });
@@ -332,7 +342,14 @@ async function callChatModel(
       console.error("[model] empty content, full payload:", JSON.stringify(payload).slice(0, 500));
       throw new PublicError("AI 未返回有效答案，请重试。", "INVALID_MODEL_RESULT", 502);
     }
-    console.log("[model] raw content (first 300 chars):", content.slice(0, 300));
+    // 只记录阶段耗时和输出长度，避免将题目/答案写入生产日志。
+    console.info("[model] completed", JSON.stringify({
+      model: resolved.model,
+      format: resolved.apiFormat,
+      inputChars: estimateContentChars(userContent),
+      outputChars: content.length,
+      latencyMs: Math.round(performance.now() - startedAt)
+    }));
     return content;
   } catch (error) {
     if (error instanceof PublicError) throw error;

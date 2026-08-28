@@ -51,13 +51,22 @@ function normalizeInterviewContext(input: Record<string, unknown>): InterviewCon
   return {
     position: String(raw.position ?? "").trim().slice(0, 100),
     company: String(raw.company ?? "").trim().slice(0, 100),
-    jobDescription: String(raw.jobDescription ?? "").trim().slice(0, 8_000),
-    resumeText: String(raw.resumeText ?? "").trim().slice(0, 20_000),
+    // 实时回答优先低首 token 延迟；保留简历/岗位的头尾，避免超长历史文本拖慢上游首 token。
+    jobDescription: compactContext(String(raw.jobDescription ?? ""), 4_000),
+    resumeText: compactContext(String(raw.resumeText ?? ""), 8_000),
     language: String(raw.language ?? "zh").trim().slice(0, 20) || "zh",
     answerStyle: raw.answerStyle === "detailed" ? "detailed" : "concise",
     // 客户端一直在传最近对话上下文，此前被丢弃；现在供占位符模板使用
-    recentConversation: String(raw.recentConversation ?? "").trim().slice(0, 4_000)
+    recentConversation: compactContext(String(raw.recentConversation ?? ""), 2_000)
   };
+}
+
+function compactContext(value: string, maxLength: number): string {
+  const normalized = value.trim();
+  if (normalized.length <= maxLength) return normalized;
+  const headLength = Math.floor(maxLength * 0.72);
+  const tailLength = maxLength - headLength;
+  return `${normalized.slice(0, headLength)}\n…（上下文已压缩）…\n${normalized.slice(-tailLength)}`;
 }
 
 function resolveAnswerLanguage(question: string, contextLanguage: string): "中文" | "English" {
