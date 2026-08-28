@@ -46,7 +46,15 @@
 
 ## 3. GitHub Actions 双架构安装包
 
-待记录。
+### 首次运行（保留失败证据）
+
+- Run：`33158395543`
+- 标签：`mac-release-2026.8.28.3`
+- 提交：`a1869e3489c2c0c6414eb35233a362c17616f37d`
+- Intel/Apple Silicon 的 checkout、依赖、类型检查和全部测试均通过。
+- 两个架构均在 electron-builder 打包阶段失败：`QuizMate-Mac/*** doesn't exist`。
+- 日志确认 `MAC_SIGNED_BUILD=true`、`MAC_NOTARIZE=true`，失败发生在证书导入前；`MAC_CSC_LINK` 被解释为 runner 本地路径，但该路径不存在。
+- 修复：工作流增加证书输入规范化和 PKCS#12 预检，支持原始 Base64、`base64:`、PKCS#12 Data URL、HTTPS 和 runner 本地文件；Base64 解码到 `$RUNNER_TEMP`，使用 `MAC_CSC_KEY_PASSWORD` 做 `openssl pkcs12 -noout` 验证，日志不输出证书或密码。
 
 ## 4. 实体 Mac 阻塞项
 
