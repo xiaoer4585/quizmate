@@ -99,68 +99,69 @@ jobs:
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
         run: |
           set -euo pipefail
-          if [[ -n "${MAC_CSC_LINK:-}" && -n "${MAC_CSC_KEY_PASSWORD:-}" ]]; then
-            CERT_PATH="$RUNNER_TEMP/quizmate-developer-id.p12"
-            case "$MAC_CSC_LINK" in
-              https://*|http://*)
-                printf 'CSC_LINK=%s\n' "$MAC_CSC_LINK" >> "$GITHUB_ENV"
-                ;;
-              file://*)
-                LOCAL_CERT_PATH="${MAC_CSC_LINK#file://}"
-                test -f "$LOCAL_CERT_PATH" || {
-                  echo "::error::MAC_CSC_LINK file URL does not exist on the GitHub runner; store the .p12 file as Base64 instead"
-                  exit 1
-                }
-                printf 'CSC_LINK=%s\n' "$MAC_CSC_LINK" >> "$GITHUB_ENV"
-                ;;
-              /*)
-                test -f "$MAC_CSC_LINK" || {
-                  echo "::error::MAC_CSC_LINK path does not exist on the GitHub runner; store the .p12 file as Base64 instead"
-                  exit 1
-                }
-                printf 'CSC_LINK=file://%s\n' "$MAC_CSC_LINK" >> "$GITHUB_ENV"
-                ;;
-              *)
-                CERT_BASE64="$MAC_CSC_LINK"
-                CERT_BASE64="${CERT_BASE64#base64:}"
-                CERT_BASE64="${CERT_BASE64#data:application/x-pkcs12;base64,}"
-                if ! printf '%s' "$CERT_BASE64" \
-                  | tr -d '[:space:]' \
-                  | openssl base64 -d -A -out "$CERT_PATH"; then
-                  echo "::error::MAC_CSC_LINK is neither a runner file/URL nor valid Base64"
-                  exit 1
-                fi
-                test -s "$CERT_PATH" || {
-                  echo "::error::Decoded MAC_CSC_LINK is empty"
-                  exit 1
-                }
-                if ! openssl pkcs12 -in "$CERT_PATH" -passin env:MAC_CSC_KEY_PASSWORD -noout >/dev/null 2>&1; then
-                  echo "::error::Decoded MAC_CSC_LINK is not a valid PKCS#12 file or MAC_CSC_KEY_PASSWORD is incorrect"
-                  exit 1
-                fi
-                chmod 600 "$CERT_PATH"
-                printf 'CSC_LINK=file://%s\n' "$CERT_PATH" >> "$GITHUB_ENV"
-                ;;
-            esac
-            printf 'CSC_KEY_PASSWORD=%s\n' "$MAC_CSC_KEY_PASSWORD" >> "$GITHUB_ENV"
-            echo "MAC_SIGNED_BUILD=true" >> "$GITHUB_ENV"
-          else
+          if [[ "$GITHUB_REF" != refs/tags/mac-release-* ]]; then
+            # mac-build/mac-delivery are isolated test packages. Keep them
+            # reproducibly ad-hoc even when repository secrets contain an
+            # unusable placeholder; only mac-release may consume Developer ID.
             echo "MAC_SIGNED_BUILD=false" >> "$GITHUB_ENV"
-          fi
-          if [[ "$GITHUB_REF" == refs/tags/mac-release-* ]]; then
-            test -n "${MAC_CSC_LINK:-}" || { echo "::error::MAC_CSC_LINK is required for a production Mac release"; exit 1; }
-            test -n "${MAC_CSC_KEY_PASSWORD:-}" || { echo "::error::MAC_CSC_KEY_PASSWORD is required for a production Mac release"; exit 1; }
-            test -n "${APPLE_ID:-}" || { echo "::error::APPLE_ID is required for notarization"; exit 1; }
-            test -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" || { echo "::error::APPLE_APP_SPECIFIC_PASSWORD is required for notarization"; exit 1; }
-            test -n "${APPLE_TEAM_ID:-}" || { echo "::error::APPLE_TEAM_ID is required for notarization"; exit 1; }
-            echo "MAC_NOTARIZE=true" >> "$GITHUB_ENV"
-          else
             echo "MAC_NOTARIZE=false" >> "$GITHUB_ENV"
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "::warning::Building an ad-hoc Mac test package; Gatekeeper, stable TCC identity and automatic update eligibility are not claimed"
+            exit 0
           fi
+
+          test -n "${MAC_CSC_LINK:-}" || { echo "::error::MAC_CSC_LINK is required for a production Mac release"; exit 1; }
+          test -n "${MAC_CSC_KEY_PASSWORD:-}" || { echo "::error::MAC_CSC_KEY_PASSWORD is required for a production Mac release"; exit 1; }
+          test -n "${APPLE_ID:-}" || { echo "::error::APPLE_ID is required for notarization"; exit 1; }
+          test -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" || { echo "::error::APPLE_APP_SPECIFIC_PASSWORD is required for notarization"; exit 1; }
+          test -n "${APPLE_TEAM_ID:-}" || { echo "::error::APPLE_TEAM_ID is required for notarization"; exit 1; }
+
+          CERT_PATH="$RUNNER_TEMP/quizmate-developer-id.p12"
+          case "$MAC_CSC_LINK" in
+            https://*|http://*)
+              printf 'CSC_LINK=%s\n' "$MAC_CSC_LINK" >> "$GITHUB_ENV"
+              ;;
+            file://*)
+              LOCAL_CERT_PATH="${MAC_CSC_LINK#file://}"
+              test -f "$LOCAL_CERT_PATH" || {
+                echo "::error::MAC_CSC_LINK file URL does not exist on the GitHub runner; store the .p12 file as Base64 instead"
+                exit 1
+              }
+              printf 'CSC_LINK=%s\n' "$MAC_CSC_LINK" >> "$GITHUB_ENV"
+              ;;
+            /*)
+              test -f "$MAC_CSC_LINK" || {
+                echo "::error::MAC_CSC_LINK path does not exist on the GitHub runner; store the .p12 file as Base64 instead"
+                exit 1
+              }
+              printf 'CSC_LINK=file://%s\n' "$MAC_CSC_LINK" >> "$GITHUB_ENV"
+              ;;
+            *)
+              CERT_BASE64="$MAC_CSC_LINK"
+              CERT_BASE64="${CERT_BASE64#base64:}"
+              CERT_BASE64="${CERT_BASE64#data:application/x-pkcs12;base64,}"
+              if ! printf '%s' "$CERT_BASE64" \
+                | tr -d '[:space:]' \
+                | openssl base64 -d -A -out "$CERT_PATH"; then
+                echo "::error::MAC_CSC_LINK is neither a runner file/URL nor valid Base64"
+                exit 1
+              fi
+              test -s "$CERT_PATH" || { echo "::error::Decoded MAC_CSC_LINK is empty"; exit 1; }
+              if ! openssl pkcs12 -in "$CERT_PATH" -passin env:MAC_CSC_KEY_PASSWORD -noout >/dev/null 2>&1; then
+                echo "::error::Decoded MAC_CSC_LINK is not a valid PKCS#12 file or MAC_CSC_KEY_PASSWORD is incorrect"
+                exit 1
+              fi
+              chmod 600 "$CERT_PATH"
+              printf 'CSC_LINK=file://%s\n' "$CERT_PATH" >> "$GITHUB_ENV"
+              ;;
+          esac
+          printf 'CSC_KEY_PASSWORD=%s\n' "$MAC_CSC_KEY_PASSWORD" >> "$GITHUB_ENV"
+          echo "CSC_IDENTITY_AUTO_DISCOVERY=true" >> "$GITHUB_ENV"
+          echo "MAC_SIGNED_BUILD=true" >> "$GITHUB_ENV"
+          echo "MAC_NOTARIZE=true" >> "$GITHUB_ENV"
 
       - name: Build DMG
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' && 'true' || 'false' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}

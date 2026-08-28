@@ -66,6 +66,13 @@
 - 所需外部修复：把包含 Developer ID Application 私钥的 `.p12` 文件完整 Base64 内容写入 `MAC_CSC_LINK`，而不是本机文件路径、证书名称或占位符；`MAC_CSC_KEY_PASSWORD` 必须是导出该 `.p12` 时设置的密码。
 - 在 Secret 修正前，不降级生成 ad-hoc 包，避免再次出现 Gatekeeper/TCC 身份不稳定问题。
 
+### 用户批准 ad-hoc 测试构建
+
+- 2026-08-28 用户明确说明没有 Developer ID 证书，并要求沿用上午/昨日 Codex 的构建方式继续生成 Mac 安装包。
+- 工作流将 `mac-build-*` / `mac-delivery-*` 固定为 ad-hoc 隔离测试构建，即使仓库中存在无效签名 Secret 也不尝试导入；`mac-release-*` 继续强制 Developer ID、Team ID 和公证凭据，不能降级。
+- 本次只生成 GitHub prerelease 的 Intel/Apple Silicon DMG/ZIP，不更新官网、OSS 正式对象、`latest-mac.yml` 或用户自动更新通道。
+- 交付说明必须明确：ad-hoc 包无 Apple 公证、无稳定 TeamIdentifier，Gatekeeper 与旧 TCC 权限继承不作正式保证，只用于当前实体 Mac 功能测试。
+
 ## 4. 实体 Mac 阻塞项
 
 - Intel 与 Apple Silicon 的 DMG 安装、Gatekeeper 首次启动和覆盖安装。
