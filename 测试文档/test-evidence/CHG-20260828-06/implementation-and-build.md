@@ -109,7 +109,26 @@
 | Apple Silicon arm64 | `QuizMate-2026.8.28003-arm64-mac.zip` | `106,274,898` | `9883b888af653f3679ff302f1c28cfddd55a409d6bd73e8d00c2fd31a9bfbd63` |
 | Intel x64 | `QuizMate-2026.8.28003-mac.zip` | `112,308,863` | `ff27d4aec49d6dcce59f7a70e1e05c50cd420cf9a6cae79faed73fc02e50aaab` |
 
-## 4. 实体 Mac 阻塞项
+## 4. 阿里云 OSS 临时交付
+
+- 交付时间：2026-08-28 18:36～18:42 +08:00。
+- 构建与直传任务：`33163980676`；Intel、Apple Silicon 两个 job 均成功，包含双架构构建、ad-hoc 重签名、DMG 校验、架构校验、Actions Artifact、OSS 直传和诊断日志上传。
+- 构建提交：`6ee4e30865ce963ea66cba76de7532f87b2d00e8`。
+- OSS 桶：仅 `quizmate-cn`；未触碰 `quizmate-vip`。
+- 隔离前缀：`temp/mac-overlay-2026.8.28.3/`。
+- 官网、`mac/latest-mac.yml`、正式下载对象和用户自动更新通道：均未修改。
+- 含短期 OSS PUT 签名的临时 `mac-delivery-20260828-overlay-3-r1` 标签已在上传与回读验证后删除。
+
+| 架构 | OSS 对象 | 大小 | SHA-256 | OSS ETag | 验证 |
+|---|---|---:|---|---|---|
+| Apple Silicon arm64 | `temp/mac-overlay-2026.8.28.3/QuizMate-Mac-arm64-2026.8.28003.dmg` | `110,407,686` | `197abd7795fc67e5a3157cf5944fbb86082b413c3e34181ef03835292119b55e` | `C2E55FF4A7CC2B4555E84AA029D41A31` | OSS HEAD 200；签名 GET 200；流式回读字节数与 SHA-256 完全匹配 |
+| Intel x64 | `temp/mac-overlay-2026.8.28.3/QuizMate-Mac-x64-2026.8.28003.dmg` | `117,839,707` | `34e278be4d61f9467f8904b0f3e2b506d3c4688e5a52112cbb01075745f47e39` | `E3269A8D9B1CACB4D3494D1C849230F5` | OSS HEAD 200；签名 GET 200；流式回读字节数与 SHA-256 完全匹配 |
+
+- 两个临时下载链接有效至 2026-09-04 18:39 +08:00；签名 URL 只在用户交付消息中提供，不写入 Git 或证据文件。
+- 本轮重新打包产生的 DMG 容器字节与上一轮 prerelease 略有差异，因此没有沿用旧哈希；已使用本轮 runner 日志中的 SHA-256 对 OSS 对象做完整流式回读复核。
+- 这是无 Developer ID、未公证的 ad-hoc 实体 Mac 测试包，不作为正式生产安装包或自动更新包。
+
+## 5. 实体 Mac 阻塞项
 
 - Intel 与 Apple Silicon 的 DMG 安装、Gatekeeper 首次启动和覆盖安装。
 - Space/全屏/多显示器/睡眠唤醒后的窗口行为。
@@ -117,9 +136,9 @@
 - 系统截图、命令行截图与指定 ScreenCaptureKit 工具的组合矩阵。
 - TCC 一次性迁移、统一授权、真实截图/AI、真实扬声器和持续面试回归。
 
-## 5. 回滚检查
+## 6. 回滚检查
 
 - 基线提交：`034c721a75383b3c87a1b81c1bae8a513431d08a`。
 - 本次无数据库、后端、账号、积分或 TCC 标记迁移。
-- 代码使用 Git revert 回滚；测试安装包可删除 GitHub prerelease/标签撤回。
+- 代码使用 Git revert 回滚；测试安装包可删除 GitHub prerelease/标签，并删除 OSS `temp/mac-overlay-2026.8.28.3/` 前缀撤回。
 - 官网、OSS 正式对象、`mac/latest-mac.yml` 和用户更新通道未修改。
