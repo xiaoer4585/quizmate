@@ -15,6 +15,7 @@ on:
     tags:
       - windows-build-*
       - windows-delivery-*
+      - windows-publish-*
 
 permissions:
   contents: write
@@ -166,8 +167,8 @@ jobs:
           echo "exe=$EXE" >> "$GITHUB_OUTPUT"
           echo "blockmap=$BLOCKMAP" >> "$GITHUB_OUTPUT"
 
-      - name: Upload isolated delivery package
-        if: startsWith(github.ref, 'refs/tags/windows-delivery-')
+      - name: Upload delivery or production package
+        if: startsWith(github.ref, 'refs/tags/windows-delivery-') || startsWith(github.ref, 'refs/tags/windows-publish-')
         shell: bash
         env:
           EXE_PATH: ${{ steps.artifact.outputs.exe }}
