@@ -1,12 +1,12 @@
-// macOS 防捕获 / 防检测保护模块
+// macOS 窗口隐私与输入透明模块
 //
 // 原理:
 //   1. setContentProtection(true) - Electron 在 macOS 上映射为 NSWindow.sharingType = NSWindowSharingNone,
-//      窗口对所有 CGWindowList 系截图/录屏/投屏路径完全排除:
+//      请求传统 CGWindowList 系捕获路径排除该窗口:
 //      屏幕上正常可见, 但截屏/录屏/共享屏幕时该窗口整体缺席(显示其后方内容), 不产生黑块
 //   2. panel 类型 + skipTaskbar - 不出现在 Dock/任务切换器(Command+Tab)
 //   3. focusable: false(由窗口创建参数保证) - 不抢焦点
-//   4. 空标题 - 防止通过窗口标题扫描关键字
+//   4. 鼠标事件始终穿透到底层应用
 //
 // 与 Win32Protection 保持同一接口(protection.ts 按平台分发):
 //   - applyAllProtections / applyAntiCapture / startProtectionWatchdog / removeAntiCapture
@@ -43,8 +43,20 @@ export interface ProtectionWatchdog {
   stop: () => void
 }
 
-/** 与 Windows 端 WDA_EXCLUDEFROMCAPTURE 同语义: 窗口从捕获中完全排除(无黑块) */
+/** 仅作跨平台诊断标记；macOS 不提供 Windows display affinity 的等价保证。 */
 const MAC_CAPTURE_EXCLUDED = 0x11
+
+function applyInputTransparency(win: BrowserWindow): boolean {
+  try {
+    win.setFocusable(false)
+    win.setIgnoreMouseEvents(true, { forward: true })
+    win.setSkipTaskbar(true)
+    return !win.isFocusable()
+  } catch (error) {
+    console.warn('[MacProtection] input transparency failed:', error)
+    return false
+  }
+}
 
 export function applyAntiCapture(win: BrowserWindow): AntiCaptureResult {
   try {
@@ -75,6 +87,7 @@ export function readContentProtection(win: BrowserWindow): boolean | null {
 
 export function applyAllProtections(win: BrowserWindow): ProtectionResult {
   const antiCapture = applyAntiCapture(win)
+  const noActivate = applyInputTransparency(win)
   let toolWindow = false
   try {
     win.setSkipTaskbar(true)
@@ -88,7 +101,7 @@ export function applyAllProtections(win: BrowserWindow): ProtectionResult {
       captureExcluded: antiCapture.excluded,
       captureMonitor: false,
       toolWindow,
-      noActivate: !win.isFocusable(),
+      noActivate,
       emptyTitle: true,
     },
   }
@@ -115,6 +128,10 @@ export function startProtectionWatchdog(
         clearInterval(timer)
         return
       }
+      // Mouse pass-through has no public readback API. Reapply it
+      // idempotently so window show/move/display changes cannot make the
+      // overlay intercept clicks or focus.
+      applyInputTransparency(win)
       // Older Electron versions cannot read back NSWindow.sharingType. Reapply
       // idempotently on every tick so hide/show and display changes cannot leave
       // the overlay unprotected.

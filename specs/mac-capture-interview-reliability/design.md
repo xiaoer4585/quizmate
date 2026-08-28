@@ -217,6 +217,22 @@ interface VoiceHealthSnapshot {
 - 用户可以暂时跳过，但工作台对应功能显示“尚未验证”，第一次使用时继续引导而不是突然弹出无上下文权限请求。
 - 升级安装不重复打扰已经完成且权限仍有效的用户；权限被系统撤销后重新显示修复提示。
 
+本次批准实现将旧三步按钮改为单一状态机入口：
+
+1. DMG 替换完成后首次从 `/Applications` 启动，在创建任何窗口或捕获会话前检查全局迁移版本。
+2. 未迁移时以无 shell 的 `/usr/bin/tccutil reset All vip.quizmate.mac` 清理 QuizMate 自身旧 ad-hoc TCC 记录；成功后清空旧 onboarding 完成态并写入迁移版本及签名身份。Developer ID 使用稳定 Team ID，ad-hoc 使用 CDHash，签名变化会重新迁移。
+3. 从 DMG/下载目录直接运行时不执行清理或申请权限，而是调用 Electron `moveToApplicationsFolder()` 完成安装后继续。
+4. 用户只点击一次“开始授权”，主进程依次请求麦克风、屏幕和系统音频；Renderer 只呈现后台真实阶段。
+5. 音轨 `readyState=live` 即证明能力可用，零电平只表示静音；屏幕仍以非空、非黑测试帧为验证标准。
+6. 系统要求重启时使用 `app.relaunch()`，新进程从持久化阶段自动续接，不要求用户重新逐项操作。
+
+### 3.9 悬浮窗输入透明与自有截图事务
+
+- Mac 保护看门狗除公开 `setContentProtection(true)` 请求外，每个周期都幂等重设 `setFocusable(false)`、`setIgnoreMouseEvents(true, { forward: true })` 和 `setSkipTaskbar(true)`。
+- 笔试与面试悬浮窗的 create/ready/show/move/resize/recovery 路径均不得关闭输入穿透；Renderer 不暴露临时解除穿透的 IPC。
+- 自有截图在一个事务中记录两类悬浮窗实际可见性，隐藏所有可见悬浮窗，等待合成器，执行捕获，并在 `finally` 仅恢复原先可见的窗口。
+- `NSWindowSharingNone`/Electron content protection 只记录请求与可读回状态。macOS 15+ 第三方 ScreenCaptureKit、硬件录制和投屏不在被捕获应用的公共控制范围，不加入私有 CGS、注入或 Hook。
+
 #### 截图悬浮窗
 
 - 保留现有尺寸和主要布局。
@@ -242,6 +258,9 @@ interface VoiceHealthSnapshot {
 | `diagnostics:copyCurrent` | Renderer → Main | 复制当前截图/面试诊断摘要 |
 | `diagnostics:openLogFolder` | Renderer → Main | 打开日志目录 |
 | `analysis:stateChanged` | Main → Renderer | 截图分析阶段、错误与恢复建议 |
+| `permissions:authorizeAll` | Renderer → Main | 运行一次性迁移后的统一授权状态机 |
+| `permissions:installToApplications` | Renderer → Main | 从临时位置移动到 `/Applications` |
+| `permissions:relaunch` | Renderer → Main | 屏幕权限改变后重启并自动续接 |
 
 旧 `interview:transcript` 保留文本和答案相关事件，不再承担会话真值状态；兼容期内可继续发送 `started/stopped`，但 React 新逻辑只消费 `stateChanged`。
 
@@ -331,6 +350,8 @@ event, stage/phase, code, durationMs, attempt
 - 需要 macOS runner 时，将已批准的同一构建提交同步到 GitHub 构建入口，仅用于 Actions 生成安装包，不把 GitHub 作为代码管理基线。
 - 测试产物上传 OSS `temp/mac-capture-interview-<version>/`，附架构、大小和 SHA-256。
 - 未收到明确上线指令前，不修改 `quizmate.cn` 官网、正式下载对象、`mac/latest-mac.yml` 或用户自动更新通道。
+- Mac builder 开启 Hardened Runtime 和固定 entitlements；`afterSign` 仅在 `MAC_NOTARIZE=true` 时调用 `@electron/notarize`。
+- `mac-release-*` 正式标签必须同时具备 Developer ID Application 证书、证书密码、Apple ID 应用专用密码和 Team ID；任一缺失直接失败。`mac-build-*`/`mac-delivery-*` 可保留明确标注的隔离测试构建，但无 TeamIdentifier 时不得正式发布。
 
 ## 9. 回滚设计
 

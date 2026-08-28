@@ -19,13 +19,16 @@ mac:
     - zip
   icon: resources/icon.png
   category: public.app-category.productivity
-  hardenedRuntime: false
+  hardenedRuntime: true
   gatekeeperAssess: false
+  entitlements: resources/entitlements.mac.plist
+  entitlementsInherit: resources/entitlements.mac.plist
   extendInfo:
     NSMicrophoneUsageDescription: QuizMate needs microphone access for realtime interview transcription.
     NSAudioCaptureUsageDescription: QuizMate needs system audio access to transcribe interviewer questions in realtime.
     NSScreenCaptureUsageDescription: QuizMate needs screen recording access to capture written-test questions.
     NSCameraUsageDescription: QuizMate does not use the camera.
+afterSign: scripts/notarize.cjs
 dmg:
   artifactName: QuizMate-Mac-${arch}-${version}.dmg
 publish:

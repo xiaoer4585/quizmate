@@ -4,7 +4,7 @@ import fs from 'fs';
 import Store from 'electron-store';
 import type { DesktopConfigHelperOptions } from './platform';
 import { toBusinessVersion } from './electron/version';
-import type { PermissionOnboardingState } from './shared/reliability';
+import type { MacPermissionMigrationRecord, PermissionOnboardingState } from './shared/reliability';
 
 export interface AIModelConfig {
   provider: string;
@@ -101,6 +101,7 @@ interface StoreSchema {
   interviewContexts?: Record<string, SavedInterviewContext>;
   onboardingGuideStates?: Record<string, boolean>;
   permissionOnboardingStates?: Record<string, PermissionOnboardingState>;
+  macPermissionMigration?: MacPermissionMigrationRecord;
 }
 
 export class DesktopConfigHelper {
@@ -252,6 +253,18 @@ export class DesktopConfigHelper {
     const states = this.store.get('permissionOnboardingStates') || {};
     const next = { ...state, updatedAt: Date.now() };
     this.store.set('permissionOnboardingStates', { ...states, [this.getInterviewAccountScope()]: next });
+    return next;
+  }
+  resetPermissionOnboardingStates(): void {
+    this.store.set('permissionOnboardingStates', {});
+  }
+  getMacPermissionMigration(): MacPermissionMigrationRecord | undefined {
+    const record = this.store.get('macPermissionMigration');
+    return record ? { ...record } : undefined;
+  }
+  setMacPermissionMigration(record: MacPermissionMigrationRecord): MacPermissionMigrationRecord {
+    const next = { ...record, updatedAt: Date.now() };
+    this.store.set('macPermissionMigration', next);
     return next;
   }
   getUserConfig(): UserConfig {

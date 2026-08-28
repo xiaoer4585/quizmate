@@ -84,11 +84,14 @@ export function registerIpcHandlers(
   ipcMain.handle('guide:getState', () => ctx.configHelper.getOnboardingGuideState());
   ipcMain.handle('guide:setCompleted', (_e, completed?: boolean) => ctx.configHelper.setOnboardingGuideCompleted(completed !== false));
   ipcMain.handle('permissions:getState', () => ctx.permissions!.getState());
+  ipcMain.handle('permissions:authorizeAll', () => ctx.permissions!.authorizeAll());
   ipcMain.handle('permissions:requestMicrophone', () => ctx.permissions!.requestMicrophone());
   ipcMain.handle('permissions:requestScreen', () => ctx.permissions!.requestScreen());
   ipcMain.handle('permissions:testSystemAudio', () => ctx.permissions!.testSystemAudio());
   ipcMain.handle('permissions:complete', (_e, skipped?: boolean) => ctx.permissions!.complete(skipped === true));
   ipcMain.handle('permissions:openSettings', (_e, kind: 'microphone' | 'screen') => ctx.permissions!.openSettings(kind));
+  ipcMain.handle('permissions:installToApplications', () => ctx.permissions!.installToApplications());
+  ipcMain.handle('permissions:relaunch', () => ctx.permissions!.relaunchAfterPermissionGrant());
 
   // ===== 笔试助手 =====
   ipcMain.handle('exam:captureAndAnalyze', async () => {

@@ -14,6 +14,7 @@ on:
     tags:
       - mac-build-*
       - mac-delivery-*
+      - mac-release-*
 permissions:
   contents: write
 
@@ -86,9 +87,40 @@ jobs:
             }
           } 2>&1 | tee -a build.log
 
+      - name: Configure signing and notarization gate
+        shell: bash
+        env:
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -n "${CSC_LINK:-}" && -n "${CSC_KEY_PASSWORD:-}" ]]; then
+            echo "MAC_SIGNED_BUILD=true" >> "$GITHUB_ENV"
+          else
+            echo "MAC_SIGNED_BUILD=false" >> "$GITHUB_ENV"
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/mac-release-* ]]; then
+            test -n "${CSC_LINK:-}" || { echo "::error::MAC_CSC_LINK is required for a production Mac release"; exit 1; }
+            test -n "${CSC_KEY_PASSWORD:-}" || { echo "::error::MAC_CSC_KEY_PASSWORD is required for a production Mac release"; exit 1; }
+            test -n "${APPLE_ID:-}" || { echo "::error::APPLE_ID is required for notarization"; exit 1; }
+            test -n "${APPLE_APP_SPECIFIC_PASSWORD:-}" || { echo "::error::APPLE_APP_SPECIFIC_PASSWORD is required for notarization"; exit 1; }
+            test -n "${APPLE_TEAM_ID:-}" || { echo "::error::APPLE_TEAM_ID is required for notarization"; exit 1; }
+            echo "MAC_NOTARIZE=true" >> "$GITHUB_ENV"
+          else
+            echo "MAC_NOTARIZE=false" >> "$GITHUB_ENV"
+          fi
+
       - name: Build DMG
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+          CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' && 'true' || 'false' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           # delivery 测试包使用独立空更新通道，不读取正式 mac/latest-mac.yml。
           QUIZMATE_UPDATE_BASE_URL: ${{ startsWith(github.ref, 'refs/tags/mac-delivery-') && format('https://quizmate.cn/temp/{0}', github.ref_name) || 'https://quizmate.cn' }}
         run: |
@@ -99,6 +131,7 @@ jobs:
           } 2>&1 | tee -a build.log
 
       - name: Re-sign app for local distribution
+        if: env.MAC_SIGNED_BUILD != 'true'
         shell: bash
         env:
           QUIZMATE_UPDATE_BASE_URL: ${{ startsWith(github.ref, 'refs/tags/mac-delivery-') && format('https://quizmate.cn/temp/{0}', github.ref_name) || 'https://quizmate.cn' }}
@@ -107,7 +140,7 @@ jobs:
           exec > >(tee -a build.log) 2>&1
           APP_PATH=$(find release -maxdepth 2 -name 'QuizMate.app' -type d -print -quit)
           test -d "$APP_PATH"
-          codesign --force --deep --sign - --timestamp=none "$APP_PATH"
+          codesign --force --deep --options runtime --entitlements resources/entitlements.mac.plist --sign - --timestamp=none "$APP_PATH"
           codesign --verify --deep --strict --verbose=4 "$APP_PATH"
           rm -f release/QuizMate-Mac-${{ matrix.arch }}-*.dmg
           rm -f release/QuizMate-*-${{ matrix.arch }}-mac.zip
@@ -132,6 +165,18 @@ jobs:
           test -n "$APP_PATH"
           codesign --verify --deep --strict --verbose=4 "$APP_PATH"
           codesign -dv --verbose=4 "$APP_PATH" 2>&1 | tee codesign.txt
+          if [[ "${MAC_SIGNED_BUILD:-false}" == "true" ]]; then
+            TEAM_ID=$(codesign -dv --verbose=4 "$APP_PATH" 2>&1 | sed -n 's/^TeamIdentifier=//p')
+            test -n "$TEAM_ID"
+            test "$TEAM_ID" != "not set"
+            spctl --assess --type execute --verbose=4 "$APP_PATH"
+            if [[ "${MAC_NOTARIZE:-false}" == "true" ]]; then
+              xcrun stapler validate "$APP_PATH"
+            fi
+          elif [[ "$GITHUB_REF" == refs/tags/mac-release-* ]]; then
+            echo "::error::Production release cannot use ad-hoc signing"
+            exit 1
+          fi
           file "$APP_BIN" | tee architecture.txt
           grep -q "${{ matrix.expected }}" architecture.txt
           hdiutil detach "$MOUNT_DIR"

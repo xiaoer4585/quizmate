@@ -178,6 +178,34 @@ export type PermissionCapabilityStatus =
   | 'track-ready'
   | 'verified';
 
+export type PermissionMigrationStatus =
+  | 'not-required'
+  | 'install-required'
+  | 'required'
+  | 'running'
+  | 'completed'
+  | 'failed';
+
+export type PermissionAuthorizationPhase =
+  | 'idle'
+  | 'migrating'
+  | 'microphone'
+  | 'screen'
+  | 'system-audio'
+  | 'waiting-settings'
+  | 'restart-required'
+  | 'complete'
+  | 'failed';
+
+export interface MacPermissionMigrationRecord {
+  version: number;
+  status: 'completed' | 'failed';
+  appVersion: string;
+  updatedAt: number;
+  signingIdentity?: string;
+  errorCode?: string;
+}
+
 export interface PermissionOnboardingState {
   flowVersion: number;
   completed: boolean;
@@ -186,7 +214,38 @@ export interface PermissionOnboardingState {
   microphone: PermissionCapabilityStatus;
   screen: PermissionCapabilityStatus;
   systemAudio: PermissionCapabilityStatus;
+  migrationStatus?: PermissionMigrationStatus;
+  authorizationPhase?: PermissionAuthorizationPhase;
+  requiresRestart?: boolean;
+  errorCode?: string;
   microphoneLevel?: number;
   systemAudioLevel?: number;
   updatedAt?: number;
+}
+
+export const MAC_PERMISSION_FLOW_VERSION = 2;
+export const MAC_PERMISSION_MIGRATION_VERSION = 1;
+export const MAC_APP_BUNDLE_ID = 'vip.quizmate.mac';
+
+export function getMacTccResetArguments(): ['reset', 'All', typeof MAC_APP_BUNDLE_ID] {
+  return ['reset', 'All', MAC_APP_BUNDLE_ID];
+}
+
+export function shouldRunMacPermissionMigration(input: {
+  platform: string;
+  packaged: boolean;
+  inApplicationsFolder: boolean;
+  completedVersion?: number;
+  completedSigningIdentity?: string;
+  currentSigningIdentity?: string;
+}): PermissionMigrationStatus {
+  if (input.platform !== 'darwin' || !input.packaged) return 'not-required';
+  if (!input.inApplicationsFolder) return 'install-required';
+  const sameStableIdentity = Boolean(input.currentSigningIdentity)
+    && input.completedSigningIdentity === input.currentSigningIdentity;
+  return input.completedVersion === MAC_PERMISSION_MIGRATION_VERSION && sameStableIdentity ? 'completed' : 'required';
+}
+
+export function isPermissionTrackUsable(status: PermissionCapabilityStatus): boolean {
+  return status === 'granted' || status === 'track-ready' || status === 'verified';
 }

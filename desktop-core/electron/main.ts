@@ -749,17 +749,24 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
 
     // 截图前隐藏悬浮窗(以窗口实际可见性为准, 不依赖模式与状态标志)，
     // 确保自身截图在任何情况下都不包含悬浮框--即使防捕获亲和性失效也兜底
-    const overlayWasVisible = !!(
+    const examOverlayWasVisible = !!(
       state.overlayWindow && !state.overlayWindow.isDestroyed() && state.overlayWindow.isVisible()
+    );
+    const interviewOverlayWasVisible = !!(
+      state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed() && state.interviewOverlayWindow.isVisible()
     );
     // A protected window should remain visible locally and be absent from normal
     // capture APIs. On Electron versions without readback, hide as a fallback.
-    const overlayProtectionState = state.overlayWindow && !state.overlayWindow.isDestroyed()
+    const examOverlayProtectionState = state.overlayWindow && !state.overlayWindow.isDestroyed()
       ? readContentProtection(state.overlayWindow)
       : null;
-    const needsTemporaryHide = overlayWasVisible;
+    const interviewOverlayProtectionState = state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()
+      ? readContentProtection(state.interviewOverlayWindow)
+      : null;
+    const needsTemporaryHide = examOverlayWasVisible || interviewOverlayWasVisible;
+    if (examOverlayWasVisible) hideOverlay();
+    if (interviewOverlayWasVisible) hideInterviewOverlay();
     if (needsTemporaryHide) {
-      hideOverlay();
       await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 180)));
     }
 
@@ -772,7 +779,8 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     } finally {
       if (needsTemporaryHide) {
         await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
-        showOverlay();
+        if (examOverlayWasVisible) showOverlay();
+        if (interviewOverlayWasVisible) showInterviewOverlay();
       }
     }
 
@@ -791,9 +799,11 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
         ...operation,
         isExtra,
         totalMs: Date.now() - captureStartedAt,
-        overlayWasVisible,
+        examOverlayWasVisible,
+        interviewOverlayWasVisible,
         overlayTemporarilyHidden: needsTemporaryHide,
-        contentProtectionReported: overlayProtectionState,
+        examContentProtectionReported: examOverlayProtectionState,
+        interviewContentProtectionReported: interviewOverlayProtectionState,
       });
       BrowserWindow.getAllWindows().forEach((win) => {
         if (!win.isDestroyed()) win.webContents.send('screenshot-added', { ...payload, ...operation });
@@ -1269,6 +1279,13 @@ async function initializeApp(): Promise<void> {
   // macOS: 麦克风预授权 / media 权限白名单 / Dock 图标
   await configurePlatformPermissions();
 
+  // Must run before the first BrowserWindow and before any capture session is
+  // created. This is the install-replacement boundary available to a DMG app:
+  // the first launch from /Applications after the new app has replaced the old.
+  permissionOnboardingHelper = new PermissionOnboardingHelper(configHelper);
+  ctx.permissions = permissionOnboardingHelper;
+  await permissionOnboardingHelper.prepareLegacyMigration();
+
   authManager = new AuthManager(configHelper);
   authManager.init();
   ctx.authManager = authManager;
@@ -1303,9 +1320,6 @@ async function initializeApp(): Promise<void> {
   sapiVoiceHelper.init();
 
   realtimeVoiceHelper = new RealtimeVoiceHelper(configHelper);
-
-  permissionOnboardingHelper = new PermissionOnboardingHelper(configHelper);
-  ctx.permissions = permissionOnboardingHelper;
 
   interviewHelper = new InterviewHelper(configHelper, authManager, overlayAdapter as unknown as OverlayManager, ttsHelper, byteDanceTtsHelper, realtimeVoiceHelper);
   ctx.interview = interviewHelper;

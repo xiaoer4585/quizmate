@@ -7,6 +7,9 @@ import {
   mergeVoiceHealthSnapshot,
   nextReconnectDelay,
   shortDiagnosticId,
+  shouldRunMacPermissionMigration,
+  isPermissionTrackUsable,
+  getMacTccResetArguments,
 } from '../reliability';
 import { ASR_FINAL_COMMIT_MS, ASR_SILENCE_COMMIT_MS } from '../../interviewTranscript';
 
@@ -42,5 +45,23 @@ describe('voice reliability state', () => {
     expect(detectSupportedImageMime(new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))).toBe('image/png');
     expect(detectSupportedImageMime(new Uint8Array([0xff, 0xd8, 0xff, 0xe0]))).toBe('image/jpeg');
     expect(detectSupportedImageMime(new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]))).toBeNull();
+  });
+
+  it('runs the Mac TCC migration exactly once from an installed packaged app', () => {
+    expect(getMacTccResetArguments()).toEqual(['reset', 'All', 'vip.quizmate.mac']);
+    expect(shouldRunMacPermissionMigration({ platform: 'win32', packaged: true, inApplicationsFolder: true })).toBe('not-required');
+    expect(shouldRunMacPermissionMigration({ platform: 'darwin', packaged: false, inApplicationsFolder: false })).toBe('not-required');
+    expect(shouldRunMacPermissionMigration({ platform: 'darwin', packaged: true, inApplicationsFolder: false })).toBe('install-required');
+    expect(shouldRunMacPermissionMigration({ platform: 'darwin', packaged: true, inApplicationsFolder: true, currentSigningIdentity: 'team:ABC' })).toBe('required');
+    expect(shouldRunMacPermissionMigration({ platform: 'darwin', packaged: true, inApplicationsFolder: true, completedVersion: 1, completedSigningIdentity: 'team:ABC', currentSigningIdentity: 'team:ABC' })).toBe('completed');
+    expect(shouldRunMacPermissionMigration({ platform: 'darwin', packaged: true, inApplicationsFolder: true, completedVersion: 1, completedSigningIdentity: 'adhoc:OLD', currentSigningIdentity: 'team:ABC' })).toBe('required');
+    expect(shouldRunMacPermissionMigration({ platform: 'darwin', packaged: true, inApplicationsFolder: true, completedVersion: 1, completedSigningIdentity: 'adhoc:OLD', currentSigningIdentity: 'adhoc:NEW' })).toBe('required');
+  });
+
+  it('does not treat a quiet live audio track as a permission failure', () => {
+    expect(isPermissionTrackUsable('track-ready')).toBe(true);
+    expect(isPermissionTrackUsable('verified')).toBe(true);
+    expect(isPermissionTrackUsable('denied')).toBe(false);
+    expect(isPermissionTrackUsable('unavailable')).toBe(false);
   });
 });

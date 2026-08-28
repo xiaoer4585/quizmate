@@ -33,11 +33,14 @@ const api = {
   },
   permissions: {
     getState: () => invoke('permissions:getState'),
+    authorizeAll: () => invoke('permissions:authorizeAll'),
     requestMicrophone: () => invoke('permissions:requestMicrophone'),
     requestScreen: () => invoke('permissions:requestScreen'),
     testSystemAudio: () => invoke('permissions:testSystemAudio'),
     complete: (skipped = false) => invoke('permissions:complete', skipped),
     openSettings: (kind: 'microphone' | 'screen') => invoke('permissions:openSettings', kind),
+    installToApplications: () => invoke('permissions:installToApplications'),
+    relaunch: () => invoke('permissions:relaunch'),
   },
   // 笔试助手（完全沿用原考试插件方案）
   exam: {
