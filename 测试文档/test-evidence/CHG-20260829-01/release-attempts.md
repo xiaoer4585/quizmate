@@ -13,4 +13,4 @@
 - 首次切换后发现 delivery 标签按设计把包内更新源指向隔离 `temp/<tag>`，不适合正式长期更新；同时 Windows delivery 重建文件与常规 run 39 相差 84 字节，初次清单不得复用 run 39 哈希。
 - 在最终验收前主动执行 `rollback-desktop-release-20260829.cjs`，从 `rollback/CHG-20260829-01/` 恢复六个生产可变对象。验证 `suite/latest.yml` 回到 `2026.8.27002`，`mac/latest-mac.yml` 回到 `2026.8.20`，未向用户保留半成品更新推送。
 - 修正：新增 `windows-publish-*` / `mac-publish-*` 专用标签。它们保留生产更新源，同时复用签名 PUT 直传；最终清单必须从阿里云最终对象重新计算 SHA-512/size。
-
+- 第一次 `publish` 标签指向带 `[skip ci]` 的运维提交，GitHub 按规则未创建 run；未写入任何新对象。后续使用不带跳过标记的触发提交重新创建标签。

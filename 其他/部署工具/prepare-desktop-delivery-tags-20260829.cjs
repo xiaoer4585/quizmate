@@ -39,20 +39,9 @@ function signedPut(object, contentType) {
 function pushAnnotatedTag(tag, payload) {
   const message = Buffer.from(JSON.stringify(payload), 'utf8').toString('base64');
   execFileSync('git', ['tag', '-a', tag, '-m', message], { stdio: ['ignore', 'ignore', 'inherit'] });
-  const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
-  const tagResult = JSON.parse(execFileSync('gh', [
-    'api', '--method', 'POST', 'repos/xiaoer4585/quizmate/git/tags', '--input', '-',
-  ], {
-    input: JSON.stringify({ tag, message, object: commit, type: 'commit' }),
-    encoding: 'utf8',
-    stdio: ['pipe', 'pipe', 'inherit'],
-  }));
-  execFileSync('gh', [
-    'api', '--method', 'POST', 'repos/xiaoer4585/quizmate/git/refs', '--input', '-',
-  ], {
-    input: JSON.stringify({ ref: `refs/tags/${tag}`, sha: tagResult.sha }),
-    stdio: ['pipe', 'ignore', 'inherit'],
-  });
+  execFileSync('git', [
+    'push', 'git@github.com:xiaoer4585/quizmate.git', `refs/tags/${tag}`,
+  ], { stdio: ['ignore', 'ignore', 'inherit'] });
   console.log(`DELIVERY_TAG_PUSHED ${tag}`);
 }
 
