@@ -4,13 +4,23 @@
 
   const ACCOUNT_STORAGE_KEY = "quizmate_credit_account";
   const REVIEW_STORAGE_KEY = "quizmate_xhs_reward_reviews_v1";
-  const postTitle = "同学们，发现打破秋招内卷的“魔法”神器";
-  const pinnedComment = [
+  const isResumeProduct = document.body?.dataset.product === "resume_autofill";
+  const postTitle = isResumeProduct ? "秋招网申终于不用每家都重填一遍了" : "同学们，发现打破秋招内卷的“魔法”神器";
+  const pinnedComment = isResumeProduct ? [
+    "这次分享的是 input：先把 PDF / Word 简历拆成结构化档案，再到招聘官网自动匹配字段。",
+    "多段实习、项目和教育经历会分开保存，不会挤成一大段。",
+    "AI 填不确定的字段会留给我确认，不会自动提交表单。",
+    "主页：inputmate.com"
+  ].join("\n") : [
     "恭喜同学你找到了打败秋招的“魔法”～",
     "关注官方小红📕：搜索quizmate，找到ai头像的官方账号",
     "主页传送门👉 ⓠⓤⓘⓩⓜⓐⓣⓔ.ⓒⓝ",
     "不切屏不截屏，悬浮隐藏窗口字幕，支持双机位语音播报模式，结合简历+JD AI辅助笔试面试，考前熟悉和练习"
   ].join("\n");
+  const starterName = isResumeProduct ? "网申 Offer 实战包" : "网申&笔面试实战包";
+  const proName = isResumeProduct ? "网申 Offer 上岸包" : "网申&笔面试上岸包";
+  const firstImage = isResumeProduct ? "https://www.quizmate.cn/assets/showcase-resume.png" : "assets/xiaohongshu-written-test.png";
+  const secondImage = isResumeProduct ? "https://www.quizmate.cn/assets/showcase-apply.png" : "assets/xiaohongshu-interview.avif";
 
   document.body.insertAdjacentHTML("beforeend", `
     <div class="credit-modal xhs-reward-modal" data-xhs-reward-modal hidden>
@@ -29,13 +39,13 @@
         <div class="xhs-reward-ladder">
           <article>
             <span class="xhs-reward-ladder-count">20 <small>赞/收藏</small></span>
-            <div><strong>笔试实战包</strong><p>任一项达到 20，奖励 600 积分</p></div>
+            <div><strong>${starterName}</strong><p>任一项达到 20，奖励 600 积分</p></div>
             <i data-lucide="package-check"></i>
           </article>
           <span class="xhs-reward-ladder-line" aria-hidden="true"></span>
           <article class="is-premium">
             <span class="xhs-reward-ladder-count">70 <small>赞/收藏</small></span>
-            <div><strong>笔试上岸包</strong><p>达到 70 赞/收藏，奖励 2500 积分</p></div>
+            <div><strong>${proName}</strong><p>达到 70 赞/收藏，奖励 2500 积分</p></div>
             <i data-lucide="sparkles"></i>
           </article>
         </div>
@@ -65,12 +75,12 @@
           </div>
           <div class="xhs-share-images">
             <figure>
-              <img src="assets/xiaohongshu-written-test.png" alt="QuizMate 笔试悬浮答题界面配图" loading="lazy" decoding="async" />
-              <figcaption><span>笔试场景</span><a class="xhs-asset-download" href="assets/xiaohongshu-written-test.png" download="QuizMate-笔试场景.png"><i data-lucide="download"></i>下载</a></figcaption>
+              <img src="${firstImage}" alt="QuizMate 产品界面配图" loading="lazy" decoding="async" />
+              <figcaption><span>${isResumeProduct ? "简历档案" : "笔试场景"}</span><a class="xhs-asset-download" href="${firstImage}" download><i data-lucide="download"></i>下载</a></figcaption>
             </figure>
             <figure>
-              <img src="assets/xiaohongshu-interview.avif" alt="QuizMate 面试辅助界面配图" loading="lazy" decoding="async" />
-              <figcaption><span>面试场景</span><a class="xhs-asset-download" href="assets/xiaohongshu-interview.avif" download="QuizMate-面试场景.avif"><i data-lucide="download"></i>下载</a></figcaption>
+              <img src="${secondImage}" alt="QuizMate 产品界面配图" loading="lazy" decoding="async" />
+              <figcaption><span>${isResumeProduct ? "自动填写" : "面试场景"}</span><a class="xhs-asset-download" href="${secondImage}" download><i data-lucide="download"></i>下载</a></figcaption>
             </figure>
           </div>
           <p class="xhs-copy-status" data-xhs-copy-status aria-live="polite"></p>
@@ -105,7 +115,7 @@
                 <input name="proof" type="file" accept="image/png,image/jpeg,image/webp,image/avif" required />
                 <i data-lucide="image-up"></i>
                 <strong>选择截图</strong>
-                <small>支持 PNG、JPG、WebP、AVIF，原型中仅保存在当前浏览器</small>
+                <small>支持 PNG、JPG、WebP、AVIF，截图会随申请提交给客服审核</small>
               </span>
             </label>
             <div class="xhs-proof-preview" data-xhs-proof-preview hidden>
@@ -123,7 +133,7 @@
           <div data-xhs-review-history></div>
         </section>
 
-        <p class="xhs-reward-rule"><i data-lucide="shield-check"></i>同一篇笔记、同一 QuizMate 账号每档限兑一次；内容须真实可见。当前为页面审核原型，积分发放为本地模拟，正式上线后以服务端审核结果为准。</p>
+        <p class="xhs-reward-rule"><i data-lucide="shield-check"></i>同一篇笔记、同一 QuizMate 账号仅可兑换一次；内容须真实可见。客服审核通过后，积分由 QuizMate 服务端发放。</p>
       </section>
     </div>
   `);
@@ -143,6 +153,7 @@
   const history = modal.querySelector("[data-xhs-review-history]");
   let proofDataUrl = "";
   let trigger = null;
+  let serverReviews = null;
 
   function getAccountState() {
     try { return JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "null"); }
@@ -173,6 +184,36 @@
     localStorage.setItem(REVIEW_STORAGE_KEY, JSON.stringify(reviews));
   }
 
+  async function activityApi(action, payload = {}) {
+    const state = getAccountState();
+    if (!state?.token) throw new Error("请先登录 QuizMate 账号。");
+    const response = await fetch("https://api.quizmate.vip/study-auth-api", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, accountToken: state.token, ...payload })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok !== true) throw new Error(result.error || "活动接口请求失败");
+    return result.data || {};
+  }
+
+  async function loadReviews({ announce = false } = {}) {
+    if (!getCurrentAccount()) {
+      serverReviews = null;
+      renderHistory();
+      return;
+    }
+    try {
+      const data = await activityApi("listMyXiaohongshuRewards");
+      serverReviews = Array.isArray(data.items) ? data.items : [];
+      try { saveReviews(serverReviews); } catch { /* server data remains authoritative */ }
+      renderHistory();
+      if (announce) setStatus("审核记录已刷新。", "success");
+    } catch (error) {
+      if (announce) setStatus(error.message || "审核记录刷新失败。", "error");
+    }
+  }
+
   function escapeHtml(value) {
     return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#39;");
   }
@@ -198,6 +239,7 @@
     accountWrap.classList.toggle("is-logged-in", Boolean(account));
     loginButton.hidden = Boolean(account);
     renderHistory();
+    void loadReviews();
   }
 
   function openModal(event) {
@@ -233,8 +275,8 @@
 
   function getTier(likes, favorites) {
     const count = Math.max(likes, favorites);
-    if (count >= 70) return { tier: 70, rewardCredits: 2500, label: "70赞/收藏 · 笔试上岸包" };
-    if (count >= 20) return { tier: 20, rewardCredits: 600, label: "20赞/收藏 · 笔试实战包" };
+    if (count >= 70) return { tier: 70, rewardCredits: 2500, label: `70赞/收藏 · ${proName}` };
+    if (count >= 20) return { tier: 20, rewardCredits: 600, label: `20赞/收藏 · ${starterName}` };
     return { tier: 0, rewardCredits: 0, label: "尚未达到 20赞/收藏" };
   }
 
@@ -334,7 +376,7 @@
       window.lucide?.createIcons();
       return;
     }
-    const items = readReviews().filter((item) => item.accountEmail === account.email).sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
+    const items = (serverReviews ?? readReviews()).filter((item) => item.accountEmail === account.email).sort((a, b) => String(b.submittedAt).localeCompare(String(a.submittedAt)));
     if (!items.length) {
       history.innerHTML = `<div class="xhs-history-empty"><i data-lucide="inbox"></i><p>当前账号暂无兑换申请。</p></div>`;
       window.lucide?.createIcons();
@@ -348,7 +390,7 @@
     history.innerHTML = `<div class="xhs-history-list">${items.map((item) => {
       const mapped = statusMap[item.status] || statusMap.pending;
       const result = item.status === "approved"
-        ? `<p class="xhs-history-result success">已发放 <strong>${Number(item.rewardCredits || 0).toLocaleString("zh-CN")} 积分</strong>（原型模拟）</p>`
+        ? `<p class="xhs-history-result success">已发放 <strong>${Number(item.rewardCredits || 0).toLocaleString("zh-CN")} 积分</strong></p>`
         : item.status === "rejected"
           ? `<p class="xhs-history-result error">未通过原因：${escapeHtml(item.rejectReason || "未填写")}</p>`
           : `<p class="xhs-history-result">客服审核后将在这里显示结果。</p>`;
@@ -373,7 +415,7 @@
   }));
   loginButton.addEventListener("click", () => requestLogin());
   modal.querySelector("[data-remove-xhs-proof]").addEventListener("click", clearProof);
-  modal.querySelector("[data-xhs-refresh]").addEventListener("click", () => { updateAccount(); setStatus("审核记录已刷新。", "success"); });
+  modal.querySelector("[data-xhs-refresh]").addEventListener("click", () => void loadReviews({ announce: true }));
   proofInput.addEventListener("change", handleProofChange);
   form.elements.likeCount.addEventListener("input", updateTierPreview);
   form.elements.favoriteCount.addEventListener("input", updateTierPreview);
@@ -382,7 +424,7 @@
   window.addEventListener("storage", (event) => { if ([ACCOUNT_STORAGE_KEY, REVIEW_STORAGE_KEY].includes(event.key)) updateAccount(); });
   window.addEventListener("focus", updateAccount);
 
-  form.addEventListener("submit", (event) => {
+  form.addEventListener("submit", async (event) => {
     event.preventDefault();
     const account = getCurrentAccount();
     if (!account) {
@@ -437,8 +479,16 @@
       return;
     }
 
+    setStatus("正在提交审核信息...");
+    let serverClaim;
+    try {
+      serverClaim = await activityApi("submitXiaohongshuReward", { product: isResumeProduct ? "resume_autofill" : "study_ai", noteUrl, likeCount, favoriteCount, proofDataUrl, proofName: proofInput.files?.[0]?.name || "笔记归属截图.jpg" });
+    } catch (error) {
+      setStatus(error.message || "活动申请提交失败，请稍后重试。", "error");
+      return;
+    }
     reviews.push({
-      id: `xhs_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+      id: serverClaim.id || `xhs_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
       accountEmail: account.email,
       noteUrl,
       normalizedUrl,
@@ -446,25 +496,20 @@
       favoriteCount,
       tier: tier.tier,
       rewardCredits: tier.rewardCredits,
-      proofDataUrl,
+      proofDataUrl: "",
       proofName: proofInput.files?.[0]?.name || "笔记归属截图.jpg",
-      status: "pending",
+      status: serverClaim.status || "pending",
       rejectReason: "",
       submittedAt: new Date().toISOString(),
       reviewedAt: ""
     });
-    try {
-      saveReviews(reviews);
-    } catch {
-      setStatus("截图数据较大，浏览器无法保存。请上传尺寸更小的截图后重试。", "error");
-      return;
-    }
+    try { saveReviews(reviews); } catch { /* submission already persisted on server */ }
     form.reset();
     form.elements.likeCount.value = "0";
     form.elements.favoriteCount.value = "0";
     clearProof();
     updateTierPreview();
-    renderHistory();
+    await loadReviews();
     setStatus("兑换信息已提交，审核结果会显示在下方记录中。", "success");
   });
 

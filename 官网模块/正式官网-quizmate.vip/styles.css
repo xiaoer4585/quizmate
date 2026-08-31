@@ -56,9 +56,19 @@
 }
 
 .compact-credit-head h1 {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
   margin: 0 0 10px;
-  font-size: clamp(30px, 3.4vw, 42px);
-  line-height: 1.18;
+  font-size: 30px;
+  line-height: 1.12;
+  white-space: nowrap;
+}
+
+.compact-credit-head h1 small {
+  color: var(--muted);
+  font-size: 0.58em;
+  font-weight: 650;
 }
 
 .compact-credit-head p {
@@ -3272,7 +3282,10 @@ h1 {
 
 .credit-package-title h3 {
   margin: 0 0 6px;
-  font-size: 22px;
+  font-size: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .credit-package-title p {
@@ -4652,9 +4665,19 @@ h1 {
 }
 
 .compact-credit-head h1 {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
   margin: 0 0 10px;
-  font-size: clamp(30px, 3.4vw, 42px);
-  line-height: 1.18;
+  font-size: 30px;
+  line-height: 1.12;
+  white-space: nowrap;
+}
+
+.compact-credit-head h1 small {
+  color: var(--muted);
+  font-size: 0.58em;
+  font-weight: 650;
 }
 
 .compact-credit-head p {
@@ -4889,7 +4912,7 @@ h1 {
   }
 
   .compact-credit-head h1 {
-    font-size: 28px;
+    font-size: 14px;
   }
 
   .compact-credit-head p {
@@ -5104,7 +5127,11 @@ h1 {
   .recharge-compact { padding-top: calc(var(--header-height) + 28px); }
   .compact-credit-head h1 {
     margin-bottom: 8px;
-    font-size: 26px;
+    font-size: 16px;
+    gap: 4px;
+  }
+  .compact-credit-head h1 small {
+    font-size: 0.72em;
   }
   .credit-usage-note {
     gap: 6px;
@@ -5153,7 +5180,7 @@ h1 {
   .credit-package-title h3 {
     overflow: hidden;
     margin-bottom: 2px;
-    font-size: 17px;
+    font-size: 16px;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -6761,6 +6788,33 @@ h1 {
 /* 客户端 HTML 模拟界面 */
 .client-panel-mockup {
   animation: v3-fade 300ms ease;
+}
+
+.extension-showcase-image {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: contain;
+  object-position: top center;
+  border: 0;
+  border-radius: 0;
+  background: #f3f6f5;
+}
+
+/* 网申工作台是完整画布，去掉内容区内外的留白，让展示图随窗口比例自适应。 */
+.client-main:has(.client-panel[data-panel="extension"].is-active) {
+  padding: 0;
+  overflow: hidden;
+  background: #f4f7f8;
+}
+
+.client-panel[data-panel="extension"].is-active {
+  width: 100%;
+}
+
+.client-panel[data-panel="extension"] .mockup-app {
+  display: none;
 }
 
 .mockup-app {

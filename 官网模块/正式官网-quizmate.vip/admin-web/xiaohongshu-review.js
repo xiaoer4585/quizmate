@@ -1,25 +1,29 @@
 (function initXiaohongshuAdminReview() {
-  const STORAGE_KEY = "quizmate_xhs_reward_reviews_v1";
   const roots = Array.from(document.querySelectorAll("[data-xhs-admin-review]"));
   if (!roots.length) return;
+  const isDemo = document.body.dataset.demoSeed === "true";
+  let reviews = [];
 
   function readReviews() {
-    try {
-      const value = JSON.parse(localStorage.getItem(STORAGE_KEY) || "[]");
-      if (!Array.isArray(value)) return [];
-      let changed = false;
-      const migrated = value.map((item) => {
-        if (Number(item?.tier) !== 80) return item;
-        changed = true;
-        return { ...item, tier: 70, rewardCredits: 2500 };
-      });
-      if (changed) localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated));
-      return migrated;
-    } catch { return []; }
+    return reviews;
   }
 
   function saveReviews(items) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
+    reviews = items;
+  }
+
+  async function adminApi(action, payload = {}) {
+    const accountToken = localStorage.getItem("study_admin_token") || "";
+    if (!accountToken) throw new Error("管理员登录状态已失效，请重新登录。");
+    const endpoint = (localStorage.getItem("study_api_endpoint") || "https://api.quizmate.vip/study-auth-api").replace(/\/+$/, "");
+    const response = await fetch(endpoint, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, accountToken, ...payload })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || result.ok !== true) throw new Error(result.error || "审核接口请求失败");
+    return result.data || {};
   }
 
   function normalizeUrl(value) {
@@ -43,7 +47,7 @@
   }
 
   function seedDemoData() {
-    if (document.body.dataset.demoSeed !== "true") return;
+    if (!isDemo) return;
     const now = Date.now();
     const demos = [
       {
@@ -79,10 +83,7 @@
         status: "rejected", rejectReason: "截图中未显示当前账号主页，请补充个人中心完整截图。", submittedAt: new Date(now - 50 * 60 * 60 * 1000).toISOString(), reviewedAt: new Date(now - 48 * 60 * 60 * 1000).toISOString()
       }
     ];
-    const existing = readReviews();
-    const existingIds = new Set(existing.map((item) => item.id));
-    const missingDemos = demos.filter((item) => !existingIds.has(item.id));
-    if (missingDemos.length) saveReviews([...existing, ...missingDemos]);
+    saveReviews(demos);
   }
 
   function getApprovedDuplicate(item, items) {
@@ -163,11 +164,24 @@
       }).join("");
     }
 
-    function render() {
+    function renderCached() {
       const items = readReviews();
       renderMetrics(items);
       renderList(items);
       window.lucide?.createIcons();
+    }
+
+    async function render() {
+      if (isDemo) return renderCached();
+      if (!readReviews().length) elements.list.innerHTML = `<tr><td class="xhs-admin-empty-row" colspan="8">正在加载审核申请...</td></tr>`;
+      try {
+        const data = await adminApi("adminListXiaohongshuRewards");
+        saveReviews(Array.isArray(data.items) ? data.items : []);
+        renderCached();
+      } catch (error) {
+        renderMetrics([]);
+        elements.list.innerHTML = `<tr><td class="xhs-admin-empty-row" colspan="8">${escapeHtml(error.message || "审核申请加载失败")}</td></tr>`;
+      }
     }
 
     function closeModal() {
@@ -187,13 +201,13 @@
         : "";
       const result = item.status === "pending"
         ? `<div class="xhs-review-form"><label>拒绝原因（选择拒绝时必填）</label><textarea class="xhs-review-reject-reason" data-xhs-reject-reason placeholder="例如：截图中未显示当前账号个人中心，请补充完整截图。"></textarea><div class="xhs-review-actions"><button type="button" class="reject" data-xhs-reject="${escapeHtml(item.id)}"><i data-lucide="x"></i>拒绝申请</button><button type="button" class="approve" data-xhs-approve="${escapeHtml(item.id)}"><i data-lucide="check"></i>通过并发放 ${Number(item.rewardCredits || rewardForTier(item.tier)).toLocaleString("zh-CN")} 积分</button></div></div>`
-        : `<div class="xhs-review-current-result">${item.status === "approved" ? `已于 ${formatTime(item.reviewedAt)} 审核通过并模拟发放 ${Number(item.rewardCredits || 0).toLocaleString("zh-CN")} 积分。` : `已于 ${formatTime(item.reviewedAt)} 拒绝。原因：${escapeHtml(item.rejectReason || "未填写")}`}</div>`;
+        : `<div class="xhs-review-current-result">${item.status === "approved" ? `已于 ${formatTime(item.reviewedAt)} 审核通过并发放 ${Number(item.rewardCredits || 0).toLocaleString("zh-CN")} 积分。` : `已于 ${formatTime(item.reviewedAt)} 拒绝。原因：${escapeHtml(item.rejectReason || "未填写")}`}</div>`;
       elements.detail.innerHTML = `<div class="xhs-review-detail">${risk}<div class="xhs-review-summary"><div><span>用户账号</span><strong>${escapeHtml(item.accountEmail)}</strong></div><div><span>点赞 / 收藏</span><strong>${Number(item.likeCount || 0)} / ${Number(item.favoriteCount || 0)}</strong></div><div><span>奖励档位</span><strong>${Number(item.tier || 20)}赞/收藏 · ${Number(item.rewardCredits || rewardForTier(item.tier)).toLocaleString("zh-CN")} 积分</strong></div></div><figure class="xhs-review-proof-large"><figcaption><span>个人中心笔记截图</span><a href="${escapeHtml(item.noteUrl)}" target="_blank" rel="noopener noreferrer">打开小红书笔记</a></figcaption>${item.proofDataUrl ? `<img src="${escapeHtml(item.proofDataUrl)}" alt="${escapeHtml(item.proofName || "笔记归属截图")}" />` : `<div class="xhs-review-current-result">该申请没有上传归属截图。</div>`}</figure>${result}</div>`;
       elements.modal.hidden = false;
       window.lucide?.createIcons();
     }
 
-    function approve(id) {
+    async function approve(id) {
       const items = readReviews();
       const item = items.find((candidate) => candidate.id === id);
       if (!item || item.status !== "pending") return;
@@ -207,17 +221,18 @@
         ? `该链接与 ${duplicate.accountEmail} 已通过的链接相同。确认已完成二次核验并继续发放吗？`
         : `确认通过该申请，并为 ${item.accountEmail} 发放 ${Number(item.rewardCredits || rewardForTier(item.tier)).toLocaleString("zh-CN")} 积分吗？`;
       if (!window.confirm(message)) return;
-      item.status = "approved";
-      item.rewardCredits = Number(item.rewardCredits || rewardForTier(item.tier));
-      item.reviewedAt = new Date().toISOString();
-      item.rejectReason = "";
-      item.simulatedGrant = true;
-      saveReviews(items);
+      if (isDemo) {
+        item.status = "approved";
+        item.reviewedAt = new Date().toISOString();
+        saveReviews(items);
+      } else {
+        await adminApi("adminReviewXiaohongshuReward", { claimId: id, decision: "approved" });
+      }
       closeModal();
-      render();
+      await render();
     }
 
-    function reject(id) {
+    async function reject(id) {
       const items = readReviews();
       const item = items.find((candidate) => candidate.id === id);
       if (!item || item.status !== "pending") return;
@@ -227,34 +242,37 @@
         elements.detail.querySelector("[data-xhs-reject-reason]")?.focus();
         return;
       }
-      item.status = "rejected";
-      item.rejectReason = reason;
-      item.reviewedAt = new Date().toISOString();
-      saveReviews(items);
+      if (isDemo) {
+        item.status = "rejected";
+        item.rejectReason = reason;
+        item.reviewedAt = new Date().toISOString();
+        saveReviews(items);
+      } else {
+        await adminApi("adminReviewXiaohongshuReward", { claimId: id, decision: "rejected", reason });
+      }
       closeModal();
-      render();
+      await render();
     }
 
-    root.querySelector("[data-xhs-admin-refresh]")?.addEventListener("click", render);
-    [elements.statusFilter, elements.tierFilter].forEach((element) => element?.addEventListener("change", render));
-    elements.queryFilter?.addEventListener("input", render);
+    const run = (task) => Promise.resolve(task()).catch((error) => window.alert(error.message || "操作失败，请稍后重试。"));
+    root.querySelector("[data-xhs-admin-refresh]")?.addEventListener("click", () => run(render));
+    [elements.statusFilter, elements.tierFilter].forEach((element) => element?.addEventListener("change", renderCached));
+    elements.queryFilter?.addEventListener("input", renderCached);
     elements.list.addEventListener("click", (event) => {
       const openButton = event.target.closest("[data-xhs-open-review]");
       const approveButton = event.target.closest("[data-xhs-approve]");
       if (openButton) openReview(openButton.dataset.xhsOpenReview);
-      else if (approveButton) approve(approveButton.dataset.xhsApprove);
+      else if (approveButton) run(() => approve(approveButton.dataset.xhsApprove));
     });
     elements.modal.addEventListener("click", (event) => {
       if (event.target.closest("[data-close-xhs-review]")) closeModal();
       const approveButton = event.target.closest("[data-xhs-approve]");
       const rejectButton = event.target.closest("[data-xhs-reject]");
-      if (approveButton) approve(approveButton.dataset.xhsApprove);
-      if (rejectButton) reject(rejectButton.dataset.xhsReject);
+      if (approveButton) run(() => approve(approveButton.dataset.xhsApprove));
+      if (rejectButton) run(() => reject(rejectButton.dataset.xhsReject));
     });
     root.addEventListener("keydown", (event) => { if (event.key === "Escape" && activeId) closeModal(); });
-    window.addEventListener("storage", (event) => { if (event.key === STORAGE_KEY) render(); });
-
-    return { render, openReview };
+    return { render, renderCached, openReview };
   });
 
   seedDemoData();

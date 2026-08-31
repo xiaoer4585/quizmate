@@ -6,7 +6,7 @@
     <title>答题悬浮助手后台</title>
     <link rel="stylesheet" href="xiaohongshu-review.css?v=20260825-preview1" />
     <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
-    <script defer src="xiaohongshu-review.js?v=20260825-preview1"></script>
+    <script defer src="xiaohongshu-review.js?v=20260830-live1"></script>
     <style>
       [hidden] { display: none !important; }
       :root {
@@ -254,6 +254,10 @@
       .modal-card .modal-status { min-height: 20px; margin-top: 10px; font-size: 13px; color: var(--muted); }
       .modal-card .modal-status.error { color: var(--red); }
       .modal-card .modal-status.success { color: var(--green); }
+      .resume-summary-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(220px,1fr)); gap:10px; }
+      .resume-summary-item { display:grid; gap:4px; padding:12px 14px; border:1px solid var(--line); border-radius:8px; background:#fbfcfd; min-width:0; }
+      .resume-summary-item strong { overflow-wrap:anywhere; color:var(--ink); }
+      .resume-summary-item span, .resume-summary-item small { color:var(--muted); font-size:12px; }
       @media (max-width: 1080px) {
         .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         .form-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
@@ -340,11 +344,12 @@
           <button type="button" data-view-tab="orders"><i data-lucide="receipt-text"></i>订单</button>
           <button type="button" data-view-tab="xiaohongshuReviews"><i data-lucide="message-square-heart"></i>小红书分享审核</button>
           <button type="button" data-view-tab="redemptionCodes"><i data-lucide="ticket-check"></i>兑换码</button>
-          <button type="button" data-view-tab="shop"><i data-lucide="store"></i>店铺管理</button>
+          <button type="button" data-view-tab="shop"><i data-lucide="store"></i>店铺商品</button>
           <button type="button" data-view-tab="paymentConfig"><i data-lucide="credit-card"></i>支付配置</button>
           <button type="button" data-view-tab="domainInquiries"><i data-lucide="globe"></i>域名询价</button>
           <button type="button" data-view-tab="knowledge"><i data-lucide="files"></i>用户知识库</button>
           <button type="button" data-view-tab="aiConfig"><i data-lucide="bot"></i>AI 配置</button>
+          <button type="button" data-view-tab="resumeFillReports"><i data-lucide="list-checks"></i>网申未填写</button>
           <button type="button" data-view-tab="aiFailures"><i data-lucide="triangle-alert"></i>AI 调用失败</button>
           <button type="button" data-view-tab="cuotiConfig"><i data-lucide="book-open"></i>错题集配置</button>
           <button type="button" data-view-tab="operations"><i data-lucide="sliders-horizontal"></i>运营配置</button>
@@ -661,10 +666,10 @@
             <div class="form-grid">
               <div class="field"><label for="redeemPackageId">积分套餐</label>
                 <select id="redeemPackageId">
-                  <option value="trial">笔面试体验包（¥19.90 / 210积分）</option>
-                  <option value="starter" selected>笔面试实战包（¥49.90 / 600积分）</option>
-                  <option value="pro">笔面试上岸包（¥149.00 / 2500积分）</option>
-                  <option value="unlimited">无忧包（¥399.90 / 8000积分）</option>
+                  <option value="trial">网申&笔面试体验包（¥19.90 / 210积分）</option>
+                  <option value="starter" selected>网申&笔面试实战包（¥49.90 / 600积分）</option>
+                  <option value="pro">网申&笔面试上岸包（¥149.00 / 2500积分）</option>
+                  <option value="unlimited">网申&笔面试无忧包（¥399.90 / 8000积分）</option>
                 </select>
               </div>
               <div class="field"><label for="redeemCount">生成数量（1-500）</label><input id="redeemCount" type="number" min="1" max="500" value="10" /></div>
@@ -696,10 +701,10 @@
               <div class="field"><label for="redeemFilterPackage">套餐</label>
                 <select id="redeemFilterPackage">
                   <option value="">全部</option>
-                  <option value="trial">笔面试体验包</option>
-                  <option value="starter">笔面试实战包</option>
-                  <option value="pro">笔面试上岸包</option>
-                  <option value="unlimited">无忧包</option>
+                  <option value="trial">网申&笔面试体验包</option>
+                  <option value="starter">网申&笔面试实战包</option>
+                  <option value="pro">网申&笔面试上岸包</option>
+                  <option value="unlimited">网申&笔面试无忧包</option>
                 </select>
               </div>
               <div class="actions" style="grid-column:auto;align-self:end"><button id="searchRedeemBtn" type="button">查询</button><button id="clearRedeemFilterBtn" class="secondary" type="button">清空条件</button></div>
@@ -714,13 +719,13 @@
             <div class="toolbar"><div><h2>店铺商品</h2><p>买家在店铺页选购商品并支付后，系统自动生成兑换码。商品关联积分套餐，可自定义名称与售价。</p></div><button type="button" data-refresh="shopProductsAdmin">刷新商品</button></div>
             <h3 class="section-heading">新增商品</h3>
             <div class="form-grid">
-              <div class="field"><label for="shopProductName">商品名称</label><input id="shopProductName" placeholder="例如：笔面试实战包充值卡" /></div>
+              <div class="field"><label for="shopProductName">商品名称</label><input id="shopProductName" placeholder="例如：网申&笔面试实战包充值卡" /></div>
               <div class="field"><label for="shopProductPackage">关联积分套餐</label>
                 <select id="shopProductPackage">
-                  <option value="trial">笔面试体验包（210积分）</option>
-                  <option value="starter" selected>笔面试实战包（600积分）</option>
-                  <option value="pro">笔面试上岸包（2500积分）</option>
-                  <option value="unlimited">无忧包（8000积分）</option>
+                  <option value="trial">网申&笔面试体验包（210积分）</option>
+                  <option value="starter" selected>网申&笔面试实战包（600积分）</option>
+                  <option value="pro">网申&笔面试上岸包（2500积分）</option>
+                  <option value="unlimited">网申&笔面试无忧包（8000积分）</option>
                 </select>
               </div>
               <div class="field"><label for="shopProductPrice">售价（元）</label><input id="shopProductPrice" type="number" min="0.01" step="0.01" placeholder="49.90" /></div>
@@ -878,6 +883,31 @@
           </div>
           <div class="table-wrap"><table><thead data-head="aiFailures"></thead><tbody data-body="aiFailures"></tbody></table></div>
           <div class="pagination" data-pagination="aiFailures"></div>
+        </section>
+
+        <section class="view" data-view="resumeFillReports">
+          <div class="panel">
+            <div class="toolbar">
+              <div>
+                <h2>网申未填写字段</h2>
+                <p>查看 AI 填写后仍未完成的字段，按网站和语言筛选，用于定期归纳通用字段。这里仅保存字段名称、原因和统计信息，不保存用户简历值。</p>
+              </div>
+              <button type="button" data-refresh="resumeFillReports">刷新</button>
+            </div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field"><label for="resumeReportHostname">网站域名</label><input id="resumeReportHostname" placeholder="例如 jobs.feishu.cn" /></div>
+              <div class="field"><label for="resumeReportLanguage">页面语言</label><select id="resumeReportLanguage"><option value="">全部</option><option value="zh">中文</option><option value="en">英文</option></select></div>
+              <div class="field"><label for="resumeReportStartDate">开始日期</label><input id="resumeReportStartDate" type="date" /></div>
+              <div class="field"><label for="resumeReportEndDate">结束日期</label><input id="resumeReportEndDate" type="date" /></div>
+              <div class="actions" style="align-self:end"><button id="searchResumeReportsBtn" type="button">查询</button><button id="clearResumeReportsBtn" class="secondary" type="button">清空条件</button></div>
+            </div>
+          </div>
+          <div class="panel">
+            <div class="toolbar"><div><h3>字段汇总</h3><p>相同字段按失败原因聚合，优先显示出现频次高的字段。</p></div></div>
+            <div id="resumeFieldSummary" class="resume-field-summary"><div class="visit-chart-empty">加载后显示汇总</div></div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="resumeFillReports"></thead><tbody data-body="resumeFillReports"></tbody></table></div>
+          <div class="pagination" data-pagination="resumeFillReports"></div>
         </section>
 
         <section class="view" data-view="aiConfig">
@@ -1207,7 +1237,8 @@
         commissions: "adminListCommissions",
         withdrawals: "adminListWithdrawals",
         riskFlags: "adminListRiskFlags",
-        aiFailures: "adminListModelCallFailures"
+        aiFailures: "adminListModelCallFailures",
+        resumeFillReports: "adminListResumeFillReports"
       };
       const state = {
         activeView: "dashboard",
@@ -1281,7 +1312,10 @@
         cpanTodayDownloads: $("#cpanTodayDownloads"), cpanTotalDownloads: $("#cpanTotalDownloads"),
         cpanOrdersBody: $("#cpanOrdersBody"), cpanUsersBody: $("#cpanUsersBody"),
         aiFailureModelType: $("#aiFailureModelType"), aiFailureErrorCode: $("#aiFailureErrorCode"), aiFailureRequestMode: $("#aiFailureRequestMode"),
-        aiFailureStartDate: $("#aiFailureStartDate"), aiFailureEndDate: $("#aiFailureEndDate")
+        aiFailureStartDate: $("#aiFailureStartDate"), aiFailureEndDate: $("#aiFailureEndDate"),
+        resumeReportHostname: $("#resumeReportHostname"), resumeReportLanguage: $("#resumeReportLanguage"),
+        resumeReportStartDate: $("#resumeReportStartDate"), resumeReportEndDate: $("#resumeReportEndDate"),
+        resumeFieldSummary: $("#resumeFieldSummary")
       };
 
       const columns = {
@@ -1299,7 +1333,8 @@
         commissions: [["__select", "选择"], ["email", "被邀请人邮箱"], ["orderNo", "订单号"], ["chargeAmount", "充值金额"], ["commissionRate", "提成比例"], ["commissionAmount", "提成金额"], ["status", "状态"], ["createdAt", "时间"]],
         withdrawals: [["email", "邮箱"], ["amount", "金额"], ["alipayAccount", "支付宝账号"], ["alipayName", "支付宝实名"], ["status", "状态"], ["payOrderNo", "打款订单号"], ["paidAt", "打款时间"], ["createdAt", "申请时间"], ["__actions", "操作"]],
         riskFlags: [["email", "邮箱"], ["type", "类型"], ["detail", "详情"], ["createdAt", "标记时间"]],
-        aiFailures: [["createdAt", "时间"], ["modelType", "模型类型"], ["modelName", "模型"], ["errorCode", "错误码"], ["errorMessage", "错误信息"], ["httpStatus", "HTTP"], ["requestMode", "模式"], ["accountEmail", "账户"], ["requestId", "请求 ID"], ["clientIp", "IP"]]
+        aiFailures: [["createdAt", "时间"], ["modelType", "模型类型"], ["modelName", "模型"], ["errorCode", "错误码"], ["errorMessage", "错误信息"], ["httpStatus", "HTTP"], ["requestMode", "模式"], ["accountEmail", "账户"], ["requestId", "请求 ID"], ["clientIp", "IP"]],
+        resumeFillReports: [["createdAt", "时间"], ["hostname", "网站"], ["pageTitle", "页面"], ["language", "语言"], ["detected", "识别字段"], ["matched", "匹配字段"], ["filled", "已填写"], ["unresolved", "未完成"], ["frames", "Frame"]]
       };
 
       function normalizeStudyApiEndpoint(endpoint) {
@@ -1627,6 +1662,12 @@
         els.aiFailureEndDate.value = "";
         state.tables.aiFailures.page = 1; run(() => loadTable("aiFailures"));
       });
+      $("#searchResumeReportsBtn").addEventListener("click", () => { state.tables.resumeFillReports.page = 1; run(() => loadView("resumeFillReports")); });
+      $("#clearResumeReportsBtn").addEventListener("click", () => {
+        els.resumeReportHostname.value = ""; els.resumeReportLanguage.value = "";
+        els.resumeReportStartDate.value = ""; els.resumeReportEndDate.value = "";
+        state.tables.resumeFillReports.page = 1; run(() => loadView("resumeFillReports"));
+      });
       // 提成记录复选框
       document.addEventListener("change", handleCommissionCheckboxChange);
 
@@ -1696,6 +1737,7 @@
         if (view === "redemptionCodes") return Promise.all([loadTable("redemptionCodes")]);
         if (view === "shop") return Promise.all([loadShopProductsAdmin(), loadTable("shopOrders")]);
         if (view === "shopProductsAdmin") return loadShopProductsAdmin();
+        if (view === "resumeFillReports") return Promise.all([loadTable("resumeFillReports"), loadResumeFieldSummary()]);
         if (tableActions[view]) return loadTable(view);
         if (view === "aiConfig") return loadAiConfig();
         if (view === "cuotiConfig") return loadCuotiConfig();
@@ -1815,6 +1857,7 @@
       const DOWNLOAD_PRODUCTS = [
         { key: "quizmate-android", label: "QuizMate 安卓", icon: "smartphone", cls: "android", color: "#067647" },
         { key: "quizmate-windows", label: "QuizMate Windows", icon: "monitor", cls: "windows", color: "#2563eb" },
+        { key: "input-resume-extension", label: "input Chrome 插件", icon: "chrome", cls: "input", color: "#0f766e" },
         { key: "quizmate-mac", label: "QuizMate Mac", icon: "apple", cls: "mac", color: "#6d28d9" },
         { key: "diskpilot-windows", label: "磁盘轻扩 Windows", icon: "hard-drive", cls: "diskpilot", color: "#c2410c" }
       ];
@@ -2184,9 +2227,26 @@
         if (currentMode && (requestModes || []).includes(currentMode)) modeSelect.value = currentMode;
       }
 
+      function resumeFillReportFilters() {
+        return {
+          hostname: els.resumeReportHostname.value.trim(),
+          language: els.resumeReportLanguage.value,
+          startDate: els.resumeReportStartDate.value,
+          endDate: els.resumeReportEndDate.value
+        };
+      }
+
+      async function loadResumeFieldSummary() {
+        const data = await api("adminResumeFieldSummary", resumeFillReportFilters());
+        const items = data.items || [];
+        els.resumeFieldSummary.innerHTML = items.length
+          ? `<div class="resume-summary-grid">${items.map((item) => `<div class="resume-summary-item"><strong>${escapeHtml(item.label)}</strong><span>${escapeHtml(item.reason)} · ${formatNumber(item.count)} 次</span><small>${escapeHtml(item.lastSeenAt || "")}</small></div>`).join("")}</div>`
+          : `<div class="visit-chart-empty">暂无未填写字段记录</div>`;
+      }
+
       async function loadTable(type) {
         const table = state.tables[type];
-        const extra = type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "creditLogs" ? creditLogFilters() : type === "accounts" ? accountFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : type === "redemptionCodes" ? redemptionCodeFilters() : type === "shopOrders" ? shopOrderFilters() : type === "aiFailures" ? aiFailureFilters() : {};
+        const extra = type === "resumeFillReports" ? resumeFillReportFilters() : type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "creditLogs" ? creditLogFilters() : type === "accounts" ? accountFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : type === "redemptionCodes" ? redemptionCodeFilters() : type === "shopOrders" ? shopOrderFilters() : type === "aiFailures" ? aiFailureFilters() : {};
         const payload = { page: table.page, pageSize: table.pageSize, ...extra };
         const data = await api(tableActions[type], payload);
         table.items = data.items || [];
@@ -2765,6 +2825,8 @@
         if (!response.ok || !data.ok) throw new Error(data.error || "请求失败");
         return data.data || {};
       }
+      // input 测试页复用当前后台会话、接口地址和管理员权限，不创建第二套 API 客户端。
+      window.InputAdmin = { api, setStatus: (text, type = "") => setStatus(text, type) };
 
       async function loginAdmin() {
         const email = els.loginEmail.value.trim();

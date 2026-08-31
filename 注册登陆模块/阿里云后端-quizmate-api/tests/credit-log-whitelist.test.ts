@@ -69,7 +69,7 @@ describe("credit log whitelist admin actions", () => {
   it("supports fuzzy email search combined with the whitelist filter", async () => {
     const { db, queries } = fakeDb((query) => (query.text.includes("count(*)") ? { rows: [{ count: "1" }], rowCount: 1 } : { rows: [], rowCount: 0 }));
     await handler(dependencies(db), "adminListCreditLogs")({ adminSecret: "secret-key", page: 2, pageSize: 10, email: "TEST@Example.com", excludeWhitelist: "true" }, context);
-    expect(queries[0]!.text).toContain("a.email ILIKE $1");
+    expect(queries[0]!.text).toContain("lower(a.email) LIKE $1");
     expect(queries[0]!.values).toEqual(["%test@example.com%"]);
     // total=1 时请求 page=2 会被钳制到第 1 页，offset 回到 0
     expect(queries[1]!.values).toEqual(["%test@example.com%", 10, 0]);
@@ -88,6 +88,9 @@ describe("credit log whitelist admin actions", () => {
       if (query.text.includes("credit_log_whitelist") && query.text.startsWith("SELECT")) {
         return { rows: [{ email: "test@example.com", note: "自测", created_at: "2026-08-16" }], rowCount: 1 };
       }
+      if (query.text.includes("DELETE FROM credit_log_whitelist")) {
+        return { rows: [{ email: "test@example.com" }], rowCount: 1 };
+      }
       return { rows: [], rowCount: 0 };
     });
     const deps = dependencies(db);
@@ -97,7 +100,7 @@ describe("credit log whitelist admin actions", () => {
     expect(queries[0]!.values).toEqual(["test@example.com", "自测账号"]);
 
     const list = await handler(deps, "adminGetCreditWhitelist")({ adminSecret: "secret-key" }, context);
-    expect(list).toMatchObject({ items: [{ email: "test@example.com", note: "自测", createdAt: "2026-08-16" }] });
+    expect(list).toMatchObject({ items: [{ email: "test@example.com", note: "自测", createdAt: "2026-08-16T00:00:00.000Z" }] });
 
     const remove = await handler(deps, "adminRemoveCreditWhitelist")({ adminSecret: "secret-key", email: "test@example.com" }, context);
     expect(remove).toMatchObject({ removed: true, email: "test@example.com" });

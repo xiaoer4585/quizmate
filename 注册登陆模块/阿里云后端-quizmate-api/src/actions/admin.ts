@@ -40,6 +40,12 @@ function requestedCreditPlatform(input: ActionInput): string {
   return platform;
 }
 
+function requestedCreditWhitelist(input: ActionInput): boolean {
+  return input.excludeWhitelist === true
+    || String(input.excludeWhitelist ?? "").trim().toLowerCase() === "true"
+    || String(input.excludeWhitelist ?? "").trim() === "1";
+}
+
 export async function authenticateAdmin(deps: ActionDependencies, input: ActionInput): Promise<{ accountId: string; email: string }> {
   // 优先使用账户 token 认证
   if (input.accountToken || input.token) {
@@ -175,6 +181,7 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
     const { pageSize, requestedPage } = paging(input);
     const emailKeyword = String(input.email ?? "").trim().slice(0, 200);
     const platform = requestedCreditPlatform(input);
+    const excludeWhitelist = requestedCreditWhitelist(input);
     const params: unknown[] = [];
     const conditions: string[] = [];
     if (emailKeyword) {
@@ -184,6 +191,9 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
     if (platform) {
       params.push(platform);
       conditions.push(`latest.platform = $${params.length}`);
+    }
+    if (excludeWhitelist) {
+      conditions.push(`lower(a.email) NOT IN (SELECT email FROM credit_log_whitelist)`);
     }
     const whereClause = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const latestPlatformJoin = `LEFT JOIN LATERAL (
@@ -222,6 +232,43 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
   actions.set("adminListCreditLedger", listCreditLogs);
   actions.set("adminListCreditFlow", listCreditLogs);
   actions.set("adminListCreditFlows", listCreditLogs);
+  actions.set("adminGetCreditWhitelist", async (input) => {
+    await authenticateAdmin(deps, input);
+    const result = await deps.db.query<{ email: string; note: string | null; created_at: string | Date }>(
+      `SELECT email, note, created_at FROM credit_log_whitelist ORDER BY created_at DESC, email ASC`
+    );
+    return {
+      items: result.rows.map((row) => ({
+        email: String(row.email ?? ""),
+        note: String(row.note ?? ""),
+        createdAt: date(row.created_at)
+      }))
+    };
+  });
+  actions.set("adminAddCreditWhitelist", async (input) => {
+    await authenticateAdmin(deps, input);
+    const email = normalizeEmail(input.email);
+    if (!email) throw new PublicError("请输入有效的邮箱地址。", "INVALID_EMAIL");
+    const note = String(input.note ?? "").trim().slice(0, 200);
+    await deps.db.query(
+      `INSERT INTO credit_log_whitelist(email, note, created_at)
+       VALUES ($1, NULLIF($2, ''), now())
+       ON CONFLICT(email) DO UPDATE SET note = EXCLUDED.note`,
+      [email, note]
+    );
+    return { added: true, email, note };
+  });
+  actions.set("adminRemoveCreditWhitelist", async (input) => {
+    await authenticateAdmin(deps, input);
+    const email = normalizeEmail(input.email);
+    if (!email) throw new PublicError("请输入有效的邮箱地址。", "INVALID_EMAIL");
+    const result = await deps.db.query<{ email: string }>(
+      `DELETE FROM credit_log_whitelist WHERE email = $1 RETURNING email`,
+      [email]
+    );
+    if (!result.rows[0]) throw new PublicError("白名单邮箱不存在。", "WHITELIST_EMAIL_NOT_FOUND", 404);
+    return { removed: true, email };
+  });
   actions.set("adminDashboardSummary", async (input) => {
     await authenticateAdmin(deps, input);
     const result = await deps.db.query<{
@@ -558,6 +605,109 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
        GROUP BY request_mode ORDER BY count(*) DESC LIMIT 20`
     )).rows.map((r) => String(r.request_mode));
     return { items, page, pageSize, total, totalPages, errorCodes: codes, requestModes: modes };
+  });
+  actions.set("adminListResumeFillReports", async (input) => {
+    await authenticateAdmin(deps, input);
+    const { pageSize, requestedPage } = paging(input);
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    const addLike = (column: string, value: unknown) => {
+      const text = String(value ?? "").trim();
+      if (!text) return;
+      params.push(`%${text}%`);
+      conditions.push(`${column} ILIKE $${params.length}`);
+    };
+    const addEqual = (column: string, value: unknown) => {
+      const text = String(value ?? "").trim();
+      if (!text) return;
+      params.push(text);
+      conditions.push(`${column} = $${params.length}`);
+    };
+    const addDateRange = (column: string, start: unknown, end: unknown) => {
+      const startDate = String(start ?? "").trim();
+      const endDate = String(end ?? "").trim();
+      if (startDate) { params.push(`${startDate}T00:00:00+08:00`); conditions.push(`${column} >= $${params.length}`); }
+      if (endDate) { params.push(`${endDate}T23:59:59+08:00`); conditions.push(`${column} <= $${params.length}`); }
+    };
+    addLike("hostname", input.hostname);
+    addEqual("language", input.language);
+    addDateRange("created_at", input.startDate, input.endDate);
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const total = Number((await deps.db.query<{ count: string }>(
+      `SELECT count(*)::text AS count FROM resume_fill_reports ${where}`, params
+    )).rows[0]?.count ?? 0);
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const page = Math.min(requestedPage, totalPages);
+    params.push(pageSize, (page - 1) * pageSize);
+    const result = await deps.db.query<Record<string, unknown>>(
+      `SELECT report_id, request_id, hostname, page_title, language, detected, matched, filled,
+              jsonb_array_length(failed) + jsonb_array_length(unmatched) AS unresolved,
+              frames, created_at
+         FROM resume_fill_reports ${where} ORDER BY created_at DESC
+         LIMIT $${params.length - 1} OFFSET $${params.length}`,
+      params
+    );
+    const items = result.rows.map((row) => ({
+      reportId: String(row.report_id ?? ""),
+      requestId: String(row.request_id ?? ""),
+      hostname: String(row.hostname ?? ""),
+      pageTitle: String(row.page_title ?? ""),
+      language: String(row.language ?? ""),
+      detected: Number(row.detected ?? 0),
+      matched: Number(row.matched ?? 0),
+      filled: Number(row.filled ?? 0),
+      unresolved: Number(row.unresolved ?? 0),
+      frames: Number(row.frames ?? 0),
+      createdAt: date(row.created_at)
+    }));
+    return { items, page, pageSize, total, totalPages };
+  });
+  actions.set("adminResumeFieldSummary", async (input) => {
+    await authenticateAdmin(deps, input);
+    const conditions: string[] = [];
+    const params: unknown[] = [];
+    const addLike = (column: string, value: unknown) => {
+      const text = String(value ?? "").trim();
+      if (!text) return;
+      params.push(`%${text}%`);
+      conditions.push(`${column} ILIKE $${params.length}`);
+    };
+    const addEqual = (column: string, value: unknown) => {
+      const text = String(value ?? "").trim();
+      if (!text) return;
+      params.push(text);
+      conditions.push(`${column} = $${params.length}`);
+    };
+    const addDateRange = (column: string, start: unknown, end: unknown) => {
+      const startDate = String(start ?? "").trim();
+      const endDate = String(end ?? "").trim();
+      if (startDate) { params.push(`${startDate}T00:00:00+08:00`); conditions.push(`${column} >= $${params.length}`); }
+      if (endDate) { params.push(`${endDate}T23:59:59+08:00`); conditions.push(`${column} <= $${params.length}`); }
+    };
+    addLike("hostname", input.hostname);
+    addEqual("language", input.language);
+    addDateRange("created_at", input.startDate, input.endDate);
+    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const result = await deps.db.query<Record<string, unknown>>(
+      `SELECT item->>'label' AS label,
+              COALESCE(NULLIF(item->>'reason', ''), '未说明') AS reason,
+              count(*)::int AS count, max(created_at) AS last_seen_at
+         FROM resume_fill_reports
+         CROSS JOIN LATERAL jsonb_array_elements(COALESCE(failed, '[]'::jsonb) || COALESCE(unmatched, '[]'::jsonb)) item
+         ${where ? `${where} AND` : "WHERE"} NULLIF(item->>'label', '') IS NOT NULL
+        GROUP BY item->>'label', COALESCE(NULLIF(item->>'reason', ''), '未说明')
+        ORDER BY count(*) DESC, max(created_at) DESC
+        LIMIT 200`,
+      params
+    );
+    return {
+      items: result.rows.map((row) => ({
+        label: String(row.label ?? ""),
+        reason: String(row.reason ?? ""),
+        count: Number(row.count ?? 0),
+        lastSeenAt: date(row.last_seen_at)
+      }))
+    };
   });
   actions.set("adminResetAdminCredentials", async (input) => {
     await authenticateAdmin(deps, input);

@@ -1,4 +1,6 @@
 const CREDIT_API_ENDPOINT = window.QUIZMATE_CREDIT_API_ENDPOINT || "https://api.quizmate.vip/study-auth-api";
+const CREDIT_PRODUCT = document.body?.dataset.product === "resume_autofill" ? "resume_autofill" : "study_ai";
+const IS_RESUME_PRODUCT = CREDIT_PRODUCT === "resume_autofill";
 const CREDIT_STORAGE_KEY = "quizmate_credit_account";
 const ACTIVE_ORDER_STORAGE_KEY = "quizmate_active_credit_order";
 const CODE_COOLDOWN_PREFIX = "quizmate_code_cooldown";
@@ -10,7 +12,7 @@ const POLL_MAX_FAIL = 5;
 
 const creditEls = {};
 let creditConfig = null;
-let selectedPackageId = "starter";
+let selectedPackageId = IS_RESUME_PRODUCT ? "resume-starter" : "starter";
 let selectedPayMethod = "alipay"; // alipay | wechat
 let accountState = loadCreditState();
 let activeOrder = loadActiveOrder();
@@ -182,17 +184,18 @@ async function initCredits() {
 
   // 套餐配置（getCreditConfig）是纯常量接口，几乎不会失败，先加载并渲染，让用户尽快看到套餐
   // 支付配置（getPaymentConfig）需要查库，单独加载并容错：失败时默认允许充值，避免阻塞页面
-  const credits = await creditApi("getCreditConfig", {});
+  const credits = await creditApi("getCreditConfig", { product: CREDIT_PRODUCT });
   let paymentEnabled = true;
   try {
-    const payment = await creditApi("getPaymentConfig", {});
+    const payment = await creditApi("getPaymentConfig", { product: CREDIT_PRODUCT });
     paymentEnabled = payment.creditEnabled === true;
   } catch {
     // 支付配置查询失败时，默认开启充值（后端 createCreditOrder 会再次校验）
     paymentEnabled = true;
   }
   creditConfig = { ...credits, enabled: paymentEnabled };
-  selectedPackageId = creditConfig.packages?.find((item) => item.id === "starter")?.id || creditConfig.packages?.[0]?.id || "";
+  const preferredPackage = IS_RESUME_PRODUCT ? "resume-starter" : "starter";
+  selectedPackageId = creditConfig.packages?.find((item) => item.id === preferredPackage)?.id || creditConfig.packages?.[0]?.id || "";
   renderCreditPackages();
   setCreditStatus(
     creditConfig.enabled ? "请选择积分包，使用支付宝完成充值。" : "在线充值暂未开启。",
@@ -1031,7 +1034,9 @@ function renderReferralOverview(data) {
   if (!section) return;
   const inviteCode = data.inviteCode || "未生成";
   const inviteLink = data.inviteLink || (inviteCode !== "未生成" ? `${window.location.origin}/?ref=${encodeURIComponent(inviteCode)}` : "");
-  const shareText = `我发现一个很神奇的不切屏、不截屏、后台无法捕获的答题悬浮球助手，效果非常惊艳。注册时填邀请码 ${inviteCode} 可额外获得积分，快来看看吧！${inviteLink}`;
+  const shareText = IS_RESUME_PRODUCT
+    ? `我在用 QuizMate 网申助手，简历解析后能自动匹配并填写招聘官网，多段实习和项目也能分开处理。注册时填邀请码 ${inviteCode} 可额外获得积分：${inviteLink}`
+    : `我发现一个很神奇的不切屏、不截屏、后台无法捕获的答题悬浮球助手，效果非常惊艳。注册时填邀请码 ${inviteCode} 可额外获得积分，快来看看吧！${inviteLink}`;
   const stats = data.stats || {};
   const commission = data.commission || {};
   const pendingAmount = Number(commission.pendingAmount ?? commission.pending ?? 0);
@@ -1045,7 +1050,7 @@ function renderReferralOverview(data) {
   const tierCardsHtml = tiers.length
     ? tiers.map((tier) => {
         const achieved = Boolean(tier.achieved);
-        const pkgName = tier.tierPackageId === 'pro' ? '笔面试上岸包' : tier.tierPackageId === 'unlimited' ? '无忧包' : '神秘礼包';
+        const pkgName = tier.tierPackageId === 'pro' ? '网申&笔面试上岸包' : tier.tierPackageId === 'unlimited' ? '网申&笔面试无忧包' : '神秘礼包';
         return `
           <div class="referral-tier-card ${achieved ? 'is-achieved' : ''}">
             <div class="referral-tier-card-count">${formatNumber(tier.invitedRechargedCount)}<span class="referral-tier-card-unit">位</span></div>
@@ -1058,14 +1063,14 @@ function renderReferralOverview(data) {
       }).join('')
     : '';
   const nextTierHtml = tiered.nextTier
-    ? `再邀请 <strong>${formatNumber(tiered.nextTier.invitedRechargedCount - rechargedCount)}</strong> 位好友成功充值，赠送 <strong>${tiered.nextTier.tierPackageId === 'unlimited' ? '无忧包' : '笔面试上岸包'}</strong>`
+    ? `再邀请 <strong>${formatNumber(tiered.nextTier.invitedRechargedCount - rechargedCount)}</strong> 位好友成功充值，赠送 <strong>${tiered.nextTier.tierPackageId === 'unlimited' ? '网申&笔面试无忧包' : '网申&笔面试上岸包'}</strong>`
     : '已达成所有阶梯奖励，感谢你的分享！';
   section.innerHTML = `
     <div class="referral-promo-box">
       <div class="referral-promo-hero">
         <h3>邀请好友，双方各得 20 积分</h3>
         <p>不截屏 · 不切屏 · 后台无法捕获，注册即得积分</p>
-        <p class="referral-promo-tier-summary">邀满 <b>10 位</b>已充值好友，赠 <b>笔面试上岸包</b>；邀满 <b>20 位</b>再赠 <b>无忧包</b>，陪伴你成功上岸。</p>
+        <p class="referral-promo-tier-summary">邀满 <b>10 位</b>已充值好友，赠 <b>网申&笔面试上岸包</b>；邀满 <b>20 位</b>再赠 <b>网申&笔面试无忧包</b>，陪伴你成功上岸。</p>
         <p class="referral-promo-tier-summary">邀请好友充值，邀请人拿 <b>5%</b> 提成，提成按好友实际充值金额累计。</p>
       </div>
       <div class="referral-tier-board" data-referral-tier-board>
@@ -1479,7 +1484,7 @@ async function drawPoster(ctx, inviteCode, inviteLink) {
     ctx.fillText(text, 80, 395 + i * 42);
   });
 
-  // 7. 阶梯奖励 banner（黄底深字：10=pro 笔面试上岸包 / 20=unlimited 无忧包）
+  // 7. 阶梯奖励 banner（黄底深字：10=pro 网申&笔面试上岸包 / 20=unlimited 网申&笔面试无忧包）
   const bannerY = 625;
   const bannerH = 130;
   ctx.fillStyle = "#facc15";
@@ -1490,9 +1495,9 @@ async function drawPoster(ctx, inviteCode, inviteLink) {
   ctx.textAlign = "center";
   ctx.fillText("【重磅更新】阶梯邀请奖励", W / 2, bannerY + 40);
   ctx.font = "bold 26px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillText("邀满 10 位充值好友 赠 笔面试上岸包", W / 2, bannerY + 80);
+  ctx.fillText("邀满 10 位充值好友 赠 网申&笔面试上岸包", W / 2, bannerY + 80);
   ctx.font = "bold 26px system-ui, -apple-system, 'Microsoft YaHei', sans-serif";
-  ctx.fillText("邀满 20 位充值好友 再赠 无忧包", W / 2, bannerY + 118);
+  ctx.fillText("邀满 20 位充值好友 再赠 网申&笔面试无忧包", W / 2, bannerY + 118);
 
   // 8. 邀请码卡片背景
   const cardY = 795;
@@ -1763,13 +1768,21 @@ function isMobileBrowser() {
 }
 
 function packageDescription(id) {
+  if (id.startsWith("resume-")) {
+    return {
+      "resume-trial": "适合解析一份简历并体验多次网申填写",
+      "resume-starter": "适合秋招集中投递与岗位版本优化",
+      "resume-pro": "适合多岗位、多公司持续投递",
+      "resume-unlimited": "适合高频网申与长期求职管理"
+    }[id] || "选择适合你的网申积分包";
+  }
   return {
     test: "仅供测试支付宝接口是否可用，充值少量积分",
     trial: "先体验账户、充值和积分扣费流程",
     starter: "适合日常练习与短期备考",
     pro: "适合密集练习和长期刷题",
     unlimited: "大额储备，单次积分成本更低"
-  }[id] || "选择适合你的积分包";
+  }[id] || "选择适合你的积分包（适用网申/笔试/面试多端通用）";
 }
 
 function trimAmount(amount) {

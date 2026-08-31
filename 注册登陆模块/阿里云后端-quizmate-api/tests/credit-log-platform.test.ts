@@ -58,7 +58,7 @@ describe("credit log platform filter", () => {
     expect(result).toMatchObject({ total: 5 });
     const listQuery = queries.find((q) => q.text.includes("ORDER BY l.created_at DESC"))!;
     expect(listQuery.text).toContain("LEFT JOIN LATERAL");
-    expect(listQuery.text).toContain("SELECT s.platform FROM account_sessions s");
+    expect(listQuery.text).toContain("SELECT CASE");
     expect(listQuery.text).toContain("session_platform");
   });
 
@@ -69,7 +69,7 @@ describe("credit log platform filter", () => {
     const result = await handler(dependencies(db), "adminListCreditLogs")({ adminSecret: "secret-key", platform: "darwin-desktop", page: 1, pageSize: 10 }, context);
     expect(result).toMatchObject({ total: 2 });
     for (const query of queries) {
-      expect(query.text).toContain("s.platform = $1");
+      expect(query.text).toContain("latest.platform = $1");
     }
     expect(queries[0]!.values).toEqual(["darwin-desktop"]);
     expect(queries[1]!.values).toEqual(["darwin-desktop", 10, 0]);
@@ -87,8 +87,8 @@ describe("credit log platform filter", () => {
       page: 1,
       pageSize: 10
     }, context);
-    expect(queries[0]!.text).toContain("a.email ILIKE $1");
-    expect(queries[0]!.text).toContain("s.platform = $2");
+    expect(queries[0]!.text).toContain("lower(a.email) LIKE $1");
+    expect(queries[0]!.text).toContain("latest.platform = $2");
     expect(queries[0]!.text).toContain("NOT IN (SELECT email FROM credit_log_whitelist)");
     expect(queries[0]!.values).toEqual(["%test@quizmate.cn%", "android"]);
   });
