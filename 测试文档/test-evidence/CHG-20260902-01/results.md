@@ -12,4 +12,9 @@
 
 ## 发布验证
 
-待执行：ECS 服务健康、两个 action 未授权 smoke、后台 OSS 回读哈希及回滚备份。完成后追加命令输出、提交/tag 和线上 URL 验证结果。
+- ECS 部署脚本：通过；服务 `active`，健康接口返回 `status=ok/database=ok`。
+- 两个 action 未授权 smoke：均返回 HTTP 403，且未命中 `UNKNOWN_ACTION`。
+- ECS 回滚目录：`/opt/quizmate-api-shadow.rollback-admin-menu-actions-20260902-180642`。
+- admin-web OSS：`quizmate-vip/admin-web/index.html`、`xiaohongshu-review.js`、`xiaohongshu-review.css` 上传成功；页面 SHA-256 `770d97995aff2d2b62e6cbd815d504c836112d70c08a499e19d498e1b0c6a1e6`；HTML 回滚对象 `rollback/CHG-20260902-01/admin-web.index.before.html`。
+- 公网 smoke：`https://www.quizmate.vip/admin-web/index.html`、两个静态资源均 HTTP 200；回读确认小红书菜单、AI 失败菜单及对应 action 标记存在。
+- 生产提交：`c7c29d8`，本地标签 `v20260902`。向 Gitee/GitHub 的外部仓库同步因安全审批待授权，未宣称完成。
