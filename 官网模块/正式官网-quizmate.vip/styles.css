@@ -1197,6 +1197,11 @@ svg {
   backdrop-filter: blur(18px);
 }
 
+/* Blog articles start below the fixed navigation so the headline remains visible. */
+.blog-page {
+  padding-top: var(--header-height);
+}
+
 .site-header.scrolled {
   border-color: rgba(220, 228, 238, 0.82);
   box-shadow: 0 10px 30px rgba(25, 51, 87, 0.07);
