@@ -19,7 +19,8 @@ const cloudBaseActions = [
   "getPurchaseConfig", "getTutorialConfig", "listKnowledge", "loginAccount", "queryCreditOrder",
   "queryPaymentOrder", "registerAccount", "resetAccountPassword", "sendRegisterCode",
   "sendResetPasswordCode", "startTrial", "trackWebsiteVisit", "uploadKnowledge", "alipayNotify",
-  "payjsNotify", "epayNotify"
+  "payjsNotify", "epayNotify", "adminListModelCallFailures", "adminListXiaohongshuRewards",
+  "adminReviewXiaohongshuReward", "submitXiaohongshuReward", "listMyXiaohongshuRewards"
 ];
 
 const deps = {
