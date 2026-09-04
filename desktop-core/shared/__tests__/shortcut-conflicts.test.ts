@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canonicalizeAccelerator,
   getDefaultShortcutBindings,
+  migrateMacLegacyShortcut,
   type ShortcutAction,
   validateShortcutConflict,
 } from '../shortcuts'
@@ -61,5 +62,34 @@ describe('shortcut conflict validation', () => {
     for (const action of configurable) {
       expect(validateShortcutConflict(platform, bindings[action], action, bindings), action).toBeNull()
     }
+  })
+
+  it('maps Windows Alt defaults to Option on Mac without a replay conflict', () => {
+    const bindings = getDefaultShortcutBindings('darwin')
+    expect(bindings).toMatchObject({
+      screenshot: 'Option+Q',
+      search: 'Option+E',
+      voice_search: 'Option+T',
+      toggle_visibility: 'Option+B',
+      interview_start: 'Option+R',
+      replay: 'Command+R',
+      copy_content: 'Command+Shift+C',
+    })
+  })
+
+  it.each([
+    ['interview_start', 'Option+I', 'Option+R'],
+    ['interview_start', 'Command+I', 'Option+R'],
+    ['interview_start', 'Command+Shift+I', 'Option+R'],
+    ['replay', 'Option+R', 'Command+R'],
+    ['copy_content', 'Option+C', 'Command+Shift+C'],
+    ['screenshot', 'Command+Option+Q', 'Option+Q'],
+  ] as Array<[ShortcutAction, string, string]>)('migrates legacy Mac default %s %s', (action, stored, expected) => {
+    expect(migrateMacLegacyShortcut(action, stored)).toBe(expected)
+  })
+
+  it('preserves genuine custom Mac bindings while normalizing Alt spelling', () => {
+    expect(migrateMacLegacyShortcut('interview_start', 'Option+F8')).toBe('Option+F8')
+    expect(migrateMacLegacyShortcut('replay', 'Alt+F9')).toBe('Option+F9')
   })
 })

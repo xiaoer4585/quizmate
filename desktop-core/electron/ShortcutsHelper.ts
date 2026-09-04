@@ -3,6 +3,7 @@ import { globalShortcut } from 'electron'
 import {
   getDefaultShortcutBindings,
   isConfigurable,
+  migrateMacLegacyShortcut,
   normalizeMacAccelerator,
   ShortcutConflict,
   ShortcutAction,
@@ -39,7 +40,9 @@ export class ShortcutsHelper {
     let changed = false
     for (const action of Object.keys(this.defaults) as ShortcutAction[]) {
       if (!stored[action]) continue
-      const accelerator = process.platform === 'darwin' ? normalizeMacAccelerator(stored[action]) : stored[action]
+      const accelerator = process.platform === 'darwin'
+        ? migrateMacLegacyShortcut(action, stored[action])
+        : stored[action]
       this.bindings[action] = accelerator
       if (accelerator !== stored[action]) {
         migrated[action] = accelerator
@@ -67,21 +70,6 @@ export class ShortcutsHelper {
       this.bindings.toggle_visibility = this.defaults.toggle_visibility
       migrated.toggle_visibility = this.defaults.toggle_visibility
       changed = true
-    }
-    if (process.platform === 'darwin') {
-      const legacyMac: Record<string, string[]> = {
-        screenshot: ['command+q', 'command+w', 'command+option+q'],
-        search: ['command+e', 'command+option+e'],
-        interview_start: ['command+i', 'command+shift+i'],
-      }
-      for (const [action, values] of Object.entries(legacyMac)) {
-        const current = this.bindings[action]?.toLowerCase()
-        if (current && values.includes(current)) {
-          this.bindings[action] = this.defaults[action as ShortcutAction]
-          migrated[action] = this.defaults[action as ShortcutAction]
-          changed = true
-        }
-      }
     }
     if (changed) this.configHelper.setShortcutBindings?.(migrated)
   }

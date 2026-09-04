@@ -7,7 +7,7 @@ import { api, useProfile } from '../lib/ipc';
 import ShareInterviewModal from '../components/ShareInterviewModal';
 import ShortcutSettings from '../components/ShortcutSettings';
 import FeatureGuide, { type FeatureGuideStep } from '../components/FeatureGuide';
-import { defaultShortcutBindings, interviewShortcutActions } from '../../shared/shortcuts';
+import { defaultShortcutBindings, formatAccelerator, interviewShortcutActions } from '../../shared/shortcuts';
 import type { ComponentHealth, VoiceHealthSnapshot } from '../../shared/reliability';
 import { createIdleVoiceSnapshot, isVoiceSessionActive } from '../../shared/reliability';
 
@@ -396,7 +396,7 @@ export default function Interview() {
             onClick={interviewRunning ? stopInterview : startInterview}
             disabled={interviewStarting}
             className={interviewRunning ? 'btn-outline text-xs border-rose-500/50 text-rose-400' : 'btn bg-rose-500 hover:bg-rose-600 text-white text-xs'}
-            title={`${interviewRunning ? '结束' : '开始'}面试（${shortcutBindings.interview_start || 'Alt+R'}）`}
+            title={`${interviewRunning ? '结束' : '开始'}面试（${formatAccelerator(shortcutBindings.interview_start || defaultShortcutBindings.interview_start)}）`}
           >
             {interviewStarting ? <Loader2 size={14} className="animate-spin" /> : interviewRunning ? <MicOff size={14} /> : <Mic size={14} />}
             {interviewRunning ? '结束面试' : '开始面试'}
@@ -673,7 +673,7 @@ export default function Interview() {
           { title: '选择听写模式', description: '演示模式同时识别麦克风和扬声器，适合自己演练；正式面试模式只识别扬声器，也就是只把面试官的声音作为问题输入。', target: '[data-guide-target="interview-mode"]' },
           { title: '编辑并保存面试上下文', description: '点击编辑，填写应聘岗位、面试公司、答案风格和岗位描述，然后点击保存。AI 会结合这些信息生成回答。', target: '[data-guide-target="interview-context"]' },
           { title: '粘贴并保存简历', description: '点击新建或编辑，直接粘贴简历文本并保存。自我介绍和项目问题会优先使用简历中的真实经历。', target: '[data-guide-target="interview-resume"]' },
-          { title: '开始或结束面试', description: `点击右上角按钮（或按 ${shortcutBindings.interview_start || 'Alt+R'}）一键开启面试悬浮框并启动听写；再次操作会同步停止听写并关闭面试悬浮框。`, target: '[data-guide-target="interview-start"]' },
+          { title: '开始或结束面试', description: `点击右上角按钮（或按 ${formatAccelerator(shortcutBindings.interview_start || defaultShortcutBindings.interview_start)}）一键开启面试悬浮框并启动听写；再次操作会同步停止听写并关闭面试悬浮框。`, target: '[data-guide-target="interview-start"]' },
           { title: '切换问题和查看答案', description: `使用 ${shortcutBindings.interview_prev_question || '上一题快捷键'} 和 ${shortcutBindings.interview_next_question || '下一题快捷键'} 在问题流中切换；右侧始终显示当前选中问题的参考答案。`, target: '[data-guide-target="interview-results"]' },
         ] as FeatureGuideStep[]}
         onClose={finishGuide}

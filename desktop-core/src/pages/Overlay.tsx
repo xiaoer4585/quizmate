@@ -1,6 +1,6 @@
 // 面试悬浮窗 - 完全鼠标穿透（与笔试悬浮窗一致）
 // 左侧：问题列表 | 右侧：AI 回答（结合简历）
-// 快捷键: Alt+R 开始/结束面试；窗口调节键作用于最近启动的悬浮窗
+// 快捷键: Windows Alt+R / macOS Option+R 开始或结束面试；窗口调节键作用于最近启动的悬浮窗
 import { useState, useEffect, useRef } from 'react';
 import { AlertCircle, CheckCircle2, Clock3, Mic, Sparkles } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';

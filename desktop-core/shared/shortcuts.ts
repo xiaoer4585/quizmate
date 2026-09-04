@@ -37,8 +37,8 @@ const windowsShortcutBindings: Record<ShortcutAction, string> = {
 }
 
 const macShortcutBindings: Record<ShortcutAction, string> = {
-  screenshot: 'Option+Q', search: 'Option+E', voice_search: 'Option+T', toggle_visibility: 'Option+B', copy_content: 'Option+C', replay: 'Option+R',
-  interview_start: 'Option+I',
+  screenshot: 'Option+Q', search: 'Option+E', voice_search: 'Option+T', toggle_visibility: 'Option+B', copy_content: 'Command+Shift+C', replay: 'Command+R',
+  interview_start: 'Option+R',
   interview_prev_question: 'Option+Up', interview_next_question: 'Option+Down',
   quit: '', reset: 'Command+Shift+T', move_up: 'Command+Up', move_down: 'Command+Down', move_left: 'Command+Left', move_right: 'Command+Right',
   resize_height_larger: 'Command+Shift+Up', resize_height_smaller: 'Command+Shift+Down', resize_width_smaller: 'Command+Shift+Left', resize_width_larger: 'Command+Shift+Right',
@@ -50,6 +50,21 @@ const macShortcutBindings: Record<ShortcutAction, string> = {
 /** Keep Option in persisted/UI values while Electron receives its Alt accelerator spelling. */
 export function normalizeMacAccelerator(accelerator: string): string {
   return accelerator.split('+').map(part => part.trim().toLowerCase() === 'alt' ? 'Option' : part.trim()).join('+')
+}
+
+const legacyMacDefaultBindings: Partial<Record<ShortcutAction, string[]>> = {
+  screenshot: ['command+q', 'command+w', 'command+option+q'],
+  search: ['command+e', 'command+option+e'],
+  copy_content: ['option+c'],
+  replay: ['option+r'],
+  interview_start: ['option+i', 'command+i', 'command+shift+i'],
+}
+
+/** Migrate known historical Mac defaults only; genuine custom bindings are preserved. */
+export function migrateMacLegacyShortcut(action: ShortcutAction, accelerator: string): string {
+  const normalized = normalizeMacAccelerator(accelerator)
+  const knownDefaults = legacyMacDefaultBindings[action] || []
+  return knownDefaults.includes(normalized.toLowerCase()) ? macShortcutBindings[action] : normalized
 }
 
 export function toElectronAccelerator(accelerator: string): string {

@@ -1,5 +1,5 @@
 import { Camera, Images, Search } from 'lucide-react'
-import { formatAccelerator } from '../../../shared/shortcuts'
+import { defaultShortcutBindings, formatAccelerator } from '../../../shared/shortcuts'
 
 interface QueueViewProps {
   screenshots: Array<{ path: string; base64?: string; isExtra?: boolean }>
@@ -39,10 +39,10 @@ export default function QueueView({
             </div>
             <div className="text-[11px] font-medium">等待题目截图</div>
             <div className="flex items-center justify-center gap-1.5 text-[9px] mt-2 opacity-50">
-              <span>{formatAccelerator(screenshotShortcut || 'Alt+Q')}</span>
+              <span>{formatAccelerator(screenshotShortcut || defaultShortcutBindings.screenshot)}</span>
               <span>截图</span>
               <span>·</span>
-              <span>{formatAccelerator(searchShortcut || 'Alt+E')}</span>
+              <span>{formatAccelerator(searchShortcut || defaultShortcutBindings.search)}</span>
               <span>搜题</span>
             </div>
           </div>
