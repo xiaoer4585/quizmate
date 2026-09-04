@@ -15,6 +15,7 @@ import { createCreditOrder, queryCreditOrder } from './PaymentService';
 import type { ProcessingMode } from '../shared/shortcuts';
 import { v4 as uuid } from 'uuid';
 import { toBusinessVersion } from './version';
+import { postAction } from './apiClient';
 
 export interface AppContext {
   configHelper: ConfigHelper;
@@ -266,6 +267,15 @@ export function registerIpcHandlers(
   ipcMain.handle('system:openAdmin', () => shell.openExternal(ctx.configHelper.getAppConfig().adminWebUrl || 'https://www.quizmate.vip/admin-web/index.html'));
   ipcMain.handle('system:version', () => toBusinessVersion(app.getVersion()));
   ipcMain.handle('system:getAIConfigs', () => ctx.configHelper.getAllAIModelConfigs());
+  ipcMain.handle('feedback:submit', async (_e, payload: { description: string; attachmentName?: string; attachmentType?: string; attachmentData?: string }) => {
+    const token = ctx.configHelper.getAuthToken();
+    if (!token) throw new Error('请先登录后提交反馈。');
+    return postAction(ctx.configHelper.getAppConfig().apiBaseUrl, 'submitFeedback', payload, { token, timeoutMs: 30_000 });
+  });
+  ipcMain.handle('announcements:get', async () => {
+    try { return await postAction(ctx.configHelper.getAppConfig().apiBaseUrl, 'getClientAnnouncements', {}, { token: ctx.configHelper.getAuthToken() || undefined, timeoutMs: 10_000 }); }
+    catch { return { exam: '', interview: '' }; }
+  });
 
   // ===== 邀请代理 / 面经图片保存分享 =====
   ipcMain.handle('invite:generate-code', async () => {

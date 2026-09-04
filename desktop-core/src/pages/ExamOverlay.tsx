@@ -113,6 +113,11 @@ export default function OverlayPage() {
       if (status === 'idle' || status === 'error') {
         setView('queue')
       }
+      // 每次截图代表新一轮开始；捕获完成后立即结束“正在截取”状态。
+      setStatus('idle')
+      setProgress(0)
+      setProgressMessage('截图已就绪')
+      setErrorMessage('')
     }))
 
     unsubs.push(api?.on('screenshot-deleted', () => {

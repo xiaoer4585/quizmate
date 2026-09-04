@@ -159,6 +159,12 @@ const api = {
     savePoster: (dataUrl: string) => invoke('invite:save-poster', dataUrl),
     sharePoster: (dataUrl: string) => invoke('invite:share-poster', dataUrl),
   },
+  feedback: {
+    submit: (payload: { description: string; attachmentName?: string; attachmentType?: string; attachmentData?: string }) => invoke('feedback:submit', payload),
+  },
+  announcements: {
+    get: () => invoke('announcements:get'),
+  },
   // 客户端版本更新检测
   update: {
     check: () => invoke('update:check'),

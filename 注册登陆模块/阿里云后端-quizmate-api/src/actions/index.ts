@@ -13,7 +13,9 @@ import { createDomainInquiryActions } from "./domain-inquiries.js";
 import { createCuotiActions } from "./cuoti.js";
 import { createRedemptionCodeActions } from "./redemption-codes.js";
 import { createResumeActions } from "./resume.js";
+import { createSiteEngineActions } from "./site-engine.js";
 import { createActivityActions } from "./activities.js";
+import { createFeedbackActions } from "./feedback.js";
 
 export function createActionRegistry(deps: ActionDependencies): ActionRegistry {
   return new Map([
@@ -31,6 +33,8 @@ export function createActionRegistry(deps: ActionDependencies): ActionRegistry {
     ...createCuotiActions(deps),
     ...createRedemptionCodeActions(deps),
     ...createResumeActions(deps),
-    ...createActivityActions(deps)
+    ...createSiteEngineActions(deps),
+    ...createActivityActions(deps),
+    ...createFeedbackActions(deps)
   ]);
 }

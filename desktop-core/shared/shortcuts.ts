@@ -14,7 +14,7 @@ export interface ShortcutBinding { action: ShortcutAction; accelerator: string; 
 
 const windowsShortcutBindings: Record<ShortcutAction, string> = {
   screenshot: 'Alt+Q', search: 'Alt+E', toggle_visibility: 'Ctrl+B', copy_content: 'Ctrl+Shift+C', replay: 'Ctrl+R',
-  interview_start: 'Alt+Q',
+  interview_start: 'Alt+R',
   interview_prev_question: 'Alt+Up', interview_next_question: 'Alt+Down',
   quit: 'Ctrl+Shift+Q', reset: 'Ctrl+Shift+T', move_up: 'Ctrl+Up', move_down: 'Ctrl+Down', move_left: 'Ctrl+Left', move_right: 'Ctrl+Right',
   resize_height_larger: 'Ctrl+Shift+Up', resize_height_smaller: 'Ctrl+Shift+Down', resize_width_smaller: 'Ctrl+Shift+Left', resize_width_larger: 'Ctrl+Shift+Right',

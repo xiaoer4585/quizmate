@@ -89,6 +89,12 @@ export class ShortcutsHelper {
       migrated.search = this.defaults.search
       changed = true
     }
+    // Windows 旧版曾将面试听写绑定为 Alt+Q，与截图冲突；升级时自动迁移到 Alt+R。
+    if (process.platform !== 'darwin' && stored.interview_start?.toLowerCase() === 'alt+q') {
+      this.bindings.interview_start = this.defaults.interview_start
+      migrated.interview_start = this.defaults.interview_start
+      changed = true
+    }
     if (process.platform === 'darwin') {
       const legacyMac: Record<string, string[]> = {
         screenshot: ['command+q', 'command+w', 'command+option+q'],
@@ -205,7 +211,7 @@ export class ShortcutsHelper {
     if (action === 'restore_main_window') return true
     if (mode === 'voice') return voiceModeActions.has(action)
     if (mode === 'interview') {
-      return interviewShortcutActions.includes(action) || ['reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)
+      return interviewShortcutActions.includes(action) || ['screenshot', 'search', 'reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)
     }
     return !interviewShortcutActions.includes(action)
   }

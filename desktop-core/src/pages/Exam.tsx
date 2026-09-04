@@ -45,6 +45,7 @@ export default function Exam() {
   const [ttsTesting, setTtsTesting] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [diagnosticError, setDiagnosticError] = useState<ExamDiagnosticError | null>(null);
+  const [announcement, setAnnouncement] = useState('');
 
   // 加载初始配置数据
   const loadData = useCallback(async () => {
@@ -75,6 +76,7 @@ export default function Exam() {
 
   useEffect(() => {
     loadData();
+    (api as any).announcements?.get?.().then((v: any) => setAnnouncement(String(v?.exam || ''))).catch(() => {});
     // 监听后端事件
     const unsubs: Array<(() => void) | undefined> = [];
     // 积分变动
@@ -191,6 +193,7 @@ export default function Exam() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
+      {announcement && <div className="card border-cyan-500/30 bg-cyan-500/5 text-sm text-cyan-200">📢 {announcement}</div>}
       {/* 头部：用户信息 + 积分 + 操作按钮 */}
       <div className="card">
         <div className="flex items-center justify-between gap-3 flex-wrap">

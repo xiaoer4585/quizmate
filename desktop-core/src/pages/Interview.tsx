@@ -118,6 +118,7 @@ export default function Interview() {
   const [switchingMode, setSwitchingMode] = useState(false);
   const [contextStatus, setContextStatus] = useState('');
   const [guideOpen, setGuideOpen] = useState(false);
+  const [announcement, setAnnouncement] = useState('');
   const jobDescriptionRef = useRef<HTMLDivElement | null>(null);
 
   const guideAccount = profile?.account?.email || profile?.email || 'current';
@@ -161,6 +162,7 @@ export default function Interview() {
   };
 
   useEffect(() => {
+    (api as any).announcements?.get?.().then((v: any) => setAnnouncement(String(v?.interview || ''))).catch(() => {});
     api.interview.activateShortcuts().catch(() => {});
     refreshResumes().catch(() => {});
     refreshHistory().catch(() => {});
@@ -440,6 +442,7 @@ export default function Interview() {
 
   return (
     <div className="max-w-5xl mx-auto space-y-4">
+      {announcement && <div className="card border-cyan-500/30 bg-cyan-500/5 text-sm text-cyan-200">📢 {announcement}</div>}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">

@@ -5,7 +5,7 @@
 //   - overlay/voice 双模式切换
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
 //   - 托盘忙碌图标 + voice 模式进度通知
-// Windows 客户端只保留笔试助手与面试助手；求职流程由免费浏览器插件提供。
+// Windows 客户端保留笔试助手与面试助手；网申流程由共享账号体系下的浏览器插件提供。
 import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, Menu, session, Notification } from 'electron';
 import path from 'path';
 import fs from 'fs';
@@ -611,14 +611,22 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
   const interviewActive = state.interviewOverlayActive;
   switch (action) {
     case 'screenshot':
-      // 面试没有截图功能
-      if (interviewActive) return;
-      await handleScreenshot(false);
+      // 面试过程中允许临时调用截图搜题：复用笔试管线，结果显示在笔试悬浮框；不影响听写会话。
+      if (interviewActive) {
+        if (!state.overlayWindow || state.overlayWindow.isDestroyed()) await launchExamClient();
+        await handleScreenshot(false);
+        await handleSearchAction('overlay');
+      } else {
+        await handleScreenshot(false);
+      }
       break;
     case 'search':
-      // 面试没有搜题功能
-      if (interviewActive) return;
-      await handleSearchAction(configHelper.getProcessingMode());
+      if (interviewActive) {
+        if (!state.overlayWindow || state.overlayWindow.isDestroyed()) await launchExamClient();
+        await handleSearchAction('overlay');
+      } else {
+        await handleSearchAction(configHelper.getProcessingMode());
+      }
       break;
     case 'replay':
       if (interviewActive) {

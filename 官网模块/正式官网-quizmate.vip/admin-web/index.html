@@ -350,7 +350,9 @@
           <button type="button" data-view-tab="knowledge"><i data-lucide="files"></i>用户知识库</button>
           <button type="button" data-view-tab="aiConfig"><i data-lucide="bot"></i>AI 配置</button>
           <button type="button" data-view-tab="resumeFillReports"><i data-lucide="list-checks"></i>网申未填写</button>
+          <button type="button" data-view-tab="resumeFieldObservations"><i data-lucide="scan-search"></i>网申字段实验室</button>
           <button type="button" data-view-tab="aiFailures"><i data-lucide="triangle-alert"></i>AI 调用失败</button>
+          <button type="button" data-view-tab="feedback"><i data-lucide="message-square"></i>用户反馈</button>
           <button type="button" data-view-tab="cuotiConfig"><i data-lucide="book-open"></i>错题集配置</button>
           <button type="button" data-view-tab="operations"><i data-lucide="sliders-horizontal"></i>运营配置</button>
           <button type="button" data-view-tab="referral"><i data-lucide="users-round"></i>邀请和代理</button>
@@ -910,6 +912,23 @@
           <div class="pagination" data-pagination="resumeFillReports"></div>
         </section>
 
+        <section class="view" data-view="resumeFieldObservations">
+          <div class="panel">
+            <div class="toolbar">
+              <div>
+                <h2>网申字段实验室</h2>
+                <p>按页面签名沉淀控件类型、稳定定位器和成功/失败次数，用于扩展通用字段与站点适配规则。这里不保存个人简历值。</p>
+              </div>
+              <button type="button" data-refresh="resumeFieldObservations">刷新</button>
+            </div>
+            <div class="form-grid" style="margin-top:14px">
+              <div class="field"><label for="resumeObservationHostname">网站域名</label><input id="resumeObservationHostname" placeholder="例如 jobs.feishu.cn，可留空" /></div>
+              <div class="actions" style="align-self:end"><button id="searchResumeObservationsBtn" type="button">查询</button><button id="clearResumeObservationsBtn" class="secondary" type="button">清空</button></div>
+            </div>
+          </div>
+          <div class="table-wrap"><table><thead data-head="resumeFieldObservations"></thead><tbody data-body="resumeFieldObservations"></tbody></table></div>
+        </section>
+
         <section class="view" data-view="aiConfig">
           <div class="panel">
             <div class="toolbar"><div><h2>AI 配置</h2><p>API 参数和提示词分区维护；API Key 留空表示保留当前线上值。</p></div><button id="reloadAiBtn" class="secondary" type="button">读取当前配置</button></div>
@@ -1017,6 +1036,9 @@
               <div class="field"><label for="tutorialVideoUrl">视频 URL</label><input id="tutorialVideoUrl" /></div>
             </div>
             <div class="actions" style="margin-top:12px"><button id="saveTutorialBtn" type="button">保存教学配置</button></div>
+            <h3 class="section-heading">客户端公告</h3>
+            <div class="form-grid two"><div class="field"><label for="examAnnouncement">笔试助手公告</label><textarea id="examAnnouncement" maxlength="1000" placeholder="留空则不显示"></textarea></div><div class="field"><label for="interviewAnnouncement">面试助手公告</label><textarea id="interviewAnnouncement" maxlength="1000" placeholder="留空则不显示"></textarea></div></div>
+            <div class="actions" style="margin-top:12px"><button id="saveAnnouncementsBtn" type="button">保存客户端公告</button></div>
           </div>
         </section>
 
@@ -1111,6 +1133,10 @@
             <div class="iframe-toolbar"><div><strong>客服助手配置</strong><p style="margin:4px 0 0">原客服后台已嵌入；首次使用需登录客服后台。</p></div><button id="openCustomerServiceBtn" class="secondary" type="button">新窗口打开</button></div>
             <iframe class="customer-frame" src="https://kefu.quizmate.vip/" title="客服助手配置后台"></iframe>
           </div>
+        </section>
+
+        <section class="view" data-view="feedback">
+          <div class="panel"><div class="toolbar"><div><h2>用户反馈</h2><p>查看客户端提交的问题描述与附件信息。</p></div></div><div class="table-wrap"><table><thead data-head="feedback"></thead><tbody data-body="feedback"></tbody></table></div><div class="pagination" data-pagination="feedback"></div></div>
         </section>
 
         <section class="view" data-view="adminSettings">
@@ -1238,7 +1264,9 @@
         withdrawals: "adminListWithdrawals",
         riskFlags: "adminListRiskFlags",
         aiFailures: "adminListModelCallFailures",
-        resumeFillReports: "adminListResumeFillReports"
+        resumeFillReports: "adminListResumeFillReports",
+        resumeFieldObservations: "adminResumeFieldObservations",
+        feedback: "adminListFeedback"
       };
       const state = {
         activeView: "dashboard",
@@ -1275,6 +1303,7 @@
         voiceModelTemperature: $("#voiceModelTemperature"), voiceModelSystemPrompt: $("#voiceModelSystemPrompt"), voiceModelKeyStatus: $("#voiceModelKeyStatus"), voiceModelApiFormat: $("#voiceModelApiFormat"),
         asrEnabled: $("#asrEnabled"), asrWsUrl: $("#asrWsUrl"), asrResourceId: $("#asrResourceId"), asrModelName: $("#asrModelName"), asrApiKey: $("#asrApiKey"), asrKeyStatus: $("#asrKeyStatus"),
         interviewPrompt: $("#interviewPrompt"),
+        examAnnouncement: $("#examAnnouncement"), interviewAnnouncement: $("#interviewAnnouncement"),
         answerFormatEnabled: $("#answerFormatEnabled"), answerFormatPrompt: $("#answerFormatPrompt"), androidFallbackMode: $("#androidFallbackMode"),
         knowledgeLicenseCode: $("#knowledgeLicenseCode"), knowledgeDeviceId: $("#knowledgeDeviceId"), knowledgeFileName: $("#knowledgeFileName"),
         orderStatus: $("#orderStatus"), orderType: $("#orderType"), orderProvider: $("#orderProvider"),
@@ -1315,7 +1344,7 @@
         aiFailureStartDate: $("#aiFailureStartDate"), aiFailureEndDate: $("#aiFailureEndDate"),
         resumeReportHostname: $("#resumeReportHostname"), resumeReportLanguage: $("#resumeReportLanguage"),
         resumeReportStartDate: $("#resumeReportStartDate"), resumeReportEndDate: $("#resumeReportEndDate"),
-        resumeFieldSummary: $("#resumeFieldSummary")
+        resumeFieldSummary: $("#resumeFieldSummary"), resumeObservationHostname: $("#resumeObservationHostname")
       };
 
       const columns = {
@@ -1334,7 +1363,9 @@
         withdrawals: [["email", "邮箱"], ["amount", "金额"], ["alipayAccount", "支付宝账号"], ["alipayName", "支付宝实名"], ["status", "状态"], ["payOrderNo", "打款订单号"], ["paidAt", "打款时间"], ["createdAt", "申请时间"], ["__actions", "操作"]],
         riskFlags: [["email", "邮箱"], ["type", "类型"], ["detail", "详情"], ["createdAt", "标记时间"]],
         aiFailures: [["createdAt", "时间"], ["modelType", "模型类型"], ["modelName", "模型"], ["errorCode", "错误码"], ["errorMessage", "错误信息"], ["httpStatus", "HTTP"], ["requestMode", "模式"], ["accountEmail", "账户"], ["requestId", "请求 ID"], ["clientIp", "IP"]],
-        resumeFillReports: [["createdAt", "时间"], ["hostname", "网站"], ["pageTitle", "页面"], ["language", "语言"], ["detected", "识别字段"], ["matched", "匹配字段"], ["filled", "已填写"], ["unresolved", "未完成"], ["frames", "Frame"]]
+        resumeFillReports: [["createdAt", "时间"], ["hostname", "网站"], ["pageTitle", "页面"], ["language", "语言"], ["detected", "识别字段"], ["matched", "匹配字段"], ["filled", "已填写"], ["unresolved", "未完成"], ["frames", "Frame"]],
+        resumeFieldObservations: [["hostname", "网站"], ["label", "字段"], ["controlType", "控件"], ["sourcePath", "已沉淀路径"], ["successCount", "成功"], ["failureCount", "失败"], ["lastReason", "最近原因"], ["updatedAt", "更新时间"]],
+        feedback: [["createdAt", "时间"], ["email", "邮箱"], ["description", "问题描述"], ["attachmentName", "附件"], ["status", "状态"]]
       };
 
       function normalizeStudyApiEndpoint(endpoint) {
@@ -1460,6 +1491,7 @@
       $("#reloadOperationsBtn").addEventListener("click", () => run(loadOperationsConfig));
       $("#savePurchaseBtn").addEventListener("click", () => run(savePurchaseConfig));
       $("#saveTutorialBtn").addEventListener("click", () => run(saveTutorialConfig));
+      $("#saveAnnouncementsBtn").addEventListener("click", () => run(saveAnnouncements));
       $("#reloadPaymentBtn").addEventListener("click", () => run(loadPaymentConfig));
       $("#savePaymentBtn").addEventListener("click", () => run(savePaymentConfig));
       els.resetAdminCredentialsBtn.addEventListener("click", () => run(resetAdminCredentials));
@@ -1668,6 +1700,8 @@
         els.resumeReportStartDate.value = ""; els.resumeReportEndDate.value = "";
         state.tables.resumeFillReports.page = 1; run(() => loadView("resumeFillReports"));
       });
+      $("#searchResumeObservationsBtn").addEventListener("click", () => { state.tables.resumeFieldObservations.page = 1; run(() => loadTable("resumeFieldObservations")); });
+      $("#clearResumeObservationsBtn").addEventListener("click", () => { els.resumeObservationHostname.value = ""; run(() => loadTable("resumeFieldObservations")); });
       // 提成记录复选框
       document.addEventListener("change", handleCommissionCheckboxChange);
 
@@ -1738,6 +1772,7 @@
         if (view === "shop") return Promise.all([loadShopProductsAdmin(), loadTable("shopOrders")]);
         if (view === "shopProductsAdmin") return loadShopProductsAdmin();
         if (view === "resumeFillReports") return Promise.all([loadTable("resumeFillReports"), loadResumeFieldSummary()]);
+        if (view === "resumeFieldObservations") return loadTable("resumeFieldObservations");
         if (tableActions[view]) return loadTable(view);
         if (view === "aiConfig") return loadAiConfig();
         if (view === "cuotiConfig") return loadCuotiConfig();
@@ -2236,6 +2271,10 @@
         };
       }
 
+      function resumeObservationFilters() {
+        return { hostname: els.resumeObservationHostname.value.trim() };
+      }
+
       async function loadResumeFieldSummary() {
         const data = await api("adminResumeFieldSummary", resumeFillReportFilters());
         const items = data.items || [];
@@ -2246,7 +2285,7 @@
 
       async function loadTable(type) {
         const table = state.tables[type];
-        const extra = type === "resumeFillReports" ? resumeFillReportFilters() : type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "creditLogs" ? creditLogFilters() : type === "accounts" ? accountFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : type === "redemptionCodes" ? redemptionCodeFilters() : type === "shopOrders" ? shopOrderFilters() : type === "aiFailures" ? aiFailureFilters() : {};
+        const extra = type === "resumeFillReports" ? resumeFillReportFilters() : type === "resumeFieldObservations" ? resumeObservationFilters() : type === "knowledge" ? knowledgeFilters() : type === "orders" ? orderFilters() : type === "creditLogs" ? creditLogFilters() : type === "accounts" ? accountFilters() : type === "referrals" ? referralFilters() : type === "commissions" ? commissionFilters() : type === "withdrawals" ? withdrawalFilters() : type === "domainInquiries" ? domainInquiryFilters() : type === "redemptionCodes" ? redemptionCodeFilters() : type === "shopOrders" ? shopOrderFilters() : type === "aiFailures" ? aiFailureFilters() : {};
         const payload = { page: table.page, pageSize: table.pageSize, ...extra };
         const data = await api(tableActions[type], payload);
         table.items = data.items || [];
@@ -2578,7 +2617,7 @@
       }
 
       async function loadOperationsConfig() {
-        const [purchase, tutorial] = await Promise.all([api("getPurchaseConfig", {}), api("adminGetTutorialConfig", {})]);
+        const [purchase, tutorial, announcements] = await Promise.all([api("getPurchaseConfig", {}), api("adminGetTutorialConfig", {}), api("adminGetAnnouncements", {})]);
         els.purchaseTitle.value = purchase.title || "";
         els.purchaseDescription.value = purchase.description || "";
         els.purchaseImageUrl.value = purchase.imageUrl || "";
@@ -2587,6 +2626,8 @@
         els.contactInfo.value = purchase.contactInfo || "";
         els.tutorialTitle.value = tutorial.title || "";
         els.tutorialVideoUrl.value = tutorial.videoUrl || "";
+        els.examAnnouncement.value = announcements.exam || "";
+        els.interviewAnnouncement.value = announcements.interview || "";
         setStatus("运营配置已读取。", "success");
       }
 
@@ -2824,6 +2865,10 @@
         const { response, data } = result;
         if (!response.ok || !data.ok) throw new Error(data.error || "请求失败");
         return data.data || {};
+      }
+      async function saveAnnouncements() {
+        await api("adminSetAnnouncements", { exam: els.examAnnouncement.value.trim(), interview: els.interviewAnnouncement.value.trim() });
+        setStatus("客户端公告已保存。", "success");
       }
       // input 测试页复用当前后台会话、接口地址和管理员权限，不创建第二套 API 客户端。
       window.InputAdmin = { api, setStatus: (text, type = "") => setStatus(text, type) };

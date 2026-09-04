@@ -10,6 +10,7 @@ import { api, useProfile, useUpdateStatus, useMainWindowVisible } from '../lib/i
 import { isMacPlatform } from '../../shared/shortcuts';
 import RechargeModal from './RechargeModal';
 import ReleaseNotice from './ReleaseNotice';
+import FeedbackButton from './FeedbackButton';
 
 interface NavItem { to: string; label: string; icon: ReactNode; badge?: string; }
 
@@ -17,7 +18,7 @@ const NAV: NavItem[] = [
   { to: '/', label: '工作台', icon: <LayoutDashboard size={18} /> },
   { to: '/exam', label: '笔试助手', icon: <PenLine size={18} />, badge: '积分' },
   { to: '/interview', label: '面试助手', icon: <Mic size={18} />, badge: '积分' },
-  { to: '/extension', label: '浏览器插件', icon: <Chrome size={18} />, badge: '免费' },
+  { to: '/extension', label: '网申插件', icon: <Chrome size={18} />, badge: 'AI' },
 ];
 
 export default function MainLayout({ children }: { children: ReactNode }) {
@@ -238,6 +239,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
         {/* 内容区 */}
         <main className="flex-1 overflow-auto p-5">{children}</main>
       </div>
+      <FeedbackButton />
       {/* 充值弹窗 */}
       <RechargeModal open={rechargeOpen} onClose={() => setRechargeOpen(false)} />
 
