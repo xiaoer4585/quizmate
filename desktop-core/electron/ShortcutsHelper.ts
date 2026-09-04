@@ -6,6 +6,7 @@ import {
   normalizeMacAccelerator,
   ShortcutConflict,
   ShortcutAction,
+  shouldRegisterShortcutForProcessingMode,
   toElectronAccelerator,
   validateShortcutConflict,
 } from '../shared/shortcuts'
@@ -138,7 +139,8 @@ export class ShortcutsHelper {
   }
 
   public registerGlobalShortcuts(): void {
-    this.registerGlobalShortcutsForMode('overlay')
+    // Respect the persisted exam presentation mode on application startup.
+    this.registerGlobalShortcutsForMode(this.configHelper.getProcessingMode())
   }
 
   private registerAction(action: ShortcutAction, accelerator: string, mode: string): void {
@@ -168,11 +170,14 @@ export class ShortcutsHelper {
     this.registrationErrorHandler?.(data)
   }
 
-  private shouldRegister(action: ShortcutAction, _mode: 'overlay' | 'voice' | 'interview'): boolean {
+  private shouldRegister(action: ShortcutAction, mode: 'overlay' | 'voice' | 'interview'): boolean {
     if (action === 'quit') return false
     // 两个助手可同时运行，因此所有模式都注册同一组快捷键。
     // 具体动作由主进程按“笔试专属 / 面试专属 / 最近激活窗口”独立路由。
-    return true
+    // 唯一例外是两种笔试搜题动作：按当前笔试呈现模式只注册其中一个，
+    // 面试快捷键接管期间仍读取笔试模式，避免重新引入双注册。
+    const processingMode = mode === 'interview' ? this.configHelper.getProcessingMode() : mode
+    return shouldRegisterShortcutForProcessingMode(action, processingMode)
   }
 
   public registerGlobalShortcutsForMode(mode: 'overlay' | 'voice' | 'interview'): void {

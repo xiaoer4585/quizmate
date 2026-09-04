@@ -1,5 +1,5 @@
 export type ShortcutAction =
-  | 'screenshot' | 'search' | 'toggle_visibility' | 'copy_content' | 'replay'
+  | 'screenshot' | 'search' | 'voice_search' | 'toggle_visibility' | 'copy_content' | 'replay'
   | 'interview_start'
   | 'interview_prev_question' | 'interview_next_question'
   | 'quit' | 'reset' | 'move_up' | 'move_down' | 'move_left' | 'move_right'
@@ -26,7 +26,7 @@ export interface ShortcutConflict {
 }
 
 const windowsShortcutBindings: Record<ShortcutAction, string> = {
-  screenshot: 'Alt+Q', search: 'Alt+E', toggle_visibility: 'Alt+B', copy_content: 'Ctrl+Shift+C', replay: 'Ctrl+R',
+  screenshot: 'Alt+Q', search: 'Alt+E', voice_search: 'Alt+T', toggle_visibility: 'Alt+B', copy_content: 'Ctrl+Shift+C', replay: 'Ctrl+R',
   interview_start: 'Alt+R',
   interview_prev_question: 'Alt+Up', interview_next_question: 'Alt+Down',
   quit: 'Ctrl+Shift+Q', reset: 'Ctrl+Shift+T', move_up: 'Ctrl+Up', move_down: 'Ctrl+Down', move_left: 'Ctrl+Left', move_right: 'Ctrl+Right',
@@ -37,7 +37,7 @@ const windowsShortcutBindings: Record<ShortcutAction, string> = {
 }
 
 const macShortcutBindings: Record<ShortcutAction, string> = {
-  screenshot: 'Option+Q', search: 'Option+E', toggle_visibility: 'Option+B', copy_content: 'Option+C', replay: 'Option+R',
+  screenshot: 'Option+Q', search: 'Option+E', voice_search: 'Option+T', toggle_visibility: 'Option+B', copy_content: 'Option+C', replay: 'Option+R',
   interview_start: 'Option+I',
   interview_prev_question: 'Option+Up', interview_next_question: 'Option+Down',
   quit: '', reset: 'Command+Shift+T', move_up: 'Command+Up', move_down: 'Command+Down', move_left: 'Command+Left', move_right: 'Command+Right',
@@ -92,7 +92,7 @@ export function getDefaultShortcutBindings(platform?: string): Record<ShortcutAc
 export const defaultShortcutBindings: Record<ShortcutAction, string> = getDefaultShortcutBindings()
 
 const mainMetadata: Array<[ShortcutAction, string]> = [
-  ['screenshot', '全屏截图'], ['search', '搜题'], ['toggle_visibility', '显示/隐藏笔试悬浮框'], ['copy_content', '复制答案'], ['replay', '重听答案'],
+  ['screenshot', '全屏截图'], ['search', '悬浮框搜题'], ['voice_search', '语音播报搜题'], ['toggle_visibility', '显示/隐藏笔试悬浮框'], ['copy_content', '复制答案'], ['replay', '重听答案'],
   ['interview_start', '开始/结束面试'],
   ['interview_prev_question', '上一个问题'], ['interview_next_question', '下一个问题'],
 ]
@@ -109,11 +109,18 @@ export function getShortcutLabel(action: ShortcutAction) { return shortcutMetada
 export function isConfigurable(action: ShortcutAction) { return shortcutMetadata.find(s => s.action === action)?.configurable || false }
 export type ProcessingMode = 'overlay' | 'voice' | 'universal'
 export const examOverlayShortcutActions: ShortcutAction[] = ['screenshot', 'search', 'toggle_visibility', 'copy_content']
-export const examVoiceShortcutActions: ShortcutAction[] = ['search', 'replay']
+export const examVoiceShortcutActions: ShortcutAction[] = ['voice_search', 'replay']
 export const interviewShortcutActions: ShortcutAction[] = ['interview_start', 'interview_prev_question', 'interview_next_question']
-export const modeByAction: Partial<Record<ShortcutAction, ProcessingMode>> = { search: 'overlay' }
+export const modeByAction: Partial<Record<ShortcutAction, ProcessingMode>> = { search: 'overlay', voice_search: 'voice' }
 
-const examShortcutActionSet = new Set<ShortcutAction>(['screenshot', 'search', 'toggle_visibility', 'copy_content', 'replay'])
+/** Only the search action for the active exam presentation mode may own a global shortcut. */
+export function shouldRegisterShortcutForProcessingMode(action: ShortcutAction, mode: 'overlay' | 'voice'): boolean {
+  if (action === 'search') return mode === 'overlay'
+  if (action === 'voice_search') return mode === 'voice'
+  return true
+}
+
+const examShortcutActionSet = new Set<ShortcutAction>(['screenshot', 'search', 'voice_search', 'toggle_visibility', 'copy_content', 'replay'])
 const interviewShortcutActionSet = new Set<ShortcutAction>(interviewShortcutActions)
 
 const windowsOsShortcutDetails: Record<string, string> = {

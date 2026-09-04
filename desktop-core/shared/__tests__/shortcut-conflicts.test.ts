@@ -28,6 +28,7 @@ describe('shortcut conflict validation', () => {
 
   it.each([
     ['Alt+Q', 'search', 'exam', '和笔试常用快捷键冲突', 'screenshot'],
+    ['Alt+E', 'voice_search', 'exam', '和笔试常用快捷键冲突', 'search'],
     ['Alt+R', 'search', 'interview', '和面试常用快捷键冲突', 'interview_start'],
   ] as Array<[string, ShortcutAction, string, string, ShortcutAction]>)('classifies QuizMate action conflict for %s', (accelerator, action, type, reason, conflictingAction) => {
     expect(validateShortcutConflict('win32', accelerator, action, getDefaultShortcutBindings('win32'))).toMatchObject({
@@ -54,7 +55,7 @@ describe('shortcut conflict validation', () => {
   it.each(['win32', 'darwin'])('keeps all default configurable shortcuts valid on %s', (platform) => {
     const bindings = getDefaultShortcutBindings(platform)
     const configurable: ShortcutAction[] = [
-      'screenshot', 'search', 'toggle_visibility', 'copy_content', 'replay',
+      'screenshot', 'search', 'voice_search', 'toggle_visibility', 'copy_content', 'replay',
       'interview_start', 'interview_prev_question', 'interview_next_question',
     ]
     for (const action of configurable) {

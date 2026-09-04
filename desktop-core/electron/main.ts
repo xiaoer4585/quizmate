@@ -1,6 +1,6 @@
 // QuizMate考试助手 - 主进程入口
 // 笔试助手完全沿用原考试插件（QuizMate-Windows）的代码逻辑：
-//   - 快捷键系统（Alt+Q 截图 / Alt+E 搜题 / Alt+B 笔试悬浮框 / Alt+R 面试会话）
+//   - 快捷键系统（Alt+Q 截图 / Alt+E 悬浮框搜题 / Alt+T 语音搜题 / Alt+B 笔试悬浮框 / Alt+R 面试会话）
 //   - 截图→压缩→OSS/直传→AI 分析→悬浮窗展示/TTS 播报 完整流程
 //   - overlay/voice 双模式切换
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
@@ -664,11 +664,17 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
     }
     case 'search': {
       const mode = configHelper.getProcessingMode();
-      if (shouldEnsureExamOverlay(mode, 'search')) {
-        if (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible) await launchExamClient();
-        else activateOverlay('exam');
-      }
-      await handleSearchAction(mode);
+      // 悬浮框搜题与语音搜题是两个独立动作；模式切换竞态下也不允许串用。
+      if (mode !== 'overlay') break;
+      if (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible) await launchExamClient();
+      else activateOverlay('exam');
+      await handleSearchAction('overlay');
+      break;
+    }
+    case 'voice_search': {
+      const mode = configHelper.getProcessingMode();
+      if (mode !== 'voice') break;
+      await handleSearchAction('voice');
       break;
     }
     case 'replay':

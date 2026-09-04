@@ -270,11 +270,11 @@ export default function Exam() {
               )}
             </div>
             <p className="text-xs text-slate-400">
-              只需按搜题快捷键，即可自动截图、搜题并语音播报答案
+              按语音播报搜题快捷键（默认 Alt+T），即可自动截图、搜题并播报答案
             </p>
             {processingMode === 'voice' && (
               <p className="text-xs mt-1 text-exam font-medium">
-                只需按搜题快捷键即可完成截图+分析+播报全流程
+                当前快捷键：{formatAccelerator(shortcutBindings.voice_search || 'Alt+T')}
               </p>
             )}
           </button>
@@ -403,7 +403,7 @@ export default function Exam() {
           <li>· 使用「悬浮框显示」开关或 {shortcutBindings.toggle_visibility || 'Alt+B'} 快捷键可显示/隐藏悬浮框</li>
           <li>· 透明度可通过上方进度条实时调节</li>
           {processingMode === 'voice' && (
-            <li>· 语音播报模式下，按搜题快捷键即可完成截图+分析+播报全流程</li>
+            <li>· 语音播报模式下，按 {formatAccelerator(shortcutBindings.voice_search || 'Alt+T')} 即可完成截图+分析+播报全流程</li>
           )}
           {processingMode === 'voice' && (
             <li>· 按 {shortcutBindings.replay || 'Ctrl+R'} 可重听上次答案</li>
@@ -415,9 +415,9 @@ export default function Exam() {
         open={guideOpen}
         title={processingMode === 'voice' ? '笔试助手 · 语音播报模式' : '笔试助手 · 悬浮框文字模式'}
         steps={(processingMode === 'voice' ? [
-          { title: '选择语音播报模式并确认快捷键', description: '选择“语音播报”。下方常用快捷键中重点确认“搜题”和“重听答案”，需要修改时点击对应的更改按钮。', target: '[data-guide-target="exam-mode"]' },
+          { title: '选择语音播报模式并确认快捷键', description: '选择“语音播报”。下方常用快捷键中重点确认“语音播报搜题”和“重听答案”，需要修改时点击对应的更改按钮。', target: '[data-guide-target="exam-mode"]' },
           { title: '开始使用', description: '点击“开始使用”启用笔试助手。语音播报模式不会打开文字悬浮框。', target: '[data-guide-target="exam-start"]' },
-          { title: '启动搜题', description: `按 ${formatAccelerator(shortcutBindings.search || '搜题快捷键')} 即可自动完成全屏截图、识别题目、生成答案和语音播报，不需要先按全屏截图。`, target: '[data-guide-target="shortcut-search"]' },
+          { title: '启动搜题', description: `按 ${formatAccelerator(shortcutBindings.voice_search || 'Alt+T')} 即可自动完成全屏截图、识别题目、生成答案和语音播报，不需要先按全屏截图。`, target: '[data-guide-target="shortcut-voice_search"]' },
           { title: '重听答案', description: `没有听清时按 ${formatAccelerator(shortcutBindings.replay || '重听快捷键')}，可重新播报上一条答案。`, target: '[data-guide-target="shortcut-replay"]' },
         ] : [
           { title: '选择工作模式并设置常用快捷键', description: '选择“悬浮框文字呈现”。下方常用快捷键可以逐项修改，重点确认全屏截图、搜题和显示/隐藏悬浮框。', target: '[data-guide-target="exam-mode"]' },
