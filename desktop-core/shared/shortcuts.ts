@@ -11,9 +11,22 @@ export type ShortcutAction =
 
 export type ShortcutCategory = 'main' | 'system'
 export interface ShortcutBinding { action: ShortcutAction; accelerator: string; label: string; configurable: boolean; category: ShortcutCategory }
+export type ShortcutConflictType = 'os' | 'quizmate-system' | 'exam' | 'interview'
+export type ShortcutConflictReason =
+  | '和电脑自带快捷键冲突'
+  | '和QuizMate系统快捷键冲突'
+  | '和笔试常用快捷键冲突'
+  | '和面试常用快捷键冲突'
+export interface ShortcutConflict {
+  type: ShortcutConflictType
+  reason: ShortcutConflictReason
+  detail: string
+  conflictingAction?: ShortcutAction
+  conflictingLabel?: string
+}
 
 const windowsShortcutBindings: Record<ShortcutAction, string> = {
-  screenshot: 'Alt+Q', search: 'Alt+E', toggle_visibility: 'Ctrl+B', copy_content: 'Ctrl+Shift+C', replay: 'Ctrl+R',
+  screenshot: 'Alt+Q', search: 'Alt+E', toggle_visibility: 'Alt+B', copy_content: 'Ctrl+Shift+C', replay: 'Ctrl+R',
   interview_start: 'Alt+R',
   interview_prev_question: 'Alt+Up', interview_next_question: 'Alt+Down',
   quit: 'Ctrl+Shift+Q', reset: 'Ctrl+Shift+T', move_up: 'Ctrl+Up', move_down: 'Ctrl+Down', move_left: 'Ctrl+Left', move_right: 'Ctrl+Right',
@@ -43,22 +56,44 @@ export function toElectronAccelerator(accelerator: string): string {
   return accelerator.split('+').map(part => part.trim().toLowerCase() === 'option' ? 'Alt' : part.trim()).join('+')
 }
 
-export function canonicalizeAccelerator(accelerator: string): string {
-  return toElectronAccelerator(accelerator).toLowerCase()
+function resolvePlatform(platform?: string): string {
+  return platform || (typeof process !== 'undefined' ? process.platform : '') ||
+    (typeof navigator !== 'undefined' && /Macintosh|Mac OS X/i.test(navigator.userAgent) ? 'darwin' : 'win32')
+}
+
+/** Normalize aliases and modifier order so the conflict check cannot be bypassed by alternate spellings. */
+export function canonicalizeAccelerator(accelerator: string, platform?: string): string {
+  const currentPlatform = resolvePlatform(platform)
+  const modifiers = new Set<string>()
+  const keys: string[] = []
+  const keyAliases: Record<string, string> = {
+    arrowup: 'up', arrowdown: 'down', arrowleft: 'left', arrowright: 'right', esc: 'escape',
+  }
+  for (const rawPart of accelerator.split('+')) {
+    const part = rawPart.trim().toLowerCase()
+    if (!part) continue
+    if (part === 'control' || part === 'ctrl') modifiers.add('ctrl')
+    else if (part === 'option' || part === 'alt') modifiers.add('alt')
+    else if (part === 'shift') modifiers.add('shift')
+    else if (part === 'commandorcontrol' || part === 'cmdorctrl') modifiers.add(currentPlatform === 'darwin' ? 'command' : 'ctrl')
+    else if (part === 'command' || part === 'cmd' || part === 'super' || part === 'meta') modifiers.add(currentPlatform === 'darwin' ? 'command' : 'super')
+    else keys.push(keyAliases[part] || part)
+  }
+  const order = ['ctrl', 'alt', 'shift', currentPlatform === 'darwin' ? 'command' : 'super']
+  return [...order.filter(part => modifiers.has(part)), ...keys].join('+')
 }
 
 /** Return native defaults while keeping the shared module usable in Electron and the renderer. */
 export function getDefaultShortcutBindings(platform?: string): Record<ShortcutAction, string> {
-  const currentPlatform = platform || (typeof process !== 'undefined' ? process.platform : '') ||
-    (typeof navigator !== 'undefined' && /Macintosh|Mac OS X/i.test(navigator.userAgent) ? 'darwin' : '')
+  const currentPlatform = resolvePlatform(platform)
   return { ...(currentPlatform === 'darwin' ? macShortcutBindings : windowsShortcutBindings) }
 }
 
 export const defaultShortcutBindings: Record<ShortcutAction, string> = getDefaultShortcutBindings()
 
 const mainMetadata: Array<[ShortcutAction, string]> = [
-  ['screenshot', '全屏截图'], ['search', '搜题'], ['toggle_visibility', '显示/隐藏悬浮框'], ['copy_content', '复制答案'], ['replay', '重听答案'],
-  ['interview_start', '开始/结束听写'],
+  ['screenshot', '全屏截图'], ['search', '搜题'], ['toggle_visibility', '显示/隐藏笔试悬浮框'], ['copy_content', '复制答案'], ['replay', '重听答案'],
+  ['interview_start', '开始/结束面试'],
   ['interview_prev_question', '上一个问题'], ['interview_next_question', '下一个问题'],
 ]
 const systemMetadata: Array<[ShortcutAction, string]> = [
@@ -74,9 +109,94 @@ export function getShortcutLabel(action: ShortcutAction) { return shortcutMetada
 export function isConfigurable(action: ShortcutAction) { return shortcutMetadata.find(s => s.action === action)?.configurable || false }
 export type ProcessingMode = 'overlay' | 'voice' | 'universal'
 export const examOverlayShortcutActions: ShortcutAction[] = ['screenshot', 'search', 'toggle_visibility', 'copy_content']
-export const examVoiceShortcutActions: ShortcutAction[] = ['search', 'toggle_visibility', 'replay']
+export const examVoiceShortcutActions: ShortcutAction[] = ['search', 'replay']
 export const interviewShortcutActions: ShortcutAction[] = ['interview_start', 'interview_prev_question', 'interview_next_question']
 export const modeByAction: Partial<Record<ShortcutAction, ProcessingMode>> = { search: 'overlay' }
+
+const examShortcutActionSet = new Set<ShortcutAction>(['screenshot', 'search', 'toggle_visibility', 'copy_content', 'replay'])
+const interviewShortcutActionSet = new Set<ShortcutAction>(interviewShortcutActions)
+
+const windowsOsShortcutDetails: Record<string, string> = {
+  'alt+f4': '关闭当前窗口',
+  'alt+tab': '切换应用程序',
+  'alt+shift+tab': '反向切换应用程序',
+  'alt+space': '打开当前窗口系统菜单',
+  'alt+escape': '按打开顺序切换窗口',
+  'ctrl+escape': '打开开始菜单',
+  'ctrl+shift+escape': '打开任务管理器',
+  'ctrl+alt+delete': '打开 Windows 安全选项',
+  'ctrl+alt+tab': '打开应用切换界面',
+  printscreen: '系统截屏',
+  'alt+printscreen': '截取当前窗口',
+}
+
+const macOsShortcutDetails: Record<string, string> = {
+  'command+q': '退出当前应用',
+  'command+w': '关闭当前窗口',
+  'command+m': '最小化当前窗口',
+  'command+h': '隐藏当前应用',
+  'command+tab': '切换应用程序',
+  'shift+command+tab': '反向切换应用程序',
+  'command+space': '打开聚焦搜索',
+  'alt+command+escape': '打开强制退出窗口',
+  'ctrl+command+q': '锁定屏幕',
+  'shift+command+3': '截取全屏',
+  'shift+command+4': '截取屏幕区域',
+  'shift+command+5': '打开截屏与录屏工具',
+  'ctrl+up': '打开调度中心',
+  'ctrl+down': '显示当前应用的所有窗口',
+  'ctrl+left': '切换到左侧桌面',
+  'ctrl+right': '切换到右侧桌面',
+  'ctrl+command+f': '切换全屏',
+  'alt+command+d': '显示或隐藏程序坞',
+  'command+`': '切换同一应用的窗口',
+}
+
+function getOsShortcutDetail(platform: string, accelerator: string): string | null {
+  if (platform === 'darwin') return macOsShortcutDetails[accelerator] || null
+  if (accelerator === 'super' || accelerator.startsWith('super+')) return 'Windows 徽标键系统功能'
+  return windowsOsShortcutDetails[accelerator] || null
+}
+
+/** Shared renderer/main-process guard. The main process must call this again before persisting. */
+export function validateShortcutConflict(
+  platform: string,
+  accelerator: string,
+  excludeAction: ShortcutAction | undefined,
+  bindings: Record<string, string>,
+): ShortcutConflict | null {
+  const canonical = canonicalizeAccelerator(accelerator, platform)
+  const osDetail = getOsShortcutDetail(platform, canonical)
+  if (osDetail) {
+    return { type: 'os', reason: '和电脑自带快捷键冲突', detail: osDetail }
+  }
+
+  const matchingActions = (Object.keys(bindings) as ShortcutAction[]).filter(action =>
+    action !== excludeAction && !!bindings[action] && canonicalizeAccelerator(bindings[action], platform) === canonical,
+  )
+  const matchingAction = matchingActions.find(action => !examShortcutActionSet.has(action) && !interviewShortcutActionSet.has(action))
+    || matchingActions.find(action => examShortcutActionSet.has(action))
+    || matchingActions.find(action => interviewShortcutActionSet.has(action))
+  if (!matchingAction) return null
+
+  const conflictingLabel = getShortcutLabel(matchingAction)
+  if (examShortcutActionSet.has(matchingAction)) {
+    return {
+      type: 'exam', reason: '和笔试常用快捷键冲突', detail: `已用于“${conflictingLabel}”`,
+      conflictingAction: matchingAction, conflictingLabel,
+    }
+  }
+  if (interviewShortcutActionSet.has(matchingAction)) {
+    return {
+      type: 'interview', reason: '和面试常用快捷键冲突', detail: `已用于“${conflictingLabel}”`,
+      conflictingAction: matchingAction, conflictingLabel,
+    }
+  }
+  return {
+    type: 'quizmate-system', reason: '和QuizMate系统快捷键冲突', detail: `已用于“${conflictingLabel}”`,
+    conflictingAction: matchingAction, conflictingLabel,
+  }
+}
 
 // ===== 平台展示辅助（主进程/渲染层共用） =====
 

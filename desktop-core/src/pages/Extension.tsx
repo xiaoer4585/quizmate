@@ -1,8 +1,6 @@
 import { BookOpen, CheckCircle2, Chrome, Download, ExternalLink, FileText, Radar } from 'lucide-react';
 import { api } from '../lib/ipc';
 
-const DOWNLOAD_URL = 'https://quizmate.cn/downloads/QuizMate-Career-Extension-2.2.0.zip';
-
 export default function Extension() {
   return (
     <div className="max-w-4xl mx-auto space-y-4">
@@ -11,7 +9,7 @@ export default function Extension() {
           <Chrome size={22} className="text-indigo-400" /> QuizMate 求职浏览器插件
         </h1>
         <p className="text-sm text-slate-400 mt-1">
-          AI 网申 · 投递管理 · 职位监控 · <span className="text-emerald-400">永久免费</span>
+          AI 网申自动填写 · 简历模板 · 投递管理 · 职位监控
         </p>
       </div>
 
@@ -45,8 +43,8 @@ export default function Extension() {
       </div>
 
       <div className="flex items-center gap-2 flex-wrap">
-        <button onClick={() => api.system.openExternal(DOWNLOAD_URL)} className="btn-primary text-xs">
-          <Download size={14} /> 免费下载插件
+        <button onClick={() => api.system.openExternal('https://www.quizmate.cn/download.html#ai-career-tools')} className="btn-primary text-xs">
+          <Download size={14} /> 下载网申插件
         </button>
         <button onClick={() => api.system.openExternal('https://quizmate.cn/docs.html')} className="btn-outline text-xs">
           <BookOpen size={14} /> 查看安装文档
@@ -55,9 +53,8 @@ export default function Extension() {
           <ExternalLink size={14} /> 官网下载页
         </button>
       </div>
-
       <div className="text-xs text-slate-500 border-t border-slate-800 pt-4">
-        Windows 客户端专注笔试和面试辅助；AI 网申、投递管理和职位监控由免费浏览器插件提供。
+        Windows 客户端专注笔试和面试辅助；AI 网申插件负责简历识别、模板管理和字段自动填写，和客户端共用 QuizMate 账号与积分。
       </div>
     </div>
   );

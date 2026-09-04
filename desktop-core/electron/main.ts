@@ -1,6 +1,6 @@
 // QuizMate考试助手 - 主进程入口
 // 笔试助手完全沿用原考试插件（QuizMate-Windows）的代码逻辑：
-//   - 快捷键系统（Ctrl+Shift+F4 截图 / Ctrl+Shift+F5 搜题 / Ctrl+B 悬浮框 / Ctrl+Shift+F7 重听）
+//   - 快捷键系统（Alt+Q 截图 / Alt+E 搜题 / Alt+B 笔试悬浮框 / Alt+R 面试会话）
 //   - 截图→压缩→OSS/直传→AI 分析→悬浮窗展示/TTS 播报 完整流程
 //   - overlay/voice 双模式切换
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
@@ -29,6 +29,7 @@ import { InterviewHelper } from './helpers/InterviewHelper';
 import { OverlayManager } from './OverlayManager';
 import { UpdateChecker } from './UpdateChecker';
 import { ShortcutAction, ProcessingMode } from '../shared/shortcuts';
+import { selectActiveOverlay, selectFreshScreenshot, shouldEnsureExamOverlay } from '../shared/overlay-state';
 import { toBusinessVersion } from './version';
 
 // ===== 平台常量（唯一的平台差异入口） =====
@@ -46,6 +47,7 @@ interface AppState {
   overlayLocked: boolean;                  // 笔试悬浮框是否已启动（考试客户端生命周期）
   interviewOverlayActive: boolean;         // 面试悬浮框是否已启动
   interviewOverlayVisible: boolean;        // 面试悬浮框当前是否可见
+  lastActiveOverlay: 'exam' | 'interview'; // 最近启动/显示的悬浮框，窗口调节快捷键只作用于它
   windowPosition: { x: number; y: number } | null;
   windowSize: { width: number; height: number } | null;
   screenWidth: number;
@@ -54,7 +56,7 @@ interface AppState {
   currentX: number;
   currentY: number;
   quitting: boolean;
-  skipRestoreOnClose: boolean;             // 关闭悬浮框时不注销快捷键（Ctrl+B 保持可用）
+  skipRestoreOnClose: boolean;             // 关闭悬浮框时不注销快捷键（Alt+B 保持可用）
   currentTheme: 'dark' | 'light';
   zoomFactor: number;
   lastVoiceAnswer: string;                 // 上次语音播报的答案，用于重听
@@ -68,6 +70,7 @@ const state: AppState = {
   overlayLocked: false,
   interviewOverlayActive: false,
   interviewOverlayVisible: false,
+  lastActiveOverlay: 'exam',
   windowPosition: null,
   windowSize: null,
   screenWidth: 0,
@@ -327,6 +330,41 @@ let screenshotInFlight = false;
 interface AnalysisOperationState { operationId: string; requestId: string; attempt: number }
 let pendingAnalysisOperation: AnalysisOperationState | null = null;
 
+type OverlayKind = 'exam' | 'interview';
+
+function getOverlayWindow(kind: OverlayKind): BrowserWindow | null {
+  return kind === 'exam' ? state.overlayWindow : state.interviewOverlayWindow;
+}
+
+function isOverlayVisible(kind: OverlayKind): boolean {
+  const win = getOverlayWindow(kind);
+  return !!(win && !win.isDestroyed() && win.isVisible());
+}
+
+function activateOverlay(kind: OverlayKind): void {
+  const win = getOverlayWindow(kind);
+  if (!win || win.isDestroyed() || !win.isVisible()) return;
+  state.lastActiveOverlay = kind;
+  try {
+    win.setAlwaysOnTop(true, 'screen-saver');
+    win.moveTop();
+  } catch (error) {
+    console.warn(`[Main] Failed to raise ${kind} overlay:`, error);
+  }
+}
+
+function getActiveOverlayKind(): OverlayKind {
+  return selectActiveOverlay(state.lastActiveOverlay, {
+    exam: isOverlayVisible('exam'),
+    interview: isOverlayVisible('interview'),
+  });
+}
+
+function activateRemainingOverlay(closedOrHidden: OverlayKind): void {
+  const fallback: OverlayKind = closedOrHidden === 'exam' ? 'interview' : 'exam';
+  if (isOverlayVisible(fallback)) activateOverlay(fallback);
+}
+
 function createOverlayWindow() {
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     showOverlay();
@@ -425,6 +463,7 @@ function createOverlayWindow() {
       overlayProtectionWatchdog.stop();
       overlayProtectionWatchdog = null;
     }
+    activateRemainingOverlay('exam');
   });
 
   const overlayUrl = getRendererUrl('#/overlay-exam');
@@ -442,6 +481,7 @@ function createOverlayWindow() {
     state.overlayWindow?.setIgnoreMouseEvents(true, { forward: true });
     state.isOverlayVisible = true;
     state.overlayLocked = true;
+    activateOverlay('exam');
   });
   // 兜底：如果 ready-to-show 在 3 秒内没触发，强制显示
   setTimeout(() => {
@@ -451,6 +491,7 @@ function createOverlayWindow() {
       state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
       state.isOverlayVisible = true;
       state.overlayLocked = true;
+      activateOverlay('exam');
     }
   }, 3000);
 
@@ -458,7 +499,7 @@ function createOverlayWindow() {
   processingHelper.setMainWindow(state.overlayWindow);
 }
 
-function showOverlay() {
+function showOverlay(markActive = true) {
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     state.overlayWindow.showInactive();
     state.overlayWindow.setOpacity(1.0);
@@ -469,6 +510,7 @@ function showOverlay() {
     try { applyAntiCapture(state.overlayWindow); } catch (e) {
       console.warn('[Main] Re-apply anti-capture on show failed:', e);
     }
+    if (markActive) activateOverlay('exam');
   }
 }
 
@@ -479,6 +521,7 @@ function hideOverlay() {
     state.overlayWindow.hide();
     state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
     state.isOverlayVisible = false;
+    activateRemainingOverlay('exam');
   }
 }
 
@@ -525,16 +568,15 @@ function resetWindowPosition() {
 function setBackgroundOpacity(opacity: number) {
   const clamped = Math.max(0.1, Math.min(1.0, opacity));
   configHelper.setBackgroundOpacity(clamped);
-  state.overlayWindow?.webContents.send('background-opacity-changed', clamped);
-  state.interviewOverlayWindow?.webContents.send('background-opacity-changed', clamped);
+  const win = getOverlayWindow(getActiveOverlayKind());
+  if (win && !win.isDestroyed()) win.webContents.send('background-opacity-changed', clamped);
 }
 
 function setZoomFactor(factor: number) {
   state.zoomFactor = Math.max(0.5, Math.min(2.0, factor));
   configHelper.updateClientSettings({ zoomFactor: state.zoomFactor });
-  [state.mainWindow, state.overlayWindow, state.interviewOverlayWindow].forEach((w) => {
-    if (w && !w.isDestroyed()) w.webContents.setZoomFactor(state.zoomFactor);
-  });
+  const win = getOverlayWindow(getActiveOverlayKind());
+  if (win && !win.isDestroyed()) win.webContents.setZoomFactor(state.zoomFactor);
 }
 
 function broadcastTheme(theme: 'dark' | 'light') {
@@ -605,32 +647,32 @@ function cancelShortcutTest() {
   shortcutsHelper?.cancelShortcutTest();
 }
 
-// ===== 快捷键处理（完全沿用原考试插件 handleShortcutAction） =====
-// 面试悬浮窗激活时，移动/缩放/显示隐藏/重听快捷键路由到面试悬浮窗
+// ===== 快捷键处理 =====
+// 笔试/面试生命周期独立；窗口调节类动作只路由到最近启动或显示的悬浮窗。
 async function handleShortcutAction(action: ShortcutAction): Promise<void> {
-  const interviewActive = state.interviewOverlayActive;
+  const activeOverlay = getActiveOverlayKind();
   switch (action) {
-    case 'screenshot':
-      // 面试过程中允许临时调用截图搜题：复用笔试管线，结果显示在笔试悬浮框；不影响听写会话。
-      if (interviewActive) {
-        if (!state.overlayWindow || state.overlayWindow.isDestroyed()) await launchExamClient();
-        await handleScreenshot(false);
-        await handleSearchAction('overlay');
-      } else {
-        await handleScreenshot(false);
+    case 'screenshot': {
+      const mode = configHelper.getProcessingMode();
+      // 语音模式截图不创建、不显示笔试悬浮框。
+      if (shouldEnsureExamOverlay(mode, 'screenshot')) {
+        if (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible) await launchExamClient();
+        else activateOverlay('exam');
       }
+      await handleScreenshot(false);
       break;
-    case 'search':
-      if (interviewActive) {
-        if (!state.overlayWindow || state.overlayWindow.isDestroyed()) await launchExamClient();
-        await handleSearchAction('overlay');
-      } else {
-        await handleSearchAction(configHelper.getProcessingMode());
+    }
+    case 'search': {
+      const mode = configHelper.getProcessingMode();
+      if (shouldEnsureExamOverlay(mode, 'search')) {
+        if (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible) await launchExamClient();
+        else activateOverlay('exam');
       }
+      await handleSearchAction(mode);
       break;
+    }
     case 'replay':
-      if (interviewActive) {
-        // 面试模式：重听上一个答案
+      if (activeOverlay === 'interview') {
         interviewHelper?.replayLastAnswer?.();
       } else {
         await handleReplayAction();
@@ -641,37 +683,22 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       app.quit();
       break;
     case 'reset':
-      if (interviewActive) {
-        // 面试模式：清空任务列表
+      if (activeOverlay === 'interview') {
         interviewHelper?.clearTasks?.();
       } else {
         await handleReset();
       }
       break;
     case 'toggle_visibility':
-      if (interviewActive) {
-        // 面试悬浮窗：Ctrl+B 切换显示/隐藏
-        if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) {
-          createInterviewOverlayWindow();
-        } else {
-          toggleInterviewOverlay();
-        }
+      // Alt+B 永远只控制笔试悬浮框，不受面试状态影响。
+      if (!state.overlayWindow || state.overlayWindow.isDestroyed()) {
+        await launchExamClient();
       } else {
-        // 笔试悬浮窗：voice 模式不应触发此快捷键
-        if (configHelper.getProcessingMode() === 'voice') return;
-        if (!state.overlayWindow || state.overlayWindow.isDestroyed()) {
-          await launchExamClient();
-        } else {
-          toggleOverlay();
-        }
+        toggleOverlay();
       }
       break;
     case 'interview_start':
-      if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) {
-        createInterviewOverlayWindow();
-      }
-      if (interviewHelper?.isListening()) interviewHelper.stop();
-      else await interviewHelper?.start();
+      await toggleInterviewSession();
       break;
     case 'interview_prev_question':
       state.interviewOverlayWindow?.webContents.send('interview:navigate', { direction: 'prev' });
@@ -679,14 +706,14 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
     case 'interview_next_question':
       state.interviewOverlayWindow?.webContents.send('interview:navigate', { direction: 'next' });
       break;
-    case 'move_up':    interviewActive ? moveInterviewOverlay(0, -state.step) : moveOverlay(0, -state.step); break;
-    case 'move_down':  interviewActive ? moveInterviewOverlay(0, state.step)  : moveOverlay(0, state.step); break;
-    case 'move_left':  interviewActive ? moveInterviewOverlay(-state.step, 0) : moveOverlay(-state.step, 0); break;
-    case 'move_right': interviewActive ? moveInterviewOverlay(state.step, 0)  : moveOverlay(state.step, 0); break;
-    case 'resize_width_smaller':   interviewActive ? resizeInterviewOverlay(-20, 0) : resizeOverlay(-20, 0); break;
-    case 'resize_width_larger':    interviewActive ? resizeInterviewOverlay(20, 0)  : resizeOverlay(20, 0); break;
-    case 'resize_height_smaller':  interviewActive ? resizeInterviewOverlay(0, -20) : resizeOverlay(0, -20); break;
-    case 'resize_height_larger':   interviewActive ? resizeInterviewOverlay(0, 20)  : resizeOverlay(0, 20); break;
+    case 'move_up':    activeOverlay === 'interview' ? moveInterviewOverlay(0, -state.step) : moveOverlay(0, -state.step); break;
+    case 'move_down':  activeOverlay === 'interview' ? moveInterviewOverlay(0, state.step)  : moveOverlay(0, state.step); break;
+    case 'move_left':  activeOverlay === 'interview' ? moveInterviewOverlay(-state.step, 0) : moveOverlay(-state.step, 0); break;
+    case 'move_right': activeOverlay === 'interview' ? moveInterviewOverlay(state.step, 0)  : moveOverlay(state.step, 0); break;
+    case 'resize_width_smaller':   activeOverlay === 'interview' ? resizeInterviewOverlay(-20, 0) : resizeOverlay(-20, 0); break;
+    case 'resize_width_larger':    activeOverlay === 'interview' ? resizeInterviewOverlay(20, 0)  : resizeOverlay(20, 0); break;
+    case 'resize_height_smaller':  activeOverlay === 'interview' ? resizeInterviewOverlay(0, -20) : resizeOverlay(0, -20); break;
+    case 'resize_height_larger':   activeOverlay === 'interview' ? resizeInterviewOverlay(0, 20)  : resizeOverlay(0, 20); break;
     case 'opacity_brighter':
     case 'opacity_brighter_alt':
       setBackgroundOpacity(configHelper.getBackgroundOpacity() + 0.1);
@@ -699,26 +726,25 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
     case 'zoom_reset': setZoomFactor(1.0); break;
     case 'zoom_in': setZoomFactor(state.zoomFactor + 0.1); break;
     case 'toggle_raw_output':
-      if (interviewActive) {
+      if (activeOverlay === 'interview') {
         state.interviewOverlayWindow?.webContents.send('toggle-raw-output');
       } else {
         state.overlayWindow?.webContents.send('toggle-raw-output');
       }
       break;
     case 'copy_content':
-      if (interviewActive) {
+      if (activeOverlay === 'interview') {
         state.interviewOverlayWindow?.webContents.send('copy-content');
       } else {
         state.overlayWindow?.webContents.send('copy-content');
       }
       break;
     case 'delete_latest_screenshot':
-      if (interviewActive) return; // 面试无截图
       screenshotHelper.deleteLatest(false);
       state.overlayWindow?.webContents.send('screenshot-deleted', { isExtra: false });
       break;
     case 'reset_position':
-      interviewActive ? resetInterviewOverlayPosition() : resetWindowPosition();
+      activeOverlay === 'interview' ? resetInterviewOverlayPosition() : resetWindowPosition();
       break;
     case 'refresh_config':
       state.overlayWindow?.webContents.send('refresh-config');
@@ -741,6 +767,8 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     attempt: 1,
   };
   const captureStartedAt = Date.now();
+  const previousAnalysisOperation = pendingAnalysisOperation;
+  let capturedForOperation = false;
   if (screenshotInFlight) {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('screenshot-error', { error: '截图正在处理中，请稍候', code: 'CAPTURE_IN_FLIGHT', stage: 'capture' });
@@ -749,6 +777,10 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
   }
   screenshotInFlight = true;
   try {
+    // 主截图代表新的答题轮次：取消上一轮并先切换 operationId，
+    // 使上一轮迟到事件无法覆盖本轮截图。
+    if (!isExtra) processingHelper.cancelStreaming();
+    pendingAnalysisOperation = operation;
     const appConfig = configHelper.getAppConfig();
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('screenshot-started', { isExtra, ...operation });
@@ -763,6 +795,7 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     const interviewOverlayWasVisible = !!(
       state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed() && state.interviewOverlayWindow.isVisible()
     );
+    const previouslyActiveOverlay = state.lastActiveOverlay;
     // A protected window should remain visible locally and be absent from normal
     // capture APIs. On Electron versions without readback, hide as a fallback.
     const examOverlayProtectionState = state.overlayWindow && !state.overlayWindow.isDestroyed()
@@ -787,12 +820,14 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     } finally {
       if (needsTemporaryHide) {
         await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
-        if (examOverlayWasVisible) showOverlay();
-        if (interviewOverlayWasVisible) showInterviewOverlay();
+        if (examOverlayWasVisible) showOverlay(false);
+        if (interviewOverlayWasVisible) showInterviewOverlay(false);
+        if (isOverlayVisible(previouslyActiveOverlay)) activateOverlay(previouslyActiveOverlay);
       }
     }
 
     if (result.success && result.filePath) {
+      if (!isExtra) screenshotHelper.clearQueue(false);
       const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
       if (!saved) {
         throw new Error('截图已采集，但保存失败');
@@ -802,7 +837,7 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
         throw new Error('截图已保存，但读取失败');
       }
       const payload = { path: saved, base64, isExtra };
-      pendingAnalysisOperation = operation;
+      capturedForOperation = true;
       processingHelper.recordDiagnosticEvent('capture.success', {
         ...operation,
         isExtra,
@@ -844,6 +879,9 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
       if (!win.isDestroyed()) win.webContents.send('screenshot-error', payload);
     });
   } finally {
+    if (!capturedForOperation && pendingAnalysisOperation?.operationId === operation.operationId) {
+      pendingAnalysisOperation = previousAnalysisOperation;
+    }
     screenshotInFlight = false;
   }
 }
@@ -852,12 +890,23 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   const procMode = configHelper.getProcessingMode();
   let queue = screenshotHelper.getQueue(false);
 
-  // voice 模式：队列为空时自动截图（一体化流程：Ctrl+T = 截图 + 搜题 + 播报）
-  if (procMode === 'voice' && queue.length === 0) {
+  // 语音模式的每次搜题都是新一轮：隐藏笔试悬浮框并重新截取当前屏幕。
+  // 截图失败时不得退回分析队列中的旧图。
+  if (procMode === 'voice') {
+    if (isOverlayVisible('exam')) hideOverlay();
+    const previousLatestShot = queue[queue.length - 1];
     notifyVoiceProgress('正在截图...');
     setTrayBusy(true);
     await handleScreenshot(false);
     queue = screenshotHelper.getQueue(false);
+    if (!selectFreshScreenshot(previousLatestShot, queue)) {
+      const errMsg = '未获取到新截图，请重试';
+      ttsHelper?.cancel();
+      ttsHelper?.speak(errMsg).catch(() => {});
+      notifyVoiceProgress(null);
+      setTrayBusy(false);
+      return;
+    }
   }
 
   if (queue.length === 0) {
@@ -915,17 +964,21 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   // 直接调用 analyze 获取完整结果
   const result = await processingHelper.analyze({ images: [b64], mode, ...operation });
   if (result.success) {
-    // 仅在成功后清空历史截图队列；失败时保留截图，允许用户直接重试并便于诊断。
-    screenshotHelper.clearAll();
-    state.overlayWindow?.webContents.send('screenshots-cleared');
-    pendingAnalysisOperation = null;
+    // 只有当前轮次可以清空队列；上一轮迟到结果不得删除用户刚截的新图。
+    if (pendingAnalysisOperation?.operationId === operation.operationId) {
+      screenshotHelper.clearAll();
+      state.overlayWindow?.webContents.send('screenshots-cleared', { ...operation });
+      pendingAnalysisOperation = null;
+    }
   } else {
-    const outcomeUnknown = result.stage === 'timeout' || result.stage === 'network';
-    pendingAnalysisOperation = {
-      ...operation,
-      requestId: outcomeUnknown ? operation.requestId : `desktop-${crypto.randomUUID()}`,
-      attempt: operation.attempt + 1,
-    };
+    if (pendingAnalysisOperation?.operationId === operation.operationId) {
+      const outcomeUnknown = result.stage === 'timeout' || result.stage === 'network';
+      pendingAnalysisOperation = {
+        ...operation,
+        requestId: outcomeUnknown ? operation.requestId : `desktop-${crypto.randomUUID()}`,
+        attempt: operation.attempt + 1,
+      };
+    }
     console.warn('[Main] analyze failed, keeping screenshot queue for retry:', {
       code: result.errorCode,
       stage: result.stage,
@@ -1008,7 +1061,7 @@ async function switchProcessingMode(mode: 'overlay' | 'voice'): Promise<void> {
     }
     shortcutsHelper?.registerGlobalShortcutsForMode('voice');
   } else {
-    // 切到 overlay 模式：恢复所有快捷键，不自动启动悬浮框（等用户按 Ctrl+B）
+    // 切到 overlay 模式：恢复所有快捷键，不自动启动悬浮框（等用户按 Alt+B）
     shortcutsHelper?.registerGlobalShortcutsForMode('overlay');
   }
   // 向所有渲染进程发送模式切换事件
@@ -1037,8 +1090,9 @@ function createInterviewOverlayWindow() {
     height,
     minWidth: 200,
     minHeight: 40,
-    x: savedPos?.x ?? 50,
-    y: savedPos?.y ?? 50,
+    // 与笔试窗同时首次出现时保留少量错位，用户可看出两个窗口都已启动。
+    x: savedPos ? savedPos.x + 36 : 86,
+    y: savedPos ? savedPos.y + 36 : 86,
     alwaysOnTop: true,
     show: false,
     frame: false,
@@ -1095,6 +1149,8 @@ function createInterviewOverlayWindow() {
       interviewProtectionWatchdog.stop();
       interviewProtectionWatchdog = null;
     }
+    if (interviewHelper?.isListening()) interviewHelper.stop();
+    activateRemainingOverlay('interview');
   });
 
   // 与笔试悬浮窗一致：移动/缩放后持久化窗口位置与尺寸（两个悬浮窗共享已保存配置）
@@ -1124,6 +1180,7 @@ function createInterviewOverlayWindow() {
     state.interviewOverlayWindow?.setIgnoreMouseEvents(true, { forward: true });
     state.interviewOverlayActive = true;
     state.interviewOverlayVisible = true;
+    activateOverlay('interview');
   });
   // 兜底：3 秒内 ready-to-show 未触发则强制显示
   setTimeout(() => {
@@ -1133,11 +1190,12 @@ function createInterviewOverlayWindow() {
       state.interviewOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
       state.interviewOverlayActive = true;
       state.interviewOverlayVisible = true;
+      activateOverlay('interview');
     }
   }, 3000);
 }
 
-function showInterviewOverlay() {
+function showInterviewOverlay(markActive = true) {
   if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()) {
     state.interviewOverlayWindow.setOpacity(1.0);
     state.interviewOverlayWindow.showInactive();
@@ -1147,6 +1205,7 @@ function showInterviewOverlay() {
     try { applyAntiCapture(state.interviewOverlayWindow); } catch (e) {
       console.warn('[Main] Re-apply anti-capture on interview show failed:', e);
     }
+    if (markActive) activateOverlay('interview');
   }
 }
 
@@ -1156,6 +1215,7 @@ function hideInterviewOverlay() {
     state.interviewOverlayWindow.hide();
     state.interviewOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
     state.interviewOverlayVisible = false;
+    activateRemainingOverlay('interview');
   }
 }
 
@@ -1194,23 +1254,54 @@ function closeInterviewOverlay() {
   state.interviewOverlayWindow = null;
   state.interviewOverlayActive = false;
   state.interviewOverlayVisible = false;
+  activateRemainingOverlay('interview');
+}
+
+async function startInterviewSession(context?: unknown): Promise<{ running: boolean }> {
+  const createdForStart = !state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed();
+  if (createdForStart) createInterviewOverlayWindow();
+  else showInterviewOverlay();
+  try {
+    await interviewHelper.start(context as any);
+    if (!interviewHelper.isListening()) throw new Error('请先登录后再开始面试');
+    state.interviewOverlayActive = true;
+    state.interviewOverlayVisible = true;
+    activateOverlay('interview');
+    return { running: true };
+  } catch (error) {
+    if (createdForStart) closeInterviewOverlay();
+    throw error;
+  }
+}
+
+async function stopInterviewSession(): Promise<{ running: boolean }> {
+  try {
+    if (interviewHelper?.isListening()) interviewHelper.stop();
+  } finally {
+    closeInterviewOverlay();
+  }
+  return { running: false };
+}
+
+async function toggleInterviewSession(): Promise<{ running: boolean }> {
+  return interviewHelper?.isListening() ? stopInterviewSession() : startInterviewSession();
 }
 
 // ===== overlay 适配器：将面试悬浮窗适配为 InterviewHelper 所需的 OverlayManager 接口 =====
 const overlayAdapter = {
   render(payload: { type: 'exam' | 'interview'; title?: string; content: string; streaming?: boolean }) {
     if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()) {
-      showInterviewOverlay();
+      if (!screenshotInFlight) showInterviewOverlay(false);
       state.interviewOverlayWindow.webContents.send('overlay:render', payload);
     }
   },
   renderTaskList(tasks: Array<{ id: string; question: string; answer?: string; keyPoints?: string[]; error?: string; status: string; ts: number }>) {
     if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()) {
-      showInterviewOverlay();
+      if (!screenshotInFlight) showInterviewOverlay(false);
       state.interviewOverlayWindow.webContents.send('overlay:renderTasks', tasks);
     }
   },
-  show() { showInterviewOverlay(); },
+  show() { showInterviewOverlay(false); },
   hide() { hideInterviewOverlay(); },
   clear() {
     if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()) {
@@ -1229,7 +1320,7 @@ function createTrayManager(): void {
     showSettings: () => restoreMainWindow(),
     toggleOverlay: () => {
       if (state.overlayLocked) {
-        // 悬浮框已存在：切换显示/隐藏（与 Ctrl+B 语义一致，不销毁窗口）
+        // 悬浮框已存在：切换显示/隐藏（与 Alt+B 语义一致，不销毁窗口）
         toggleOverlay();
         updateTrayState();
       } else {
@@ -1241,7 +1332,6 @@ function createTrayManager(): void {
     },
     // 托盘兜底：考试输入框/输入法拦截全局快捷键时，可用鼠标从托盘触发截图与搜题
     captureScreenshot: async () => {
-      if (state.interviewOverlayActive) return;
       const mode = configHelper.getProcessingMode();
       if (mode !== 'voice' && (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible)) {
         const r = await launchExamClient();
@@ -1250,7 +1340,6 @@ function createTrayManager(): void {
       await handleScreenshot(false);
     },
     searchQuestion: async () => {
-      if (state.interviewOverlayActive) return;
       const mode = configHelper.getProcessingMode();
       if (mode !== 'voice' && (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible)) {
         const r = await launchExamClient();
@@ -1326,7 +1415,7 @@ async function initializeApp(): Promise<void> {
     });
   });
   ctx.shortcuts = shortcutsHelper;
-  // 启动时只注册 overlay 模式动作，避免 interview_start 与截图默认键冲突。
+  // 两个助手的快捷键启动时统一注册，动作在主进程中独立路由。
   shortcutsHelper.registerGlobalShortcuts();
 
   processingHelper = new LightweightProcessingHelper(configHelper);
@@ -1376,6 +1465,9 @@ async function initializeApp(): Promise<void> {
     handleSearchAction,
     launchExamClient,
     closeExamClient,
+    startInterviewSession,
+    stopInterviewSession,
+    toggleInterviewSession,
     switchProcessingMode,
     startShortcutTest,
     cancelShortcutTest,
@@ -1388,10 +1480,10 @@ async function initializeApp(): Promise<void> {
   ipcMain.handle('exam:isActive', () => state.overlayLocked);
 
   // ===== 面试悬浮窗 IPC（独立于笔试悬浮窗） =====
-  ipcMain.handle('interview-overlay:create', () => { createInterviewOverlayWindow(); return true; });
+  ipcMain.handle('interview-overlay:create', () => startInterviewSession());
   ipcMain.handle('interview-overlay:show', () => { showInterviewOverlay(); return true; });
   ipcMain.handle('interview-overlay:hide', () => { hideInterviewOverlay(); return true; });
-  ipcMain.handle('interview-overlay:close', () => { closeInterviewOverlay(); return true; });
+  ipcMain.handle('interview-overlay:close', () => stopInterviewSession());
   ipcMain.handle('interview-overlay:isActive', () => state.interviewOverlayActive);
 
   // 创建主窗口
@@ -1417,10 +1509,11 @@ async function initializeApp(): Promise<void> {
   } else {
     await authManager.validateSession().catch(() => {});
     refreshCreditsFromServer();
+    void updateChecker.checkForUpdates();
   }
   updateTrayState();
 
-  // 启动版本更新自动检测（启动后 5 秒检测一次，之后每小时检测一次）
+  // 登录进入时已检测一次；此处仅保留每小时后台复查。
   updateChecker.startAutoCheck();
 
   // 每 60 秒静默刷新一次积分，保持多端同步

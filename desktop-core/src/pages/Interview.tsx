@@ -2,7 +2,7 @@
 // 功能：配置面试上下文、上传简历、启动悬浮窗、查看历史 QA 记录
 // 语音识别通过主进程连接后台配置的实时语音模型
 import { useEffect, useRef, useState } from 'react';
-import { Mic, MicOff, Loader2, ShieldCheck, Trash2, Sparkles, FileText, CheckCircle2, Circle, Monitor, Share2, History, Send, Keyboard, Save, RefreshCw, Edit3, Plus, HelpCircle, Bold, Italic, List, ListOrdered, Copy, FolderOpen } from 'lucide-react';
+import { Mic, MicOff, Loader2, ShieldCheck, Trash2, Sparkles, FileText, CheckCircle2, Circle, Share2, History, Send, Keyboard, Save, RefreshCw, Edit3, Plus, HelpCircle, Bold, Italic, List, ListOrdered, Copy, FolderOpen } from 'lucide-react';
 import { api, useProfile } from '../lib/ipc';
 import ShareInterviewModal from '../components/ShareInterviewModal';
 import ShortcutSettings from '../components/ShortcutSettings';
@@ -111,7 +111,6 @@ export default function Interview() {
   const [resumeEditing, setResumeEditing] = useState(false);
   const [resumeName, setResumeName] = useState('我的简历');
   const [resumeDraft, setResumeDraft] = useState('');
-  const [overlayActive, setOverlayActive] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [shortcutBindings, setShortcutBindings] = useState<Record<string, string>>(defaultShortcutBindings);
   const [savingContext, setSavingContext] = useState(false);
@@ -166,7 +165,6 @@ export default function Interview() {
     api.interview.activateShortcuts().catch(() => {});
     refreshResumes().catch(() => {});
     refreshHistory().catch(() => {});
-    api.interview.isOverlayActive().then(setOverlayActive).catch(() => {});
     api.interview.getContext().then((saved: any) => {
       if (saved && typeof saved === 'object') {
         const next: InterviewContextDraft = {
@@ -216,21 +214,7 @@ export default function Interview() {
     return () => { off?.(); offState?.(); };
   }, []);
 
-  // 启动/关闭面试悬浮窗
-  const toggleOverlay = async () => {
-    if (overlayActive) {
-      await api.interview.closeOverlay();
-      setOverlayActive(false);
-    } else {
-      await api.interview.createOverlay();
-      setOverlayActive(true);
-    }
-  };
-
-  // ===== CHG-20260822-06：合并「启动悬浮框 + 开始听写」为「开始面试」按钮 =====
-  // 点击开始面试：自动启动悬浮框 + 开启听写；
-  // 点击停止面试：自动停止听写 + 关闭悬浮框；
-  // 内部任一动作失败时尝试回滚另一边，并恢复 UI 状态。
+  // 面试听写与面试悬浮窗由主进程作为一个会话原子启停，按钮和 Alt+R 复用同一路径。
   const [interviewStarting, setInterviewStarting] = useState(false);
   const interviewRunning = listening;
 
@@ -238,27 +222,9 @@ export default function Interview() {
     if (interviewStarting) return;
     setError('');
     setInterviewStarting(true);
-    // 标记前置状态以便失败时回滚
-    const prevOverlay = overlayActive;
     try {
-      if (!overlayActive) {
-        await api.interview.createOverlay();
-        setOverlayActive(true);
-      }
-      try {
-        await api.interview.startListening(context);
-      } catch (e: any) {
-        // 听写启动失败，回滚悬浮框
-        try {
-          if (!prevOverlay) {
-            await api.interview.closeOverlay();
-            setOverlayActive(false);
-          }
-        } catch {}
-        throw e;
-      }
+      await api.interview.startListening(context);
     } catch (e: any) {
-      setOverlayActive(prevOverlay);
       setError(e?.message || '启动面试失败');
     } finally {
       setInterviewStarting(false);
@@ -269,22 +235,9 @@ export default function Interview() {
     if (interviewStarting) return;
     setError('');
     setInterviewStarting(true);
-    const prevOverlay = overlayActive;
     try {
-      if (listening) {
-        try {
-          await api.interview.stopListening();
-        } catch {}
-      }
-      if (overlayActive) {
-        try {
-          await api.interview.closeOverlay();
-        } catch {}
-        setOverlayActive(false);
-      }
+      await api.interview.stopListening();
     } catch (e: any) {
-      // 出现异常时尽量恢复前置状态，避免 UI 与实际窗口不一致
-      setOverlayActive(prevOverlay);
       setError(e?.message || '停止面试失败');
     } finally {
       setInterviewStarting(false);
@@ -338,22 +291,6 @@ export default function Interview() {
   };
 
   const credits = profile?.creditBalance ?? profile?.account?.credits ?? 0;
-
-  // ===== 实时语音识别（通过主进程） =====
-  const startListening = async () => {
-    setError('');
-    try {
-      await api.interview.startListening(context);
-    } catch (e: any) {
-      setError(e?.message || '启动语音识别失败');
-    }
-  };
-
-  const stopListening = async () => {
-    try {
-      await api.interview.stopListening();
-    } catch {}
-  };
 
   const saveInterviewContext = async () => {
     setSavingContext(true);
@@ -450,18 +387,19 @@ export default function Interview() {
           </h1>
           <p className="text-sm text-slate-400 mt-1">实时听写面试官问题 · AI 快速生成参考答案 · 结合简历作答</p>
         </div>
-        <div className="flex items-center gap-2" data-guide-target="interview-overlay">
+        <div className="flex items-center gap-2" data-guide-target="interview-start">
           <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs">
             积分余额 <span className="text-amber-400 font-bold">{credits}</span>
             <span className="text-slate-500 ml-2">（每次 AI 作答消耗 20 积分）</span>
           </div>
           <button
-            onClick={toggleOverlay}
-            disabled={interviewRunning}
-            className={`btn-outline text-xs ${overlayActive ? 'text-emerald-400 border-emerald-500/50' : ''}`}
-            title="单独启动/关闭面试悬浮窗（独立于听写）"
+            onClick={interviewRunning ? stopInterview : startInterview}
+            disabled={interviewStarting}
+            className={interviewRunning ? 'btn-outline text-xs border-rose-500/50 text-rose-400' : 'btn bg-rose-500 hover:bg-rose-600 text-white text-xs'}
+            title={`${interviewRunning ? '结束' : '开始'}面试（${shortcutBindings.interview_start || 'Alt+R'}）`}
           >
-            <Monitor size={14} /> {overlayActive ? '悬浮窗已开' : '悬浮窗'}
+            {interviewStarting ? <Loader2 size={14} className="animate-spin" /> : interviewRunning ? <MicOff size={14} /> : <Mic size={14} />}
+            {interviewRunning ? '结束面试' : '开始面试'}
           </button>
         </div>
       </div>
@@ -587,27 +525,6 @@ export default function Interview() {
       {/* 控制台 */}
       <div className="card space-y-3">
         <div className="flex items-center gap-3 flex-wrap">
-          {!interviewRunning ? (
-            <button
-              data-guide-target="interview-listen"
-              onClick={startInterview}
-              disabled={interviewStarting}
-              className="btn bg-rose-500 hover:bg-rose-600 text-white"
-              title="开始面试：自动开启悬浮框 + 启动听写"
-            >
-              {interviewStarting ? <Loader2 size={16} className="animate-spin" /> : <Mic size={16} />} 开始面试
-            </button>
-          ) : (
-            <button
-              data-guide-target="interview-listen"
-              onClick={stopInterview}
-              disabled={interviewStarting}
-              className="btn-outline border-rose-500/50 text-rose-400"
-              title="停止面试：自动停止听写 + 关闭悬浮框"
-            >
-              {interviewStarting ? <Loader2 size={16} className="animate-spin" /> : <MicOff size={16} />} 停止面试
-            </button>
-          )}
           {interviewRunning && (
             <div className="flex items-center gap-2 text-sm text-rose-400">
               <span className="relative flex h-2.5 w-2.5">
@@ -756,8 +673,7 @@ export default function Interview() {
           { title: '选择听写模式', description: '演示模式同时识别麦克风和扬声器，适合自己演练；正式面试模式只识别扬声器，也就是只把面试官的声音作为问题输入。', target: '[data-guide-target="interview-mode"]' },
           { title: '编辑并保存面试上下文', description: '点击编辑，填写应聘岗位、面试公司、答案风格和岗位描述，然后点击保存。AI 会结合这些信息生成回答。', target: '[data-guide-target="interview-context"]' },
           { title: '粘贴并保存简历', description: '点击新建或编辑，直接粘贴简历文本并保存。自我介绍和项目问题会优先使用简历中的真实经历。', target: '[data-guide-target="interview-resume"]' },
-          { title: '启动参考答案悬浮窗', description: '点击“启动悬浮窗”，问题流显示在左侧，当前有效问题的参考答案显示在右侧。', target: '[data-guide-target="interview-overlay"]' },
-          { title: '开始面试', description: `点击「开始面试」按钮（或按 ${shortcutBindings.interview_start || '开始/结束面试快捷键'}）一键开启悬浮框并启动听写；再次点击则同步关闭。识别到有效问题后会立即调用 AI，非问题内容在正式面试模式会被过滤。`, target: '[data-guide-target="interview-listen"]' },
+          { title: '开始或结束面试', description: `点击右上角按钮（或按 ${shortcutBindings.interview_start || 'Alt+R'}）一键开启面试悬浮框并启动听写；再次操作会同步停止听写并关闭面试悬浮框。`, target: '[data-guide-target="interview-start"]' },
           { title: '切换问题和查看答案', description: `使用 ${shortcutBindings.interview_prev_question || '上一题快捷键'} 和 ${shortcutBindings.interview_next_question || '下一题快捷键'} 在问题流中切换；右侧始终显示当前选中问题的参考答案。`, target: '[data-guide-target="interview-results"]' },
         ] as FeatureGuideStep[]}
         onClose={finishGuide}

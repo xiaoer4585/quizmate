@@ -230,7 +230,7 @@ export default function Login({ onLogged }: { onLogged: () => void }) {
 
         <div className="text-center text-xs text-slate-500 mt-6 space-y-1">
           <div>登录即可使用全部功能，积分与官网/插件通用</div>
-          <div>笔试与面试功能按积分消耗，求职浏览器插件永久免费</div>
+          <div>网申、笔试与面试 AI 功能共用 QuizMate 账号与积分</div>
         </div>
       </div>
     </div>

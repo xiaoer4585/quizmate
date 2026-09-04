@@ -2,22 +2,37 @@
 import { useNavigate } from 'react-router-dom';
 import {
   PenLine, Mic, Chrome,
-  Wallet, ArrowRight, Sparkles, TrendingUp, ShieldCheck, Zap
+  Wallet, ArrowRight, Sparkles, TrendingUp, ShieldCheck, Zap, RefreshCw
 } from 'lucide-react';
-import { api, useProfile, useConfig } from '../lib/ipc';
+import { useState } from 'react';
+import { api, useProfile, useUpdateStatus } from '../lib/ipc';
 
 const MODULES = [
   { to: '/exam', title: '笔试助手', desc: '截图搜题 · AI智能答题 · 多题批量解析', icon: <PenLine size={22} />, color: 'from-exam to-exam-dark', cost: '积分' },
   { to: '/interview', title: '面试助手', desc: '实时听写面试官问题 · AI秒出参考答案 · 隐身模式', icon: <Mic size={22} />, color: 'from-rose-500 to-rose-700', cost: '积分' },
-  { to: '/extension', title: '求职浏览器插件', desc: 'AI 网申 · 投递管理 · 职位监控', icon: <Chrome size={22} />, color: 'from-indigo-500 to-indigo-700', cost: '免费' },
+  { to: '/extension', title: 'AI 网申插件', desc: '简历识别 · 自动填写 · 投递管理', icon: <Chrome size={22} />, color: 'from-indigo-500 to-indigo-700', cost: '10积分/次' },
 ];
 
 export default function Dashboard() {
   const navigate = useNavigate();
   const { data: profile } = useProfile();
-  const { data: config } = useConfig();
+  const updateStatus = useUpdateStatus();
+  const [checkingUpdate, setCheckingUpdate] = useState(false);
   const acct = profile?.account;
   const credits = profile?.creditBalance ?? acct?.credits ?? 0;
+  const checkUpdate = async () => {
+    setCheckingUpdate(true);
+    try { await api.update.check(); } finally { setCheckingUpdate(false); }
+  };
+  const updateText = updateStatus?.status === 'available'
+    ? `发现新版本 ${updateStatus.version || ''}`
+    : updateStatus?.status === 'not-available'
+      ? `已是最新版本 ${updateStatus.currentVersion || ''}`
+      : updateStatus?.status === 'error'
+        ? (updateStatus.message || '检测失败，请重试')
+        : updateStatus?.status === 'checking' || checkingUpdate
+          ? '正在检测更新…'
+          : '';
 
   return (
     <div className="space-y-5 max-w-6xl mx-auto">
@@ -25,20 +40,24 @@ export default function Dashboard() {
       <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-brand/20 via-exam/10 to-transparent border border-slate-800 p-6">
         <div className="relative z-10">
           <h1 className="text-2xl font-bold mb-1">你好，{acct?.nickname || acct?.email || '同学'} 👋</h1>
-          <p className="text-sm text-slate-400 mb-4">专注笔试截图答题与面试实时辅助，求职流程交给免费浏览器插件</p>
+          <p className="text-sm text-slate-400 mb-4">从网申简历识别与自动填写，到笔试练习和面试准备，一套账号贯穿求职流程</p>
           <div className="flex items-center gap-3">
             <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/60 border border-slate-700">
               <Wallet size={16} className="text-amber-400" />
               <span className="text-sm">积分余额</span>
               <span className="text-amber-400 font-bold">{credits}</span>
             </div>
-            <button onClick={() => api.system.openRecharge()} className="btn-primary text-xs">
+            <button onClick={() => window.dispatchEvent(new CustomEvent('quizmate:open-recharge'))} className="btn-primary text-xs">
               <Zap size={14} /> 充值积分
             </button>
             <button onClick={() => navigate('/extension')} className="btn-outline text-xs">
               <Chrome size={14} /> 安装求职插件 <ArrowRight size={12} />
             </button>
+            <button onClick={checkUpdate} disabled={checkingUpdate || updateStatus?.status === 'checking'} className="btn-outline text-xs">
+              <RefreshCw size={14} className={checkingUpdate || updateStatus?.status === 'checking' ? 'animate-spin' : ''} /> 检测更新
+            </button>
           </div>
+          {updateText && <div className={`mt-2 text-xs ${updateStatus?.status === 'error' ? 'text-rose-400' : updateStatus?.status === 'available' ? 'text-amber-300' : 'text-slate-400'}`}>{updateText}</div>}
         </div>
         <div className="absolute right-4 top-4 text-7xl opacity-10">🎯</div>
       </div>
@@ -62,8 +81,8 @@ export default function Dashboard() {
         <div className="card flex items-start gap-3">
           <TrendingUp size={20} className="text-accent mt-0.5" />
           <div>
-            <div className="text-sm font-medium">免费引流</div>
-            <div className="text-xs text-slate-400 mt-1">免费插件提供 AI 网申、投递管理与职位监控</div>
+            <div className="text-sm font-medium">网申自动化</div>
+            <div className="text-xs text-slate-400 mt-1">网申插件提供简历识别、字段填写、投递管理与职位监控</div>
           </div>
         </div>
       </div>
@@ -99,7 +118,7 @@ export default function Dashboard() {
         <div className="flex items-center gap-3 flex-wrap">
           <Chrome size={18} className="text-indigo-400" />
           <div className="flex-1 min-w-0">
-            <div className="text-sm font-medium">QuizMate 求职浏览器插件 · 完全免费</div>
+            <div className="text-sm font-medium">QuizMate AI 网申自动化插件</div>
             <div className="text-xs text-slate-400">AI 网申 · 投递管理 · 职位监控，覆盖浏览器内的求职流程</div>
           </div>
           <button onClick={() => navigate('/extension')} className="btn-outline text-xs">安装插件 <ArrowRight size={12} /></button>

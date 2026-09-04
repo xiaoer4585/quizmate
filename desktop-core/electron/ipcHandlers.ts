@@ -49,6 +49,9 @@ export interface OverlayControls {
   handleSearchAction: (mode: ProcessingMode) => Promise<void>;
   launchExamClient: () => Promise<{ success: boolean; error?: string }>;
   closeExamClient: () => Promise<void>;
+  startInterviewSession: (context?: unknown) => Promise<{ running: boolean }>;
+  stopInterviewSession: () => Promise<{ running: boolean }>;
+  toggleInterviewSession: () => Promise<{ running: boolean }>;
   switchProcessingMode: (mode: 'overlay' | 'voice') => Promise<void>;
   startShortcutTest: () => void;
   cancelShortcutTest: () => void;
@@ -64,9 +67,17 @@ export function registerIpcHandlers(
   controls: OverlayControls
 ) {
   // ===== 认证 =====
-  ipcMain.handle('auth:login', (_e, email: string, password: string) => ctx.authManager!.login(email, password));
+  ipcMain.handle('auth:login', async (_e, email: string, password: string) => {
+    const result = await ctx.authManager!.login(email, password);
+    void ctx.updateChecker?.checkForUpdates();
+    return result;
+  });
   ipcMain.handle('auth:sendRegisterCode', (_e, email: string) => ctx.authManager!.sendRegisterCode(email));
-  ipcMain.handle('auth:register', (_e, email: string, code: string, password: string, inviteCode?: string) => ctx.authManager!.register(email, code, password, inviteCode));
+  ipcMain.handle('auth:register', async (_e, email: string, code: string, password: string, inviteCode?: string) => {
+    const result = await ctx.authManager!.register(email, code, password, inviteCode);
+    void ctx.updateChecker?.checkForUpdates();
+    return result;
+  });
   ipcMain.handle('auth:logout', () => ctx.authManager!.logout());
   ipcMain.handle('auth:getProfile', () => ctx.authManager!.getProfile());
   ipcMain.handle('auth:isAuthenticated', () => ctx.authManager!.isAuthenticated());
@@ -97,8 +108,12 @@ export function registerIpcHandlers(
   // ===== 笔试助手 =====
   ipcMain.handle('exam:captureAndAnalyze', async () => {
     // 截图 + 分析一体化流程
-    await controls.handleScreenshot(false);
-    await controls.handleSearchAction(ctx.configHelper.getProcessingMode());
+    const mode = ctx.configHelper.getProcessingMode();
+    if (mode === 'voice') await controls.handleSearchAction(mode);
+    else {
+      await controls.handleScreenshot(false);
+      await controls.handleSearchAction(mode);
+    }
   });
   ipcMain.handle('exam:screenshot', async () => { await controls.handleScreenshot(false); });
   ipcMain.handle('exam:search', async () => { await controls.handleSearchAction(ctx.configHelper.getProcessingMode()); });
@@ -115,13 +130,15 @@ export function registerIpcHandlers(
   ipcMain.handle('shortcuts:getBindings', () => controls.shortcutsHelper.getBindings());
   ipcMain.handle('shortcuts:getRegistrationErrors', () => controls.shortcutsHelper.getRegistrationErrors());
   ipcMain.handle('shortcuts:setBinding', (_e, action: string, accelerator: string) => {
+    const conflict = controls.shortcutsHelper.checkConflict(accelerator, action as any);
+    if (conflict) return { success: false, conflict };
     const updated = controls.shortcutsHelper.setBinding(action as any, accelerator);
     if (updated) {
       controls.shortcutsHelper.refreshCurrentRegistration();
       const bindings = controls.shortcutsHelper.getBindings();
       BrowserWindow.getAllWindows().forEach((win) => win.webContents.send('shortcuts:updated', bindings));
     }
-    return updated;
+    return { success: updated };
   });
   ipcMain.handle('shortcuts:resetBinding', (_e, action: string) => {
     controls.shortcutsHelper.resetBinding(action as any);
@@ -172,10 +189,10 @@ export function registerIpcHandlers(
   ipcMain.handle('exam:getProcessingMode', () => ctx.configHelper.getProcessingMode());
 
   // ===== 面试助手 =====
-  ipcMain.handle('interview:start', (_e, context?) => ctx.interview!.start(context));
+  ipcMain.handle('interview:start', (_e, context?) => controls.startInterviewSession(context));
   ipcMain.handle('interview:restart', (_e, context?) => ctx.interview!.restart(context));
-  ipcMain.handle('interview:stop', () => ctx.interview!.stop());
-  ipcMain.handle('interview:toggle', () => ctx.interview!.toggleListening?.());
+  ipcMain.handle('interview:stop', () => controls.stopInterviewSession());
+  ipcMain.handle('interview:toggle', () => controls.toggleInterviewSession());
   ipcMain.handle('interview:activateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode('interview'); return true; });
   ipcMain.handle('interview:deactivateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode(ctx.configHelper.getProcessingMode()); return true; });
   ipcMain.handle('interview:setContext', (_e, context) => ctx.interview!.setContext(context));
@@ -269,14 +286,13 @@ export function registerIpcHandlers(
   ipcMain.handle('system:getAIConfigs', () => ctx.configHelper.getAllAIModelConfigs());
   ipcMain.handle('feedback:submit', async (_e, payload: { description: string; attachmentName?: string; attachmentType?: string; attachmentData?: string }) => {
     const token = ctx.configHelper.getAuthToken();
-    if (!token) throw new Error('请先登录后提交反馈。');
+    if (!token) throw new Error('请先登录后提交问题反馈。');
     return postAction(ctx.configHelper.getAppConfig().apiBaseUrl, 'submitFeedback', payload, { token, timeoutMs: 30_000 });
   });
   ipcMain.handle('announcements:get', async () => {
     try { return await postAction(ctx.configHelper.getAppConfig().apiBaseUrl, 'getClientAnnouncements', {}, { token: ctx.configHelper.getAuthToken() || undefined, timeoutMs: 10_000 }); }
     catch { return { exam: '', interview: '' }; }
   });
-
   // ===== 邀请代理 / 面经图片保存分享 =====
   ipcMain.handle('invite:generate-code', async () => {
     if (!ctx.processing) return { success: false, error: '处理模块未初始化' };

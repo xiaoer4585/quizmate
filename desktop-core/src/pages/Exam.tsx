@@ -2,7 +2,7 @@
 // 在 MainLayout 内渲染，不含 TitleBar；不含邀请代理和本地知识库
 import { useState, useEffect, useCallback } from 'react';
 import {
-  Play, Square, RefreshCw, ExternalLink, Info, Eye, EyeOff,
+  Play, Square, ExternalLink, Info, Eye, EyeOff,
   Volume2, Loader2,
   AlertCircle, Copy, FolderOpen,
 } from 'lucide-react';
@@ -30,7 +30,6 @@ export default function Exam() {
   const [userInfo, setUserInfo] = useState<any>(null);
   const [credits, setCredits] = useState<number | null>(null);
   const [version, setVersion] = useState('');
-  const [updateInfo, setUpdateInfo] = useState<any>(null);
 
   // 悬浮窗状态
   const [overlayActive, setOverlayActive] = useState<boolean>(false); // 是否已启动
@@ -180,12 +179,6 @@ export default function Exam() {
     await api.window.setOpacity(clamped);
   };
 
-  // 检测更新
-  const handleCheckUpdate = async () => {
-    const result = await api.app.checkUpdate();
-    setUpdateInfo(result);
-  };
-
   // 打开官网
   const handleOpenWebsite = () => {
     api.app.openExternal('https://quizmate.cn');
@@ -217,21 +210,11 @@ export default function Exam() {
                 <Square size={14} /> 关闭悬浮窗
               </button>
             )}
-            <button onClick={handleCheckUpdate} className="btn-ghost">
-              <RefreshCw size={14} /> 检测更新
-            </button>
             <button onClick={handleOpenWebsite} className="btn-ghost">
               <ExternalLink size={14} /> 官网
             </button>
           </div>
         </div>
-        {updateInfo && (
-          <div className={`mt-3 p-2 rounded text-xs ${updateInfo.hasUpdate ? 'bg-amber-500/10 text-amber-400' : 'bg-slate-800 text-slate-400'}`}>
-            {updateInfo.hasUpdate
-              ? `发现新版本 ${updateInfo.latest}（当前 ${updateInfo.current}）`
-              : `已是最新版本 ${updateInfo.current}`}
-          </div>
-        )}
       </div>
 
       {diagnosticError && (
@@ -414,10 +397,10 @@ export default function Exam() {
           <Info size={16} /> 操作提示
         </h3>
         <ul className="text-sm text-slate-300 space-y-2">
-          <li>· 点击「开始使用」启动笔试悬浮框，或按 {shortcutBindings.toggle_visibility || 'Ctrl+B'} 快捷键启动/切换</li>
+          <li>· 点击「开始使用」启动笔试悬浮框，或按 {shortcutBindings.toggle_visibility || 'Alt+B'} 快捷键启动/切换</li>
           <li>· 拖动悬浮框顶部提示栏可移动位置</li>
           <li>· 拖动悬浮框四边或四角可调整大小</li>
-          <li>· 使用「悬浮框显示」开关或 {shortcutBindings.toggle_visibility || 'Ctrl+B'} 快捷键可显示/隐藏悬浮框</li>
+          <li>· 使用「悬浮框显示」开关或 {shortcutBindings.toggle_visibility || 'Alt+B'} 快捷键可显示/隐藏悬浮框</li>
           <li>· 透明度可通过上方进度条实时调节</li>
           {processingMode === 'voice' && (
             <li>· 语音播报模式下，按搜题快捷键即可完成截图+分析+播报全流程</li>

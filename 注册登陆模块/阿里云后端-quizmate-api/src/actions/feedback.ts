@@ -22,7 +22,9 @@ export function createFeedbackActions(deps: ActionDependencies): Map<string, Act
     const account = await accountForToken(deps, input);
     const description = clean(input.description, 5000);
     if (!description) throw new PublicError("请填写问题描述。", "FEEDBACK_DESCRIPTION_REQUIRED");
-    const data = clean(input.attachmentData, 7_000_000);
+    const rawData = String(input.attachmentData ?? "");
+    if (rawData.length > 7_000_000) throw new PublicError("附件不能超过 5MB。", "FEEDBACK_ATTACHMENT_TOO_LARGE", 413);
+    const data = rawData.trim();
     if (data && !/^data:[^;]+;base64,[A-Za-z0-9+/=\s]+$/i.test(data)) throw new PublicError("附件格式不支持。", "INVALID_ATTACHMENT");
     const r = await deps.db.query<{ feedback_id: string; created_at: string }>(
       `INSERT INTO user_feedback(account_id,email,description,attachment_name,attachment_data,attachment_type)

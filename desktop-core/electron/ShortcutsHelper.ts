@@ -1,51 +1,17 @@
 // Global shortcuts helper - 完全沿用原考试插件的快捷键方案
 import { globalShortcut } from 'electron'
 import {
-  canonicalizeAccelerator,
   getDefaultShortcutBindings,
-  interviewShortcutActions,
   isConfigurable,
   normalizeMacAccelerator,
+  ShortcutConflict,
   ShortcutAction,
   toElectronAccelerator,
+  validateShortcutConflict,
 } from '../shared/shortcuts'
 import { ConfigHelper } from './ConfigHelper'
 
 type ActionHandler = (action: ShortcutAction) => void
-
-const voiceModeActions: Set<string> = new Set<string>([
-  // Screenshot remains available in subtitle/voice mode.
-  'screenshot',
-  'search',
-  'toggle_visibility',
-  'replay',
-  'quit',
-  'reset',
-  'interview_prev_question',
-  'interview_next_question',
-])
-
-// 面试模式下同样可用的窗口调节动作（与笔试悬浮窗一致：移动/缩放/透明度/界面缩放/复位）。
-// 这些动作在 handleShortcutAction 中按 interviewActive 路由到面试悬浮窗，
-// 若不加入白名单，interview:activateShortcuts 切换注册模式后快捷键将无法触发。
-const interviewWindowActions: Set<string> = new Set<string>([
-  'move_up',
-  'move_down',
-  'move_left',
-  'move_right',
-  'resize_height_larger',
-  'resize_height_smaller',
-  'resize_width_smaller',
-  'resize_width_larger',
-  'opacity_brighter',
-  'opacity_darker',
-  'opacity_brighter_alt',
-  'opacity_darker_alt',
-  'zoom_in',
-  'zoom_out',
-  'zoom_reset',
-  'reset_position',
-])
 
 export class ShortcutsHelper {
   private configHelper: ConfigHelper
@@ -95,6 +61,12 @@ export class ShortcutsHelper {
       migrated.interview_start = this.defaults.interview_start
       changed = true
     }
+    // Windows 旧默认值为 Ctrl+B。仅迁移这个历史默认值，用户自定义的其他组合保持不变。
+    if (process.platform !== 'darwin' && stored.toggle_visibility?.toLowerCase() === 'ctrl+b') {
+      this.bindings.toggle_visibility = this.defaults.toggle_visibility
+      migrated.toggle_visibility = this.defaults.toggle_visibility
+      changed = true
+    }
     if (process.platform === 'darwin') {
       const legacyMac: Record<string, string[]> = {
         screenshot: ['command+q', 'command+w', 'command+option+q'],
@@ -140,11 +112,7 @@ export class ShortcutsHelper {
   public setBinding(action: ShortcutAction, accelerator: string): boolean {
     if (!this.isConfigurable(action)) return false
     const storedAccelerator = process.platform === 'darwin' ? normalizeMacAccelerator(accelerator) : accelerator
-    for (const [a, acc] of Object.entries(this.bindings)) {
-      if (a !== action && canonicalizeAccelerator(acc) === canonicalizeAccelerator(storedAccelerator)) {
-        return false
-      }
-    }
+    if (this.checkConflict(storedAccelerator, action)) return false
     this.bindings[action] = storedAccelerator
     this.configHelper.setShortcutBindings?.(this.bindings)
     return true
@@ -165,14 +133,8 @@ export class ShortcutsHelper {
     return isConfigurable(action)
   }
 
-  public checkConflict(accelerator: string, excludeAction?: ShortcutAction): ShortcutAction | null {
-    for (const [a, acc] of Object.entries(this.bindings)) {
-      if (excludeAction && a === excludeAction) continue
-      if (canonicalizeAccelerator(acc) === canonicalizeAccelerator(accelerator)) {
-        return a as ShortcutAction
-      }
-    }
-    return null
+  public checkConflict(accelerator: string, excludeAction?: ShortcutAction): ShortcutConflict | null {
+    return validateShortcutConflict(process.platform, accelerator, excludeAction, this.bindings)
   }
 
   public registerGlobalShortcuts(): void {
@@ -206,14 +168,11 @@ export class ShortcutsHelper {
     this.registrationErrorHandler?.(data)
   }
 
-  private shouldRegister(action: ShortcutAction, mode: 'overlay' | 'voice' | 'interview'): boolean {
+  private shouldRegister(action: ShortcutAction, _mode: 'overlay' | 'voice' | 'interview'): boolean {
     if (action === 'quit') return false
-    if (action === 'restore_main_window') return true
-    if (mode === 'voice') return voiceModeActions.has(action)
-    if (mode === 'interview') {
-      return interviewShortcutActions.includes(action) || ['screenshot', 'search', 'reset', 'toggle_visibility', 'replay'].includes(action) || interviewWindowActions.has(action)
-    }
-    return !interviewShortcutActions.includes(action)
+    // 两个助手可同时运行，因此所有模式都注册同一组快捷键。
+    // 具体动作由主进程按“笔试专属 / 面试专属 / 最近激活窗口”独立路由。
+    return true
   }
 
   public registerGlobalShortcutsForMode(mode: 'overlay' | 'voice' | 'interview'): void {

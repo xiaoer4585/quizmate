@@ -4,6 +4,7 @@ import SolutionsView from '../components/exam/SolutionsView'
 import RawOutputView from '../components/exam/RawOutputView'
 import { useTheme } from '../contexts/ThemeContext'
 import { Camera, CheckCircle2, CircleAlert, Loader2, Sparkles } from 'lucide-react'
+import { isCurrentOperation } from '../../shared/overlay-state'
 
 // 笔试悬浮窗透明背景样式（防止 body 的 bg-slate-950 导致黑屏）
 function ExamOverlayStyles() {
@@ -60,6 +61,8 @@ export default function OverlayPage() {
   const [screenshots, setScreenshots] = useState<Screenshot[]>([])
   const [backgroundOpacity, setBackgroundOpacity] = useState(0.85)
   const [shortcutBindings, setShortcutBindings] = useState<Record<string, string>>({})
+  const activeOperationRef = useRef<string | null>(null)
+  const partialContentRef = useRef('')
 
   // Load initial data
   useEffect(() => {
@@ -103,20 +106,24 @@ export default function OverlayPage() {
       setShortcutBindings(bindings)
     }))
 
+    const eventBelongsToCurrentOperation = (data: any) => isCurrentOperation(activeOperationRef.current, data?.operationId)
+
     unsubs.push(api?.on('screenshot-added', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setScreenshots((prev) => {
         const newShot: Screenshot = { path: data.path, base64: data.base64, isExtra: data.isExtra }
-        const filtered = prev.filter(s => s.path !== data.path)
+        const filtered = data.isExtra ? prev.filter(s => s.path !== data.path) : prev.filter(s => s.isExtra)
         return [...filtered, newShot]
       })
-      // Stay on queue view if not processing
-      if (status === 'idle' || status === 'error') {
-        setView('queue')
-      }
       // 每次截图代表新一轮开始；捕获完成后立即结束“正在截取”状态。
+      setView('queue')
       setStatus('idle')
       setProgress(0)
       setProgressMessage('截图已就绪')
+      partialContentRef.current = ''
+      setPartialContent('')
+      setResult(null)
+      setRawContent('')
       setErrorMessage('')
     }))
 
@@ -130,49 +137,66 @@ export default function OverlayPage() {
     }))
 
     // 搜题后服务端清空了截图队列, 同步清空前端显示
-    unsubs.push(api?.on('screenshots-cleared', () => {
+    unsubs.push(api?.on('screenshots-cleared', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setScreenshots([])
     }))
 
     unsubs.push(api?.on('screenshot-error', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setErrorMessage(formatErrorMessage(data, '截图失败'))
       setStatus('error')
     }))
 
-    unsubs.push(api?.on('screenshot-started', () => {
+    unsubs.push(api?.on('screenshot-started', (data: any) => {
+      activeOperationRef.current = data?.operationId || null
       setErrorMessage('')
       setStatus('processing')
+      setView('queue')
+      setProgress(0)
       setProgressMessage('正在截取屏幕...')
+      partialContentRef.current = ''
+      setPartialContent('')
+      setResult(null)
+      setRawContent('')
     }))
 
-    unsubs.push(api?.on('initial-start', () => {
+    unsubs.push(api?.on('initial-start', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setStatus('processing')
       setView('solutions')
       setProgress(5)
       setProgressMessage('正在创建任务...')
+      partialContentRef.current = ''
       setPartialContent('')
       setResult(null)
       setErrorMessage('')
     }))
 
     unsubs.push(api?.on('problem-extracted', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setProgress(30)
       setProgressMessage('题目已提取，正在生成答案...')
       if (data.problem) {
-        setPartialContent(prev => prev + `\n[题目] ${typeof data.problem === 'string' ? data.problem : JSON.stringify(data.problem)}`)
+        const next = `${partialContentRef.current}\n[题目] ${typeof data.problem === 'string' ? data.problem : JSON.stringify(data.problem)}`
+        partialContentRef.current = next
+        setPartialContent(next)
       }
     }))
 
     unsubs.push(api?.on('solution-stream-chunk', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       if (data.progress !== undefined) setProgress(data.progress)
       if (data.message) setProgressMessage(data.message)
       if (data.partialContent) {
+        partialContentRef.current = data.partialContent
         setPartialContent(data.partialContent)
         setStatus('processing')
       }
     }))
 
     unsubs.push(api?.on('solution-stream-complete', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setStatus('completed')
       setProgress(100)
       setProgressMessage('完成')
@@ -183,36 +207,41 @@ export default function OverlayPage() {
         setResult(data.result)
       } else {
         // Use partial content as result
-        setResult({ answer: partialContent })
+        setResult({ answer: partialContentRef.current })
       }
       if (data && data.rawContent) {
         setRawContent(data.rawContent)
       } else {
-        setRawContent(partialContent)
+        setRawContent(partialContentRef.current)
       }
     }))
 
     unsubs.push(api?.on('solution-stream-error', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setStatus('error')
       setErrorMessage(formatErrorMessage(data, '处理失败'))
     }))
 
     unsubs.push(api?.on('solution-error', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setStatus('error')
       setErrorMessage(formatErrorMessage(data, '处理失败'))
     }))
 
     unsubs.push(api?.on('processing-unauthorized', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setStatus('error')
       setErrorMessage(formatErrorMessage(data, '登录已过期，请重新登录'))
     }))
 
     unsubs.push(api?.on('processing-no-screenshots', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setView('queue')
       setErrorMessage(formatErrorMessage(data, '请先截图'))
     }))
 
     unsubs.push(api?.on('out-of-credits', (data: any) => {
+      if (!eventBelongsToCurrentOperation(data)) return
       setStatus('error')
       setErrorMessage(formatErrorMessage(data, '积分不足，请充值'))
     }))
@@ -234,6 +263,7 @@ export default function OverlayPage() {
       setStatus('idle')
       setProgress(0)
       setProgressMessage('')
+      partialContentRef.current = ''
       setPartialContent('')
       setResult(null)
       setRawContent('')

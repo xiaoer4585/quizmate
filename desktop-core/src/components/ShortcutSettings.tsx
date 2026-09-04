@@ -72,6 +72,13 @@ export default function ShortcutSettings({
     api.config.resumeGlobalShortcuts()
   }
 
+  const formatConflict = (accelerator: string, conflict: any) => {
+    if (conflict?.reason) {
+      return `${accelerator} ${conflict.reason}${conflict.detail ? `（${conflict.detail}）` : ''}`
+    }
+    return `${accelerator} 已被“${getShortcutLabel(conflict)}”占用`
+  }
+
   const handleCapture = async (event: React.KeyboardEvent) => {
     event.preventDefault()
     event.stopPropagation()
@@ -88,6 +95,7 @@ export default function ShortcutSettings({
     if (event.altKey) parts.push('Alt')
     if (event.metaKey) parts.push('Super')
     let key = event.key === ' ' ? 'Space' : event.key
+    if (key.startsWith('Arrow')) key = key.slice('Arrow'.length)
     if (key.length === 1) key = key.toUpperCase()
     parts.push(key)
     const accelerator = parts.join('+')
@@ -102,7 +110,7 @@ export default function ShortcutSettings({
       const conflict = await api.config.checkShortcutConflict(accelerator, action)
       if (conflict) {
         finishCapture()
-        setStatus(`${accelerator} 已被“${getShortcutLabel(conflict)}”占用`)
+        setStatus(formatConflict(accelerator, conflict))
         return
       }
       const updated = await api.config.setShortcutBinding(action, accelerator)
@@ -111,7 +119,9 @@ export default function ShortcutSettings({
         onBindingsChange(await api.config.getShortcutBindings())
         setStatus(`${getShortcutLabel(action)}已设置为 ${accelerator}`)
       } else {
-        setStatus('设置失败，请换一个快捷键组合')
+        setStatus(updated?.conflict
+          ? formatConflict(accelerator, updated.conflict)
+          : '设置失败，请换一个快捷键组合')
       }
     } catch (error) {
       finishCapture()

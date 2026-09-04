@@ -324,9 +324,8 @@ export class UpdateChecker {
     }
   }
 
-  /** 启动自动检测：启动后 5 秒检测一次，之后每小时检测一次 */
+  /** 启动周期检测。首次登录检测由认证成功路径触发，避免进入工作台后重复请求。 */
   startAutoCheck(): void {
-    setTimeout(() => this.checkForUpdates(), 5_000);
     this.timer = setInterval(() => this.checkForUpdates(), 60 * 60 * 1000);
   }
 
