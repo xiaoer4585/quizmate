@@ -26,4 +26,19 @@
 - Mac `package-lock.json`：`8DE667EAFE63CB0139DC44D507ABDF3A9D5925BA38E457B051A25970DE08225C`
 - Mac `resources/config.json`：`53F892F1ED7530D87928E98785F5B28CDB84068D04B66DF32F36B5FB3B6A0916`
 
-> 尚未执行：GitHub Actions Windows/Mac 正式打包、安装包架构和更新源检查、OSS 回读哈希、官网及更新清单切换、安装包人工复核。
+> 发布范围调整：只上线 Windows。Mac 双架构 CI 仅作为后续测试产物，不上传生产、不更新 `mac/latest-mac.yml` 和官网 Mac 映射。
+
+## 正式发布补充结果
+
+- Windows GitHub Actions：运行 `33894854730`，提交 `1558599dca104dd948c517d060a6962194faed47`，`Windows ia32 universal installer` 成功。
+- Windows 正式安装包：`82,858,936` 字节，SHA-256 `EDCCFF84659ED5D65643157321CF61897AD1545016177DF296D3D4E1B95BBE6D`；blockmap SHA-256 `1D3525CA0B74A96BC5E5F4DB0B75C5BAC9AAC616D57E8966946D32F3544901AA`。
+- 包内检查：`PACKAGED_APP_OK version=2026.9.5000 arch=i386`，安装器和主程序均为 ia32 通用包，`app-update.yml` 指向 `https://quizmate.cn/suite/`。
+- 更新清单：`https://www.quizmate.cn/suite/latest.yml` 与 `https://www.quizmate.cn/downloads/latest.yml` 内容一致，内部版本 `2026.9.5000`，文件大小与正式包一致。
+- 公网安装包：`/suite/QuizMate-Windows-2026.09.05.exe` 与 `/downloads/QuizMate-Windows-2026.09.05.exe` Range 请求均返回 HTTP 206，`Content-Range` 总大小均为 `82,858,936`。
+- 官网：Windows 入口命中 `2026.09.05`；`download.html#ai-career-tools` 锚点存在；Mac Intel/Apple Silicon 卡片继续命中 `2026.08.29`。
+- 反馈/公告：生产 `getClientAnnouncements` HTTP 200；未登录 `submitFeedback` HTTP 401 `AUTH_REQUIRED`；无管理员凭据 `adminListFeedback` HTTP 403 `ADMIN_AUTH_FAILED`；后台页面 HTTP 200。
+- 回滚对象：`quizmate-cn/rollback/CHG-20260905-01/`；反馈后端 `/opt/quizmate-api-shadow.rollback-feedback-CHG-20260905-01-20260905-002708`；后台 `rollback/CHG-20260905-01/admin-web.index.before-feedback.html`。
+- Mac 未发布：运行 `33894856815` 已取消；正式触发标签已删除；`mac/latest-mac.yml` 仍为 `2026.8.29000` / `2026.08.29`；四个 Mac `2026.09.05` 生产 URL 均 HTTP 404。
+- 本地清理：已按精确白名单删除 Windows/Mac `out`、Windows `release`、Mac 测试证据中的两个 `release` 二进制目录、部署临时压缩包和 31,457,280 字节的残缺历史副本；本次正式包、2026.08.29 历史正式包及文字日志已复核保留。
+
+> 尚待用户安装后人工复核：DT-066 两个充值入口的弹框交互，以及 DT-067 网申按钮调用默认浏览器的最终桌面体验。该项不改变已完成的 Windows 生产发布事实；Mac 仍不得进入生产。
