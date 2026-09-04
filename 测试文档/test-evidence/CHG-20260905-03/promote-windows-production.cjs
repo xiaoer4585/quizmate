@@ -107,8 +107,17 @@ function replaceWindowsCard(value) {
   const end = value.indexOf('</article>', start);
   if (start < 0 || end < 0) throw new Error('Windows download card is missing or incomplete');
   let card = value.slice(start, end);
-  card = replaceChecked(card, previousExe, names.windowsExe, 'Windows download');
-  card = replaceChecked(card, PREVIOUS_PUBLIC_VERSION, PUBLIC_VERSION, 'Windows card version');
+  card = card.replace(
+    /QuizMate-Windows-2026\.09\.05(?:\.1){0,2}\.exe/g,
+    names.windowsExe,
+  );
+  card = card.replace(
+    /(<li><span>版本<\/span><strong>)2026\.09\.05(?:\.1){0,2}(<\/strong><\/li>)/,
+    `$1${PUBLIC_VERSION}$2`,
+  );
+  if (!card.includes(names.windowsExe) || !card.includes(`>${PUBLIC_VERSION}</strong>`)) {
+    throw new Error('Windows download card update did not reach the expected version');
+  }
   return value.slice(0, start) + card + value.slice(end);
 }
 
@@ -118,18 +127,15 @@ async function updatedPages(storage) {
     pages[object] = (await storage.get(object)).content.toString('utf8');
   }
   pages['download.html'] = replaceWindowsCard(pages['download.html']);
-  pages['index.html'] = replaceChecked(
-    pages['index.html'],
-    previousExe,
-    names.windowsExe,
-    'home Windows download',
-  );
-  pages['blog/article-exam-skills.html'] = replaceChecked(
-    pages['blog/article-exam-skills.html'],
-    previousExe,
-    names.windowsExe,
-    'article Windows download',
-  );
+  for (const object of ['index.html', 'blog/article-exam-skills.html']) {
+    pages[object] = pages[object].replace(
+      /QuizMate-Windows-2026\.09\.05(?:\.1){0,2}\.exe/g,
+      names.windowsExe,
+    );
+    if (!pages[object].includes(names.windowsExe)) {
+      throw new Error(`${object} did not reach the expected Windows version`);
+    }
+  }
   return pages;
 }
 
