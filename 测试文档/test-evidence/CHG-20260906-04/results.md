@@ -4,6 +4,7 @@
 
 - 发布分支：`codex/windows-release-20260906`
 - 发布提交：`fb7ab991e0ac5311686c647a502e739729a3b86e`
+- 发布后文档提交：`21823c1`，仅补充本次发布验收证据和主测试文档状态
 - 正式标签：`windows-publish-20260906-1`
 - 对外版本：`2026.09.06`（用户版本 `2026.9.6`）
 - 内部 SemVer：`2026.9.6000`
@@ -11,9 +12,9 @@
 
 ## 源码同步
 
-- Gitee `origin/main`：`fb7ab991e0ac5311686c647a502e739729a3b86e`
+- Gitee `origin/main`：`21823c1`（包含发布提交及发布后文档记录）
 - Gitee `origin/windows-publish-20260906-1`：已验证指向正式标签
-- GitHub `main`：`fb7ab991e0ac5311686c647a502e739729a3b86e`，通过 GitHub API 验证
+- GitHub `main`：`21823c1`（包含发布提交及发布后文档记录），通过 GitHub API 验证
 - GitHub `windows-publish-20260906-1`：通过 GitHub API 验证并解析到提交 `fb7ab991e0ac5311686c647a502e739729a3b86e`
 - 本次未创建额外 GitHub Release 页面，正式客户端以仓库标签和官网更新通道发布
 
