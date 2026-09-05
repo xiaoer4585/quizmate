@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Play, Square, ExternalLink, Info, Eye, EyeOff,
   Volume2, Loader2,
-  AlertCircle, Copy, FolderOpen,
+  AlertCircle, Copy, FolderOpen, ShieldCheck,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { defaultShortcutBindings, examOverlayShortcutActions, examVoiceShortcutActions, formatAccelerator, isMacPlatform } from '../../shared/shortcuts';
 import ShortcutSettings from '../components/ShortcutSettings';
 import FeatureGuide, { type FeatureGuideStep } from '../components/FeatureGuide';
+import type { PermissionOnboardingState } from '../../shared/reliability';
 
 type ProcessingMode = 'overlay' | 'voice';
 interface ExamDiagnosticError {
@@ -45,6 +46,8 @@ export default function Exam() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [diagnosticError, setDiagnosticError] = useState<ExamDiagnosticError | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [permissionState, setPermissionState] = useState<PermissionOnboardingState | null>(null);
+  const [permissionBusy, setPermissionBusy] = useState(false);
 
   // 加载初始配置数据
   const loadData = useCallback(async () => {
@@ -64,6 +67,10 @@ export default function Exam() {
       }
       const mode = await api.config.getProcessingMode();
       setProcessingMode(mode);
+      if (isMacPlatform()) {
+        const permissions = await api.permissions.getState().catch(() => null) as PermissionOnboardingState | null;
+        setPermissionState(permissions);
+      }
       // 同步悬浮框启动状态（由侧边栏菜单控制）
       const isActive = await api.app.isExamClientActive();
       setOverlayActive(!!isActive);
@@ -100,6 +107,13 @@ export default function Exam() {
     };
   }, [api, loadData]);
 
+  useEffect(() => {
+    if (!isMacPlatform()) return;
+    const refresh = () => api.permissions.getState().then((value: PermissionOnboardingState) => setPermissionState(value)).catch(() => {});
+    const timer = window.setInterval(refresh, 1500);
+    return () => window.clearInterval(timer);
+  }, [api]);
+
   const guideAccount = userInfo?.email || userInfo?.username || 'current';
   const guideStorageKey = `quizmate.feature-guide.exam.${guideAccount}`;
   useEffect(() => {
@@ -124,20 +138,41 @@ export default function Exam() {
 
   // 启动笔试悬浮窗
   const handleStartExam = async () => {
-    // 语音播报模式没有文字悬浮框，不能伪装成已启动。
-    if (processingMode === 'voice') {
-      setOverlayActive(false);
-      setOverlayVisible(false);
-      setDiagnosticError({ error: '当前为语音播报模式，无法启动笔试助手悬浮框，请切换为悬浮框文字模式后再使用。' });
-      return;
+    try {
+      // 语音播报模式没有文字悬浮框，不能伪装成已启动。
+      if (processingMode === 'voice') {
+        setOverlayActive(false);
+        setOverlayVisible(false);
+        setDiagnosticError({ error: '当前为语音播报模式，无法启动笔试助手悬浮框，请切换为悬浮框文字模式后再使用。' });
+        return;
+      }
+      if (isMacPlatform()) {
+        setPermissionBusy(true);
+        try {
+          const checked = await api.permissions.authorizeAll() as PermissionOnboardingState;
+          setPermissionState(checked);
+          if (!checked?.completed) {
+            setDiagnosticError({ error: '笔试助手需要屏幕录制权限。请在系统设置中允许 QuizMate 后，再点击开始使用。', code: checked?.errorCode || 'EXAM_PERMISSION_REQUIRED', stage: 'capture-permission' });
+            return;
+          }
+        } finally {
+          setPermissionBusy(false);
+        }
+      }
+      const result = await api.app.launchExamClient();
+      if (result?.success === false) {
+        setDiagnosticError({ error: result.error || '无法启动笔试助手悬浮框' });
+        return;
+      }
+      setDiagnosticError(null);
+      setOverlayActive(true);
+      setOverlayVisible(true);
+    } catch (error) {
+      // IPC/权限异常以前会让按钮看起来“无反应”；将错误显式反馈给用户。
+      setDiagnosticError({ error: error instanceof Error ? error.message : '无法启动笔试助手悬浮框，请检查系统权限后重试。', code: 'EXAM_LAUNCH_FAILED', stage: 'launch' });
+    } finally {
+      setPermissionBusy(false);
     }
-    const result = await api.app.launchExamClient();
-    if (result?.success === false) {
-      setDiagnosticError({ error: result.error || '无法启动笔试助手悬浮框' });
-      return;
-    }
-    setOverlayActive(true);
-    setOverlayVisible(true);
   };
 
   // 关闭笔试悬浮窗
@@ -192,6 +227,26 @@ export default function Exam() {
   return (
     <div className="max-w-5xl mx-auto space-y-4">
       {announcement && <div className="card border-cyan-500/30 bg-cyan-500/5 text-sm text-cyan-200">📢 {announcement}</div>}
+      {isMacPlatform() && permissionState && (
+        <div className={`card ${permissionState.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-amber-500/30 bg-amber-500/5'}`} data-guide-target="exam-permissions">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">笔试助手权限状态</div>
+              <div className="mt-1 text-xs text-slate-300">
+                屏幕录制：<span className={permissionState.screen === 'verified' ? 'text-emerald-300' : 'text-amber-300'}>{permissionState.screen}</span>
+                {' · '}麦克风：<span className="text-slate-300">{permissionState.microphone}</span>
+                {' · '}系统音频：<span className="text-slate-300">{permissionState.systemAudio}</span>
+              </div>
+              {!permissionState.completed && <div className="mt-1 text-xs text-amber-200">开始使用前必须完成授权；新安装包或签名变化后需要重新勾选 QuizMate。</div>}
+            </div>
+            {!permissionState.completed && (
+              <button className="btn-outline text-xs shrink-0" disabled={permissionBusy} onClick={() => api.permissions.authorizeAll().then((value: PermissionOnboardingState) => setPermissionState(value)).catch(() => {})}>
+                {permissionBusy ? <Loader2 size={12} className="animate-spin" /> : <ShieldCheck size={12} />}重新授权
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {/* 头部：用户信息 + 积分 + 操作按钮 */}
       <div className="card">
         <div className="flex items-center justify-between gap-3 flex-wrap">

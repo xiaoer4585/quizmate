@@ -1,49 +1,29 @@
-# CHG-20260906-04 发布验收证据
+# CHG-20260906-04 测试证据
 
-## 发布对象
+## 变更
 
-- 发布分支：`codex/windows-release-20260906`
-- 发布提交：`fb7ab991e0ac5311686c647a502e739729a3b86e`
-- 正式标签：`windows-publish-20260906-1`
-- 对外版本：`2026.09.06`（用户版本 `2026.9.6`）
-- 内部 SemVer：`2026.9.6000`
-- GitHub Actions：`33981162810`，Windows ia32 构建、架构校验和正式包上传通过
+- Mac 笔试页“开始使用”此前调用 `window.electronAPI.permissions.authorizeAll()`，但 preload 兼容层缺少 `permissions`，导致点击后在权限检查阶段异常中断，悬浮框启动未执行。
+- 在 `desktop-core/electron/preload.ts` 补齐 `getState`、`authorizeAll`、`openSettings`；在 `Exam.tsx` 增加 IPC 异常可见反馈。
+- Mac 测试版本：`2026.09.06.3`（内部 SemVer `2026.9.6003`）。不修改官网、正式更新清单或生产更新通道。
 
-## 源码同步
+## 自动化回归（2026-09-06）
 
-- Gitee `origin/main`：`fb7ab991e0ac5311686c647a502e739729a3b86e`
-- Gitee `origin/windows-publish-20260906-1`：已验证指向正式标签
-- GitHub `main`：`fb7ab991e0ac5311686c647a502e739729a3b86e`，通过 GitHub API 验证
-- GitHub `windows-publish-20260906-1`：通过 GitHub API 验证并解析到提交 `fb7ab991e0ac5311686c647a502e739729a3b86e`
-- 本次未创建额外 GitHub Release 页面，正式客户端以仓库标签和官网更新通道发布
+| 平台/项目 | 命令 | 结果 |
+|---|---|---|
+| macOS 目标配置 | `npm run typecheck:node` | 通过 |
+| macOS 目标配置 | `npm run typecheck:web` | 通过 |
+| macOS 目标配置 | `npm run test:shared` | 通过（共享用例全部通过） |
+| macOS 目标配置 | `npm run test:mac-protection` | 通过（4/4） |
+| macOS 目标配置 | `npm run build` | 通过 |
+| Windows 目标配置 | `npm run typecheck:node` | 通过 |
+| Windows 目标配置 | `npm run typecheck:web` | 通过 |
+| Windows 目标配置 | `npm run test:shared` | 通过（48/48） |
+| Windows 目标配置 | `npm run build` | 通过 |
 
-## 正式包
+## 实机验收
 
-- 官网下载：`https://quizmate.cn/downloads/QuizMate-Windows-2026.09.06.exe`
-- 更新清单：`https://quizmate.cn/suite/latest.yml`
-- 备用清单：`https://quizmate.cn/downloads/latest.yml`
-- 文件大小：`82,859,872` 字节
-- SHA-256：`b867a8c353b13b13c139880db0f6bbebf6b7732e898022b053bab5fa15510579`
-- 清单核心内容：`version: 2026.9.6000`，文件 `QuizMate-Windows-2026.09.06.exe`
-
-## 公网验收
-
-2026-09-06 在发布环境执行 HEAD 检查，以下 URL 均返回 HTTP 200；下载文件 `Content-Length` 为 `82859872`，与发布包大小一致：
-
-- `https://quizmate.cn/suite/latest.yml`
-- `https://quizmate.cn/downloads/latest.yml`
-- `https://quizmate.cn/downloads/QuizMate-Windows-2026.09.06.exe`
-- `https://quizmate.cn/download.html`
-- `https://quizmate.cn/index.html`
-
-GitHub Actions 已完成正式构建和包内校验；正式客户端仅发布 Windows ia32。Mac、Android、浏览器扩展未随本次发布变更。
+待用户安装 Mac 测试包后验证：权限状态显示、点击“开始使用”、Option+Q 截图、Option+E 搜题、Option+R 面试启停，以及悬浮框投屏不可见和鼠标穿透。实体 Mac 权限和快捷键不能由 CI 结果替代。
 
 ## 回滚
 
-- 备份目录：`quizmate-cn/rollback/CHG-20260906-04/`
-- 已备份正式清单、官网页面、博客页和 Windows 操作手册。
-- 回滚方式：恢复该目录中的 `suite/latest.yml`、`downloads/latest.yml`、官网页面和手册；保留旧版本化安装包，不移动正式标签。
-
-## 结论
-
-正式发布完成，自动更新已映射到 Windows `2026.09.06`。本次没有发布 Mac 或其他平台，也没有修改原工作区未纳入发布的改动。
+回滚 `desktop-core/electron/preload.ts`、`desktop-core/src/pages/Exam.tsx` 及本次版本字段即可；无数据库迁移，不涉及正式线上对象。
