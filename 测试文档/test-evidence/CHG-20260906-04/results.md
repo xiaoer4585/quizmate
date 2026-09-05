@@ -6,6 +6,16 @@
 - 在 `desktop-core/electron/preload.ts` 补齐 `getState`、`authorizeAll`、`openSettings`；在 `Exam.tsx` 增加 IPC 异常可见反馈。
 - Mac 测试版本：`2026.09.06.3`（内部 SemVer `2026.9.6003`）。不修改官网、正式更新清单或生产更新通道。
 
+## 测试包
+
+- GitHub Actions：`33986555897`，Intel 与 Apple Silicon 均成功。
+- 临时下载目录：`https://quizmate.cn/temp/mac-delivery-20260906-start-button-1/`
+- [Intel DMG](https://quizmate.cn/temp/mac-delivery-20260906-start-button-1/QuizMate-Mac-Intel-2026.09.06.3.dmg)，SHA-256 `3abb37c0a6137c6c282bff01dcbd9b24622e2f1252ae243e3d8f008cfecb0388`。
+- [Intel ZIP](https://quizmate.cn/temp/mac-delivery-20260906-start-button-1/QuizMate-Mac-x64-2026.09.06.3.zip)，SHA-256 `a33da5f0b7e8b9e7de5d74318d5fd420fed2fdaa196891e1bfc368d08bfa0bbb`。
+- [Apple Silicon DMG](https://quizmate.cn/temp/mac-delivery-20260906-start-button-1/QuizMate-Mac-Apple-Silicon-2026.09.06.3.dmg)，SHA-256 `d7b393ffd1765c4b851a8a85b4c0c7bc8a0730a6d69f657d5356244e877c6bcd`。
+- [Apple Silicon ZIP](https://quizmate.cn/temp/mac-delivery-20260906-start-button-1/QuizMate-Mac-arm64-2026.09.06.3.zip)，SHA-256 `6067f07d50eaa0ae86c75ee2fa924298fc2cf2c88a1c388a9cdeee92a8b33590`。
+- 四个对象 HEAD 均为 HTTP 200；Range `bytes=0-1023` 验证返回 HTTP 206/1024 字节。临时对象不接入正式更新通道。
+
 ## 自动化回归（2026-09-06）
 
 | 平台/项目 | 命令 | 结果 |
