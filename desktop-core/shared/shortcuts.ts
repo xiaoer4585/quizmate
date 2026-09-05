@@ -37,7 +37,7 @@ const windowsShortcutBindings: Record<ShortcutAction, string> = {
 }
 
 const macShortcutBindings: Record<ShortcutAction, string> = {
-  screenshot: 'Option+Q', search: 'Option+E', voice_search: 'Option+T', toggle_visibility: 'Option+B', copy_content: 'Command+Shift+C', replay: 'Command+R',
+  screenshot: 'Option+Q', search: 'Option+E', voice_search: 'Option+T', toggle_visibility: 'Option+B', copy_content: 'Command+C', replay: 'Command+R',
   interview_start: 'Option+R',
   interview_prev_question: 'Option+Up', interview_next_question: 'Option+Down',
   quit: '', reset: 'Command+Shift+T', move_up: 'Command+Up', move_down: 'Command+Down', move_left: 'Command+Left', move_right: 'Command+Right',
@@ -55,7 +55,7 @@ export function normalizeMacAccelerator(accelerator: string): string {
 const legacyMacDefaultBindings: Partial<Record<ShortcutAction, string[]>> = {
   screenshot: ['command+q', 'command+w', 'command+option+q'],
   search: ['command+e', 'command+option+e'],
-  copy_content: ['option+c'],
+  copy_content: ['option+c', 'command+shift+c'],
   replay: ['option+r'],
   interview_start: ['option+i', 'command+i', 'command+shift+i'],
 }
@@ -233,40 +233,25 @@ export function isMacPlatform(): boolean {
   return false
 }
 
-/** 按平台展示快捷键: macOS 用 ⌘/⌥/⇧/⌃ 符号, Windows 保持 Ctrl/Alt 原样 */
+/** 按平台展示快捷键：macOS 使用 option/command 等可读文字，Windows 保持 Ctrl/Alt 原样。 */
 export function formatAccelerator(accelerator: string): string {
   if (!accelerator) return accelerator
-  if (!isMacPlatform()) return accelerator
+  if (isMacPlatform()) return formatAcceleratorText(accelerator)
+  return accelerator
+}
+
+/** Textual accelerator for settings and help: keep modifier names readable on every platform. */
+export function formatAcceleratorText(accelerator: string): string {
+  if (!accelerator) return accelerator
   const parts = accelerator.split('+')
-  return parts
-    .map((part, index) => {
-      const p = part.trim()
-      const isLast = index === parts.length - 1
-      switch (p) {
-        case 'Command':
-        case 'Cmd':
-        case 'Super':
-        case 'CommandOrControl':
-        case 'CmdOrCtrl':
-          return '⌘'
-        case 'Option':
-        case 'Alt':
-          return '⌥'
-        case 'Shift':
-          return '⇧'
-        case 'Control':
-        case 'Ctrl':
-          return '⌃'
-        default:
-          if (isLast) {
-            if (p === 'Up') return '↑'
-            if (p === 'Down') return '↓'
-            if (p === 'Left') return '←'
-            if (p === 'Right') return '→'
-            if (p.length === 1) return p.toUpperCase()
-          }
-          return p
-      }
-    })
-    .join('')
+  return parts.map((part, index) => {
+    const p = part.trim()
+    const lower = p.toLowerCase()
+    if (lower === 'alt' || lower === 'option') return 'option'
+    if (lower === 'command' || lower === 'cmd' || lower === 'super' || lower === 'meta') return 'command'
+    if (lower === 'control' || lower === 'ctrl') return 'ctrl'
+    if (lower === 'shift') return 'shift'
+    if (index === parts.length - 1 && p.length === 1) return p.toUpperCase()
+    return p
+  }).join('+')
 }

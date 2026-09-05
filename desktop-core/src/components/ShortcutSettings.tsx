@@ -2,6 +2,8 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Keyboard, Pencil, RotateCcw } from 'lucide-react'
 import {
   defaultShortcutBindings,
+  formatAcceleratorText,
+  isMacPlatform,
   getShortcutLabel,
   shortcutMetadata,
   type ShortcutAction,
@@ -92,8 +94,8 @@ export default function ShortcutSettings({
     const parts: string[] = []
     if (event.ctrlKey) parts.push('Ctrl')
     if (event.shiftKey) parts.push('Shift')
-    if (event.altKey) parts.push('Alt')
-    if (event.metaKey) parts.push('Super')
+    if (event.altKey) parts.push(isMacPlatform() ? 'Option' : 'Alt')
+    if (event.metaKey) parts.push(isMacPlatform() ? 'Command' : 'Super')
     let key = event.key === ' ' ? 'Space' : event.key
     if (key.startsWith('Arrow')) key = key.slice('Arrow'.length)
     if (key.length === 1) key = key.toUpperCase()
@@ -159,8 +161,8 @@ export default function ShortcutSettings({
             <div key={meta.action} data-guide-target={`shortcut-${meta.action}`} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-slate-900/40 border border-slate-800/80">
               <span className="text-sm min-w-0">{meta.label}</span>
               <div className="flex items-center gap-2 shrink-0">
-                <kbd className={`min-w-20 text-center px-2 py-1 text-xs rounded border ${editingAction === meta.action ? `${accentClass} border-transparent text-white animate-pulse` : 'bg-slate-800 border-slate-700'}`}>
-                  {editingAction === meta.action ? '等待按键' : (bindings[meta.action] || meta.accelerator)}
+                <kbd className={`min-w-[8.5rem] whitespace-nowrap text-center px-3 py-1 text-xs rounded border ${editingAction === meta.action ? `${accentClass} border-transparent text-white animate-pulse` : 'bg-slate-800 border-slate-700'}`}>
+                  {editingAction === meta.action ? '等待按键' : formatAcceleratorText(bindings[meta.action] || meta.accelerator)}
                 </kbd>
                 <button onClick={() => beginCapture(meta.action)} className="btn-outline text-xs px-2 py-1" title={`更改${meta.label}`}>
                   <Pencil size={12} /> 更改
@@ -182,7 +184,7 @@ export default function ShortcutSettings({
             <div key={meta.action} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-slate-900/40 border border-slate-800/80">
               <span className="text-sm">{meta.label}</span>
               <kbd className="px-2 py-1 text-xs rounded bg-slate-800 border border-slate-700">
-                {bindings[meta.action] || defaultShortcutBindings[meta.action]}
+                {formatAcceleratorText(bindings[meta.action] || defaultShortcutBindings[meta.action])}
               </kbd>
             </div>
           ))}

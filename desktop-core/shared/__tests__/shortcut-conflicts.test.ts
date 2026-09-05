@@ -3,6 +3,7 @@ import {
   canonicalizeAccelerator,
   getDefaultShortcutBindings,
   migrateMacLegacyShortcut,
+  formatAcceleratorText,
   type ShortcutAction,
   validateShortcutConflict,
 } from '../shortcuts'
@@ -73,7 +74,7 @@ describe('shortcut conflict validation', () => {
       toggle_visibility: 'Option+B',
       interview_start: 'Option+R',
       replay: 'Command+R',
-      copy_content: 'Command+Shift+C',
+      copy_content: 'Command+C',
     })
   })
 
@@ -82,7 +83,7 @@ describe('shortcut conflict validation', () => {
     ['interview_start', 'Command+I', 'Option+R'],
     ['interview_start', 'Command+Shift+I', 'Option+R'],
     ['replay', 'Option+R', 'Command+R'],
-    ['copy_content', 'Option+C', 'Command+Shift+C'],
+    ['copy_content', 'Option+C', 'Command+C'],
     ['screenshot', 'Command+Option+Q', 'Option+Q'],
   ] as Array<[ShortcutAction, string, string]>)('migrates legacy Mac default %s %s', (action, stored, expected) => {
     expect(migrateMacLegacyShortcut(action, stored)).toBe(expected)
@@ -91,5 +92,10 @@ describe('shortcut conflict validation', () => {
   it('preserves genuine custom Mac bindings while normalizing Alt spelling', () => {
     expect(migrateMacLegacyShortcut('interview_start', 'Option+F8')).toBe('Option+F8')
     expect(migrateMacLegacyShortcut('replay', 'Alt+F9')).toBe('Option+F9')
+  })
+
+  it('renders readable textual shortcut names', () => {
+    expect(formatAcceleratorText('Option+Q')).toBe('option+Q')
+    expect(formatAcceleratorText('Command+Shift+C')).toBe('command+shift+C')
   })
 })

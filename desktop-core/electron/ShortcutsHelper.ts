@@ -133,7 +133,9 @@ export class ShortcutsHelper {
 
   private registerAction(action: ShortcutAction, accelerator: string, mode: string): void {
     try {
-      const electronAccelerator = toElectronAccelerator(accelerator)
+      // Electron's macOS accelerator grammar calls Option "Alt". Normalize
+      // both persisted text and captured browser aliases before registration.
+      const electronAccelerator = toElectronAccelerator(normalizeMacAccelerator(accelerator))
       const ret = globalShortcut.register(electronAccelerator, () => {
         if (this.testMode && this.testCallback) {
           this.testCallback(accelerator)
@@ -209,7 +211,7 @@ export class ShortcutsHelper {
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!this.pausedAccelerators.has(accelerator)) continue
       try {
-        const ret = globalShortcut.register(toElectronAccelerator(accelerator), () => {
+        const ret = globalShortcut.register(toElectronAccelerator(normalizeMacAccelerator(accelerator)), () => {
           if (this.testMode && this.testCallback) {
             this.testCallback(accelerator)
             return
