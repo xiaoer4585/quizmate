@@ -31,6 +31,7 @@
 - 根因：macOS Option+字母在 `KeyboardEvent.key` 中会变成 `œ`、`´`、`®` 等组合字符，旧配置被持久化后默认快捷键无法注册；注册链路也只尝试单一 Electron accelerator 拼写。
 - 修复：迁移已保存的组合字符到物理字母；Mac 注册和恢复时兼容 `Alt/Option` 及大小写 key 拼写；UI 始终显示 `option+q`、`option+e`、`option+r` 等小写文本。
 - 新测试包版本：`2026.09.06.2`，需重新安装并在系统设置中确认当前 QuizMate 权限。
+- 本次 GitHub Actions `33984932527` 双架构成功。Intel DMG/ZIP SHA-256：`ed252f53740ac3eb107628b20fd887bd243f82503519ff00442dedbf47d87e17` / `c8c7aed193807b947848a2b817a0aada5b22ad4ea325503e08e9564fc60e0c74`；Apple Silicon DMG/ZIP：`8795879726dff085ef841834225a442843689ea71c5cf97956b2af919a52e14d` / `cabf4f7652496e49cbc69eb1a6b93747e42781c006357be51d5c0a7e3db23379`。四个对象 HTTP 200/Range 206 校验通过。
 
 ## 回滚
 
