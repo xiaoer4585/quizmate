@@ -103,6 +103,12 @@ describe('shortcut conflict validation', () => {
     expect(migrateMacLegacyShortcut('replay', 'Alt+F9')).toBe('Option+F9')
   })
 
+  it('normalizes macOS Option composed characters back to physical keys', () => {
+    expect(migrateMacLegacyShortcut('screenshot', 'Option+œ')).toBe('Option+q')
+    expect(migrateMacLegacyShortcut('search', 'Option+´')).toBe('Option+e')
+    expect(migrateMacLegacyShortcut('interview_start', 'Option+®')).toBe('Option+r')
+  })
+
   it('renders readable textual shortcut names', () => {
     expect(formatAcceleratorText('Option+Q')).toBe(isMacPlatform() ? 'option+q' : 'alt+q')
     expect(formatAcceleratorText('Command+Shift+C')).toBe(isMacPlatform() ? 'command+shift+c' : 'ctrl+shift+c')

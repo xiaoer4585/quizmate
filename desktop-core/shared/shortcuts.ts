@@ -47,9 +47,24 @@ const macShortcutBindings: Record<ShortcutAction, string> = {
   restore_main_window: 'Command+Shift+Option+M',
 }
 
+const macOptionKeyAliases: Record<string, string> = {
+  // macOS lays out Option+letter as a composed character in KeyboardEvent.key.
+  // Persist the physical letter instead so defaults and captured shortcuts
+  // remain stable across layouts and can be registered globally.
+  'œ': 'q', '´': 'e', '†': 't', '∫': 'b', '®': 'r', 'ç': 'c',
+  'å': 'a', 'ß': 's', 'ƒ': 'f', '∂': 'd', '©': 'g', '˙': 'h', '˚': 'k',
+  '¬': 'l', 'µ': 'm', 'ø': 'o', 'π': 'p', '™': 't', '√': 'v', '∑': 'w',
+  '≈': 'x', 'Ω': 'z',
+}
+
 /** Keep Option in persisted/UI values while Electron receives its Alt accelerator spelling. */
 export function normalizeMacAccelerator(accelerator: string): string {
-  return accelerator.split('+').map(part => part.trim().toLowerCase() === 'alt' ? 'Option' : part.trim()).join('+')
+  const parts = accelerator.split('+').map(part => part.trim())
+  if (parts.length > 1 && parts.some(part => part.toLowerCase() === 'option' || part.toLowerCase() === 'alt')) {
+    const last = parts.length - 1
+    parts[last] = macOptionKeyAliases[parts[last]] || macOptionKeyAliases[parts[last].toLowerCase()] || parts[last]
+  }
+  return parts.map(part => part.toLowerCase() === 'alt' ? 'Option' : part).join('+')
 }
 
 /** Windows persists and displays the native Alt spelling, never macOS Option. */

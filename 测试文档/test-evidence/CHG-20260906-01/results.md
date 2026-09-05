@@ -26,6 +26,12 @@
 - Apple Silicon ZIP：`22167538ea33ca839b8933013d754376fe4cad52d7a09db8a1dee002cdf6d605`。
 - 四个对象均已完成 HTTP 200 HEAD 与 HTTP 206 Range `bytes=0-1023` 校验；生产 Mac 更新清单未改。
 
+## 2026-09-06 快捷键追加修复
+
+- 根因：macOS Option+字母在 `KeyboardEvent.key` 中会变成 `œ`、`´`、`®` 等组合字符，旧配置被持久化后默认快捷键无法注册；注册链路也只尝试单一 Electron accelerator 拼写。
+- 修复：迁移已保存的组合字符到物理字母；Mac 注册和恢复时兼容 `Alt/Option` 及大小写 key 拼写；UI 始终显示 `option+q`、`option+e`、`option+r` 等小写文本。
+- 新测试包版本：`2026.09.06.2`，需重新安装并在系统设置中确认当前 QuizMate 权限。
+
 ## 回滚
 
 - 回滚到 `341dad3`，删除本轮临时测试包对象；不触碰官网和正式 Mac 更新映射。

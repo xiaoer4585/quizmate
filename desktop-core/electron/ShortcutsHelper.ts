@@ -146,18 +146,19 @@ export class ShortcutsHelper {
         }
         this.handler?.(action)
       }
-      const ret = globalShortcut.register(electronAccelerator, callback)
-      if (ret) this.registered.add(accelerator)
-      if (!ret && process.platform === 'darwin' && electronAccelerator !== accelerator) {
-        // Electron versions differ on whether Option or Alt is accepted in
-        // globalShortcut. Retry the native spelling once for compatibility.
-        const nativeRet = globalShortcut.register(accelerator, callback)
-        if (nativeRet) {
+      const lowerLast = (value: string) => value.length ? `${value.slice(0, -1)}${value.slice(-1).toLowerCase()}` : value
+      const candidates = process.platform === 'darwin'
+        ? Array.from(new Set([electronAccelerator, lowerLast(electronAccelerator), accelerator, lowerLast(accelerator)]))
+        : [electronAccelerator]
+      let registered = false
+      for (const candidate of candidates) {
+        if (globalShortcut.register(candidate, callback)) {
           this.registered.add(accelerator)
-          return
+          registered = true
+          break
         }
       }
-      if (!ret) {
+      if (!registered) {
         console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
         this.reportRegistrationError({ action, accelerator, mode })
       }
@@ -229,7 +230,13 @@ export class ShortcutsHelper {
     for (const [action, accelerator] of Object.entries(this.bindings)) {
       if (!this.pausedAccelerators.has(accelerator)) continue
       try {
-        const ret = globalShortcut.register(toElectronAccelerator(normalizeMacAccelerator(accelerator)), () => {
+        const normalized = normalizeMacAccelerator(accelerator)
+        const electronAccelerator = toElectronAccelerator(normalized)
+        const lowerLast = (value: string) => value.length ? `${value.slice(0, -1)}${value.slice(-1).toLowerCase()}` : value
+        const candidates = process.platform === 'darwin'
+          ? Array.from(new Set([electronAccelerator, lowerLast(electronAccelerator), normalized, lowerLast(normalized)]))
+          : [electronAccelerator]
+        const callback = () => {
           if (this.testMode && this.testCallback) {
             this.testCallback(accelerator)
             return
@@ -237,7 +244,11 @@ export class ShortcutsHelper {
           if (this.handler) {
             this.handler(action as ShortcutAction)
           }
-        })
+        }
+        let ret = false
+        for (const candidate of candidates) {
+          if (globalShortcut.register(candidate, callback)) { ret = true; break }
+        }
         if (ret) {
           this.registered.add(accelerator)
         } else {
