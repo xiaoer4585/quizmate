@@ -1,14 +1,16 @@
-// A finalized utterance should dispatch to the interview model within 300ms.
-// Interim text still uses a longer silence window to avoid splitting a question.
+// Keep the original responsive dispatch timing. Long ASR fragments are
+// disambiguated by the recent conversation context sent to the model.
 export const ASR_SILENCE_COMMIT_MS = 900;
 export const ASR_FINAL_COMMIT_MS = 180;
+/** Only unfinished question fragments get this longer coalescing window. */
+export const ASR_FRAGMENT_SETTLE_MS = 2_000;
 
 export const INTERVIEW_CONTEXT_LIMITS = {
   // Keep the client request at or below the deployed service limits so the
   // backend can forward it without a second compaction pass.
   jobDescription: 4000,
   resumeText: 8000,
-  recentConversation: 2000,
+  recentConversation: 8000,
 } as const;
 
 const CONTEXT_OMISSION_MARKER = '\n…[中间内容已省略以加快响应]…\n';
@@ -109,5 +111,17 @@ export function isLikelyInterviewQuestion(text: string, audioMode: 'demo' | 'for
   if (interviewTopic.test(value.replace(/[，。！？、,.!?；;：:\s]/g, ''))) return true;
   if (audioMode === 'demo') return value.length >= 4;
   return value.replace(/[，。！？、,.!?；;：:\s]/g, '').length >= 8;
+}
+
+/**
+ * ASR final events are often phrase fragments rather than complete questions.
+ * Hold only these clearly unfinished fragments briefly; complete short questions
+ * keep the fast submission path.
+ */
+export function isLikelyIncompleteInterviewFragment(text: string): boolean {
+  const normalized = normalizeTranscript(text);
+  const value = normalized.replace(/[，,。！？!?；;：:]+$/g, '').trim();
+  if (!value || /[。！？!?]$/.test(normalized)) return false;
+  return /(?:如果|因为|所以|然后|并且|以及|但是|还有|另外|关于|对于|当|当时|在|从|到|和|与|或|请你|你来|能不能|能否|是否)$/.test(value);
 }
 

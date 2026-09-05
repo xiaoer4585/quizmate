@@ -52,6 +52,11 @@ export function normalizeMacAccelerator(accelerator: string): string {
   return accelerator.split('+').map(part => part.trim().toLowerCase() === 'alt' ? 'Option' : part.trim()).join('+')
 }
 
+/** Windows persists and displays the native Alt spelling, never macOS Option. */
+export function normalizeWindowsAccelerator(accelerator: string): string {
+  return accelerator.split('+').map(part => part.trim().toLowerCase() === 'option' ? 'Alt' : part.trim()).join('+')
+}
+
 const legacyMacDefaultBindings: Partial<Record<ShortcutAction, string[]>> = {
   screenshot: ['command+q', 'command+w', 'command+option+q'],
   search: ['command+e', 'command+option+e'],
@@ -240,15 +245,16 @@ export function formatAccelerator(accelerator: string): string {
   return accelerator
 }
 
-/** Textual accelerator for settings and help: keep modifier names readable on every platform. */
+/** Textual accelerator for settings and help, using the native modifier name per platform. */
 export function formatAcceleratorText(accelerator: string): string {
   if (!accelerator) return accelerator
+  const mac = isMacPlatform()
   const parts = accelerator.split('+')
   return parts.map((part, index) => {
     const p = part.trim()
     const lower = p.toLowerCase()
-    if (lower === 'alt' || lower === 'option') return 'option'
-    if (lower === 'command' || lower === 'cmd' || lower === 'super' || lower === 'meta') return 'command'
+    if (lower === 'alt' || lower === 'option') return mac ? 'option' : 'alt'
+    if (lower === 'command' || lower === 'cmd' || lower === 'super' || lower === 'meta') return mac ? 'command' : 'ctrl'
     if (lower === 'control' || lower === 'ctrl') return 'ctrl'
     if (lower === 'shift') return 'shift'
     if (index === parts.length - 1 && p.length === 1) return p.toLowerCase()

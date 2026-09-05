@@ -96,6 +96,7 @@ export default function Interview() {
   const [contextEditing, setContextEditing] = useState(false);
   const [draftContext, setDraftContext] = useState<InterviewContextDraft>(emptyContext);
   const [error, setError] = useState('');
+  const [examProcessingMode, setExamProcessingMode] = useState<'overlay' | 'voice'>('overlay');
 
   // 手动输入问题
   const [manualQuestion, setManualQuestion] = useState('');
@@ -157,7 +158,7 @@ export default function Interview() {
 
   const refreshHistory = async () => {
     const tasks = await api.interview.getTasks();
-    setHistoryTasks((tasks as HistoryTask[]) || []);
+    setHistoryTasks(((tasks as HistoryTask[]) || []).filter((task) => task.status !== 'skipped'));
   };
 
   useEffect(() => {
@@ -187,8 +188,12 @@ export default function Interview() {
       if (state && typeof state === 'object') setVoiceState(state as VoiceHealthSnapshot);
     }).catch(() => {});
     api.exam.getShortcutBindings().then(setShortcutBindings).catch(() => {});
+    api.exam.getProcessingMode().then((mode: 'overlay' | 'voice') => setExamProcessingMode(mode)).catch(() => {});
     const offShortcuts = (window as any).electronAPI?.on('shortcuts:updated', (next: Record<string, string>) => setShortcutBindings(next));
-    return () => { offShortcuts?.(); api.interview.deactivateShortcuts().catch(() => {}); };
+    const offMode = (window as any).electronAPI?.on('processing-mode-changed', (data: { mode?: 'overlay' | 'voice' }) => {
+      if (data?.mode === 'overlay' || data?.mode === 'voice') setExamProcessingMode(data.mode);
+    });
+    return () => { offShortcuts?.(); offMode?.(); api.interview.deactivateShortcuts().catch(() => {}); };
   }, []);
 
   // 监听任务更新，刷新历史记录
@@ -291,6 +296,8 @@ export default function Interview() {
   };
 
   const credits = profile?.creditBalance ?? profile?.account?.credits ?? 0;
+  const examVisibilityShortcut = shortcutBindings.toggle_visibility || defaultShortcutBindings.toggle_visibility;
+  const interviewStartShortcut = shortcutBindings.interview_start || defaultShortcutBindings.interview_start;
 
   const saveInterviewContext = async () => {
     setSavingContext(true);
@@ -380,6 +387,11 @@ export default function Interview() {
   return (
     <div className="max-w-5xl mx-auto space-y-4">
       {announcement && <div className="card border-cyan-500/30 bg-cyan-500/5 text-sm text-cyan-200">📢 {announcement}</div>}
+      {examProcessingMode === 'voice' && (
+        <div role="alert" className="border border-red-500/50 bg-red-500/10 px-3 py-2 text-sm font-medium text-red-400">
+          面试过程中如需同时启动笔试助手，当前为语音播报模式，无法悬浮框截图，需调整笔试助手为悬浮框模式
+        </div>
+      )}
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
@@ -598,6 +610,17 @@ export default function Interview() {
         <div className="text-[11px] text-slate-500 pl-5">实时语音识别由后台统一配置，识别效果不理想时可手动输入问题</div>
       </div>
 
+      <div className="card bg-rose-500/5 border-rose-500/20">
+        <h3 className="text-sm font-semibold mb-2 flex items-center gap-2">
+          <Keyboard size={14} className="text-rose-300" /> 快捷提示
+        </h3>
+        <div className="text-xs text-slate-300 space-y-1.5">
+          <div>· 按 {formatAccelerator(interviewStartShortcut)} 可开始或停止听写，并同步关闭面试悬浮窗</div>
+          <div>· 悬浮框文字模式下，按 {formatAccelerator(examVisibilityShortcut)} 可切换笔试助手悬浮框；语音播报模式下无法启动</div>
+          <div>· 如果题目很长，可以在笔试里分次截图，最多 3 张后再一次搜题给 AI</div>
+        </div>
+      </div>
+
       <div data-guide-target="interview-shortcuts">
         <ShortcutSettings
           commonActions={interviewShortcutActions}
@@ -673,7 +696,8 @@ export default function Interview() {
           { title: '选择听写模式', description: '演示模式同时识别麦克风和扬声器，适合自己演练；正式面试模式只识别扬声器，也就是只把面试官的声音作为问题输入。', target: '[data-guide-target="interview-mode"]' },
           { title: '编辑并保存面试上下文', description: '点击编辑，填写应聘岗位、面试公司、答案风格和岗位描述，然后点击保存。AI 会结合这些信息生成回答。', target: '[data-guide-target="interview-context"]' },
           { title: '粘贴并保存简历', description: '点击新建或编辑，直接粘贴简历文本并保存。自我介绍和项目问题会优先使用简历中的真实经历。', target: '[data-guide-target="interview-resume"]' },
-          { title: '开始或结束面试', description: `点击右上角按钮（或按 ${formatAccelerator(shortcutBindings.interview_start || defaultShortcutBindings.interview_start)}）一键开启面试悬浮框并启动听写；再次操作会同步停止听写并关闭面试悬浮框。`, target: '[data-guide-target="interview-start"]' },
+          { title: '开始或结束面试', description: `点击右上角按钮（或按 ${formatAccelerator(interviewStartShortcut)}）一键开启面试悬浮框并启动听写；再次操作会同步停止听写并关闭面试悬浮框。`, target: '[data-guide-target="interview-start"]' },
+          { title: '查看笔试提示', description: `悬浮框文字模式下按 ${formatAccelerator(examVisibilityShortcut)} 可切换笔试助手；语音播报模式无法启动悬浮框。笔试题目太长时可分次截图，最多 3 张后再一次搜题。`, target: '[data-guide-target="interview-shortcuts"]' },
           { title: '切换问题和查看答案', description: `使用 ${shortcutBindings.interview_prev_question || '上一题快捷键'} 和 ${shortcutBindings.interview_next_question || '下一题快捷键'} 在问题流中切换；右侧始终显示当前选中问题的参考答案。`, target: '[data-guide-target="interview-results"]' },
         ] as FeatureGuideStep[]}
         onClose={finishGuide}

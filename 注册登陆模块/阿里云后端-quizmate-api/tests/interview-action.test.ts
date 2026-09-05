@@ -45,7 +45,7 @@ describe("interview speech action", () => {
     expect(prompt).toContain("应聘岗位：Product Manager");
     expect(prompt).toContain("目标公司：Example Inc.");
     expect(prompt).toContain("候选人简历：Led a cross-functional product launch.");
-    expect(prompt).toContain("最近对话上下文：面试官：先简单聊聊你的经历。");
+    expect(prompt).toContain("最近一小时同一账户的对话上下文（仅用于判断延续、追问或新问题）：面试官：先简单聊聊你的经历。");
     expect(prompt).toContain("回答风格：简洁");
     expect(prompt).not.toContain("{question}");
     expect(prompt).not.toContain("{context.");
@@ -62,7 +62,7 @@ describe("interview speech action", () => {
     });
     expect(prompt).toContain("应聘岗位：（未提供）");
     expect(prompt).toContain("目标公司：（未提供）");
-    expect(prompt).toContain("最近对话上下文：（无）");
+    expect(prompt).toContain("最近一小时同一账户的对话上下文（仅用于判断延续、追问或新问题）：（无）");
   });
 
   it("keeps legacy custom prompts working with labeled context appends", () => {

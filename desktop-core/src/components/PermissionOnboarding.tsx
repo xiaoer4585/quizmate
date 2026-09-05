@@ -96,16 +96,6 @@ export default function PermissionOnboarding({ onComplete }: PermissionOnboardin
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const finishLater = async () => {
-    setBusy(true);
-    try {
-      await api.permissions.complete(true);
-      onComplete();
-    } finally {
-      setBusy(false);
-    }
-  };
-
   if (!state) {
     return <div className="flex h-screen items-center justify-center text-slate-400"><Loader2 className="mr-2 animate-spin" size={18} />正在准备 macOS 权限…</div>;
   }
@@ -139,8 +129,7 @@ export default function PermissionOnboarding({ onComplete }: PermissionOnboardin
 
         {error && <div className="mt-4 rounded-lg border border-rose-500/30 bg-rose-500/5 px-3 py-2 text-sm text-rose-300">权限代码：{error}</div>}
 
-        <div className="mt-6 flex items-center justify-between gap-3">
-          <button className="btn-ghost text-xs text-slate-500" disabled={busy} onClick={finishLater}>暂不授权，先进入应用</button>
+        <div className="mt-6 flex items-center justify-end gap-3">
           {installRequired ? (
             <button className="btn-primary" disabled={busy} onClick={() => api.permissions.installToApplications()}><ShieldCheck size={14} />安装到“应用程序”并继续</button>
           ) : restartRequired ? (

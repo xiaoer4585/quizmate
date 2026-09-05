@@ -28,13 +28,16 @@ export default function App() {
     let mounted = true;
     (async () => {
       try {
+        // macOS permissions are an installation prerequisite, not a feature
+        // that can be deferred until after login. This makes a new package
+        // request TCC access on its first launch like the legacy client did.
+        const permissionState = await api.permissions.getState().catch(() => null) as { platform?: string; completed?: boolean } | null;
+        if (mounted) setPermissionOnboardingRequired(permissionState?.platform === 'darwin' && permissionState.completed !== true);
         const ok = await api.auth.isAuthenticated();
         if (mounted) {
           setAuthed(!!ok);
           if (ok) {
             await api.auth.getProfile().catch(() => {});
-            const permissionState = await api.permissions.getState().catch(() => null) as { platform?: string; completed?: boolean } | null;
-            setPermissionOnboardingRequired(permissionState?.platform === 'darwin' && permissionState.completed !== true);
           }
         }
       } catch {
@@ -74,6 +77,12 @@ export default function App() {
     );
   }
 
+  // Do not allow the login page to bypass the mandatory first-launch Mac
+  // authorization flow. PermissionOnboarding is intentionally auth-free.
+  if (permissionOnboardingRequired) {
+    return <PermissionOnboarding onComplete={() => setPermissionOnboardingRequired(false)} />;
+  }
+
   if (authed === null) {
     return (
       <div className="flex items-center justify-center h-screen text-slate-400">
@@ -98,10 +107,6 @@ export default function App() {
         }}
       />
     );
-  }
-
-  if (permissionOnboardingRequired) {
-    return <PermissionOnboarding onComplete={() => setPermissionOnboardingRequired(false)} />;
   }
 
   return (

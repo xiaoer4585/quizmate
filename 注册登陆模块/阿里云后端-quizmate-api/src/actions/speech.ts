@@ -57,7 +57,7 @@ function normalizeInterviewContext(input: Record<string, unknown>): InterviewCon
     language: String(raw.language ?? "zh").trim().slice(0, 20) || "zh",
     answerStyle: raw.answerStyle === "detailed" ? "detailed" : "concise",
     // 客户端一直在传最近对话上下文，此前被丢弃；现在供占位符模板使用
-    recentConversation: compactContext(String(raw.recentConversation ?? ""), 2_000)
+    recentConversation: compactContext(String(raw.recentConversation ?? ""), 8_000)
   };
 }
 
@@ -101,6 +101,7 @@ export function buildInterviewPrompt(
     "仅输出 JSON，格式为：",
     '{"items":[{"summary":"问题摘要","answer":"完整可口述的回答","explanation":""}]}'
   ].join("\n");
+  const continuityInstruction = "上下文判断规则：最近对话可能是同一个长问题被语音识别拆开的多个片段。请判断当前问题属于同一问题的延续、同一问题的追问，还是完全不相关的新问题；无论哪一种，只回答当前输入的后半段/当前增量，不要重复回答上下文里的旧问题。若当前输入只是补充片段，请结合上下文理解完整含义后回答。";
   const base = configuredPrompt.trim() || DEFAULT_INTERVIEW_PROMPT;
 
   // 新版占位符模板（含 {question}）：直接填充占位符，不再追加重复的上下文标签
@@ -116,6 +117,7 @@ export function buildInterviewPrompt(
       .replaceAll("{context.recentConversation}", context.recentConversation || "（无）");
     return [
       filled,
+      continuityInstruction,
       selfIntroInstruction,
       "不要虚构简历中不存在的事实；信息不足时给出稳妥的通用表述。",
       jsonRequirement
@@ -128,6 +130,7 @@ export function buildInterviewPrompt(
     : "给出简洁、自然、可直接口述的回答，优先控制在 150 至 300 字";
   return [
     base,
+    continuityInstruction,
     detail + "。不要虚构简历中不存在的事实；信息不足时给出稳妥的通用表述。",
     selfIntroInstruction || "回答必须结合候选人简历、岗位描述、应聘岗位和目标公司；优先使用简历中的真实项目和成果，不能只给脱离上下文的通用答案。",
     `本次回答语言（必须遵守）：${answerLanguage}`,

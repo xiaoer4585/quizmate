@@ -3,12 +3,20 @@ import {
   canonicalizeAccelerator,
   getDefaultShortcutBindings,
   migrateMacLegacyShortcut,
+  normalizeWindowsAccelerator,
   formatAcceleratorText,
   type ShortcutAction,
   validateShortcutConflict,
 } from '../shortcuts'
 
 describe('shortcut conflict validation', () => {
+  it('normalizes an accidentally persisted macOS Option binding back to Windows Alt', () => {
+    expect(normalizeWindowsAccelerator('Option+Q')).toBe('Alt+Q')
+    expect(normalizeWindowsAccelerator('Ctrl+Option+Shift+E')).toBe('Ctrl+Alt+Shift+E')
+    expect(getDefaultShortcutBindings('win32').screenshot).toBe('Alt+Q')
+    expect(getDefaultShortcutBindings('darwin').screenshot).toBe('Option+Q')
+  })
+
   it.each([
     ['win32', 'Alt+F4', '关闭当前窗口'],
     ['win32', 'Super+L', 'Windows 徽标键系统功能'],
@@ -95,7 +103,8 @@ describe('shortcut conflict validation', () => {
   })
 
   it('renders readable textual shortcut names', () => {
-    expect(formatAcceleratorText('Option+Q')).toBe('option+q')
-    expect(formatAcceleratorText('Command+Shift+C')).toBe('command+shift+c')
+    // The test runner is Windows here: settings must show Alt, not the macOS alias Option.
+    expect(formatAcceleratorText('Option+Q')).toBe('alt+q')
+    expect(formatAcceleratorText('Command+Shift+C')).toBe('ctrl+shift+c')
   })
 })

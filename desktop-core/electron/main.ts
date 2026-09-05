@@ -612,6 +612,9 @@ function closeWindow(which: 'main' | 'overlay') {
 
 // ===== 启动/关闭考试客户端（悬浮框生命周期管理，完全沿用原考试插件） =====
 async function launchExamClient(): Promise<{ success: boolean; error?: string }> {
+  if (configHelper.getProcessingMode() === 'voice') {
+    return { success: false, error: '当前为语音播报模式，无法启动笔试助手悬浮框。' };
+  }
   if (state.overlayLocked) {
     // 悬浮框已存在, 只需显示它
     if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
@@ -664,11 +667,13 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
     }
     case 'search': {
       const mode = configHelper.getProcessingMode();
-      // 悬浮框搜题与语音搜题是两个独立动作；模式切换竞态下也不允许串用。
-      if (mode !== 'overlay') break;
+      // If the exam overlay is already visible, honor the exam search key even
+      // when the persisted presentation mode is still voice. This also makes
+      // the screenshot/search pair usable after Alt+B without a mode detour.
+      if (mode !== 'overlay' && !isOverlayVisible('exam')) break;
       if (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible) await launchExamClient();
       else activateOverlay('exam');
-      await handleSearchAction('overlay');
+      await handleSearchAction(mode === 'overlay' ? 'overlay' : 'voice');
       break;
     }
     case 'voice_search': {
@@ -696,7 +701,10 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       }
       break;
     case 'toggle_visibility':
-      // Alt+B 永远只控制笔试悬浮框，不受面试状态影响。
+      // 语音播报模式没有文字悬浮框，所有启动入口统一阻断。
+      if (configHelper.getProcessingMode() === 'voice') {
+        break;
+      }
       if (!state.overlayWindow || state.overlayWindow.isDestroyed()) {
         await launchExamClient();
       } else {
@@ -775,6 +783,19 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
   const captureStartedAt = Date.now();
   const previousAnalysisOperation = pendingAnalysisOperation;
   let capturedForOperation = false;
+  if (!isExtra && screenshotHelper.getQueue(false).length >= 3) {
+    const payload = {
+      error: '最多只能保留 3 张题图，请先按搜题快捷键一次发送给 AI。',
+      code: 'SCREENSHOT_LIMIT_REACHED',
+      stage: 'capture',
+      action: 'retry',
+      ...operation,
+    };
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('screenshot-error', payload);
+    });
+    return;
+  }
   if (screenshotInFlight) {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('screenshot-error', { error: '截图正在处理中，请稍候', code: 'CAPTURE_IN_FLIGHT', stage: 'capture' });
@@ -833,7 +854,6 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     }
 
     if (result.success && result.filePath) {
-      if (!isExtra) screenshotHelper.clearQueue(false);
       const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
       if (!saved) {
         throw new Error('截图已采集，但保存失败');
@@ -894,13 +914,25 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
 
 async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   const procMode = configHelper.getProcessingMode();
+  // A visible exam overlay is an explicit request for the overlay workflow,
+  // even if the persisted mode is still voice. In that case search the queued
+  // screenshots instead of taking a replacement screenshot.
+  const voiceSearch = procMode === 'voice' && !isOverlayVisible('exam');
   let queue = screenshotHelper.getQueue(false);
 
   // 语音模式的每次搜题都是新一轮：隐藏笔试悬浮框并重新截取当前屏幕。
   // 截图失败时不得退回分析队列中的旧图。
-  if (procMode === 'voice') {
+  if (voiceSearch) {
     if (isOverlayVisible('exam')) hideOverlay();
     const previousLatestShot = queue[queue.length - 1];
+    if (queue.length >= 3) {
+      const errMsg = '最多只能保留 3 张题图，请先按搜题快捷键一次发送给 AI。';
+      ttsHelper?.cancel();
+      ttsHelper?.speak(errMsg).catch(() => {});
+      notifyVoiceProgress(null);
+      setTrayBusy(false);
+      return;
+    }
     notifyVoiceProgress('正在截图...');
     setTrayBusy(true);
     await handleScreenshot(false);
@@ -917,7 +949,7 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
 
   if (queue.length === 0) {
     const errMsg = '请先截图';
-    if (procMode === 'voice') {
+    if (voiceSearch) {
       ttsHelper?.cancel();
       ttsHelper?.speak(errMsg).catch(() => {});
     } else {
@@ -927,18 +959,19 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
     return;
   }
 
-  // 只取最新一张截图发给 AI
-  const latestShot = queue[queue.length - 1];
+  const analysisQueue = queue.slice(-3);
   const operation = pendingAnalysisOperation ?? {
     operationId: crypto.randomUUID(),
     requestId: `desktop-${crypto.randomUUID()}`,
     attempt: 1,
   };
   const compressStartedAt = Date.now();
-  const compressed = await screenshotHelper.getCompressedScreenshot(latestShot);
+  const compressed = await screenshotHelper.getCombinedCompressedScreenshot(analysisQueue);
   const b64 = compressed.dataUrl;
   processingHelper.recordDiagnosticEvent(b64 ? 'compress.success' : 'compress.error', {
     ...operation,
+    imageCount: analysisQueue.length,
+    combined: analysisQueue.length > 1,
     totalMs: Date.now() - compressStartedAt,
     compressionMs: compressed.compressionMs,
     waitMs: compressed.waitMs,
@@ -953,7 +986,7 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   });
   if (!b64) {
     const errMsg = '截图读取失败';
-    if (procMode === 'voice') {
+    if (voiceSearch) {
       ttsHelper?.cancel();
       ttsHelper?.speak(errMsg).catch(() => {});
     } else {
@@ -968,7 +1001,7 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   setTrayBusy(true);
 
   // 直接调用 analyze 获取完整结果
-  const result = await processingHelper.analyze({ images: [b64], mode, ...operation });
+  const result = await processingHelper.analyze({ images: [b64], mode: voiceSearch ? 'voice' : 'overlay', ...operation });
   if (result.success) {
     // 只有当前轮次可以清空队列；上一轮迟到结果不得删除用户刚截的新图。
     if (pendingAnalysisOperation?.operationId === operation.operationId) {
@@ -1071,7 +1104,7 @@ async function switchProcessingMode(mode: 'overlay' | 'voice'): Promise<void> {
     shortcutsHelper?.registerGlobalShortcutsForMode('overlay');
   }
   // 向所有渲染进程发送模式切换事件
-  [state.mainWindow, state.overlayWindow].forEach((win) => {
+  [state.mainWindow, state.overlayWindow, state.interviewOverlayWindow].forEach((win) => {
     if (win && !win.isDestroyed()) {
       win.webContents.send('processing-mode-changed', { mode });
     }
