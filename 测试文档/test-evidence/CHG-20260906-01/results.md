@@ -17,6 +17,15 @@
 - Mac Intel/Apple Silicon：新包首次启动授权、屏幕录制 TCC、辅助功能、点击笔试“开始使用”二次检查、真实截图、面试悬浮框多图搜题、长语音连续问题。
 - 权限失败时必须显示错误码/系统设置入口，不能以 Windows 或 CI 结果替代。
 
+## 双架构测试包
+
+- GitHub Actions：`33982475659`，Intel/Apple Silicon 均成功，提交 `77745e785c4f4398c4153e7dcce0f39ac4117395`。
+- Intel DMG：`7245dc9e3addf521cd46387f90b2d34e70214af669f3ac0c69b659ec2b66a6ec`。
+- Intel ZIP：`7322b4aa656b55a852b42edd88624386f498eb797f3d2b399c7c92e0bda558e2`。
+- Apple Silicon DMG：`cc49534e30394ea187e4823202228b1885effa1a55b37548c7ccb42aec6e30dc`。
+- Apple Silicon ZIP：`22167538ea33ca839b8933013d754376fe4cad52d7a09db8a1dee002cdf6d605`。
+- 四个对象均已完成 HTTP 200 HEAD 与 HTTP 206 Range `bytes=0-1023` 校验；生产 Mac 更新清单未改。
+
 ## 回滚
 
 - 回滚到 `341dad3`，删除本轮临时测试包对象；不触碰官网和正式 Mac 更新映射。
