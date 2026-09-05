@@ -1,9 +1,9 @@
 export type DesktopOverlayKind = 'exam' | 'interview';
 export type ExamOverlayTrigger = 'screenshot' | 'search' | 'toggle_visibility';
 
-/** Voice capture/search works headlessly; only an explicit visibility toggle may show the exam overlay. */
-export function shouldEnsureExamOverlay(mode: string, trigger: ExamOverlayTrigger): boolean {
-  return mode !== 'voice' || trigger === 'toggle_visibility';
+/** Voice capture/search works headlessly; voice mode never starts the exam overlay. */
+export function shouldEnsureExamOverlay(mode: string, _trigger: ExamOverlayTrigger): boolean {
+  return mode !== 'voice';
 }
 
 /** Voice search must never fall back to the screenshot that existed before this trigger. */

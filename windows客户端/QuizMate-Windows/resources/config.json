@@ -4,7 +4,7 @@
   "adminWebUrl": "https://www.quizmate.vip/admin-web/index.html",
   "websocketUrl": "",
   "environment": "production",
-  "version": "2026.09.05.1",
+  "version": "2026.09.06",
   "registerUrl": "https://www.quizmate.cn/#credits",
   "resetPasswordUrl": "https://www.quizmate.cn/#credits",
   "rechargeUrl": "https://www.quizmate.cn/recharge.html",

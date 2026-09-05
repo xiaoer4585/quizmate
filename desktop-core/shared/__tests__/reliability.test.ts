@@ -13,10 +13,12 @@ import {
 } from '../reliability';
 import {
   ASR_FINAL_COMMIT_MS,
+  ASR_FRAGMENT_SETTLE_MS,
   ASR_SILENCE_COMMIT_MS,
   INTERVIEW_CONTEXT_LIMITS,
   limitContextPreservingEnds,
   limitInterviewRequestContext,
+  isLikelyIncompleteInterviewFragment,
 } from '../../interviewTranscript';
 
 describe('voice reliability state', () => {
@@ -47,6 +49,13 @@ describe('voice reliability state', () => {
     expect(ASR_SILENCE_COMMIT_MS).toBeGreaterThan(ASR_FINAL_COMMIT_MS);
   });
 
+  it('identifies unfinished ASR fragments without delaying complete questions', () => {
+    expect(isLikelyIncompleteInterviewFragment('我现在出一个问题，你来回答一下，如果')).toBe(true);
+    expect(isLikelyIncompleteInterviewFragment('请介绍一下你的项目经历')).toBe(false);
+    expect(isLikelyIncompleteInterviewFragment('请介绍一下你的项目经历？')).toBe(false);
+    expect(ASR_FRAGMENT_SETTLE_MS).toBeGreaterThan(ASR_SILENCE_COMMIT_MS);
+  });
+
   it('keeps short interview context unchanged', () => {
     expect(limitInterviewRequestContext({
       jobDescription: '  Java 后端工程师  ',
@@ -72,7 +81,7 @@ describe('voice reliability state', () => {
     const limited = limitInterviewRequestContext({
       jobDescription: 'J'.repeat(8000),
       resumeText: 'R'.repeat(20000),
-      recentConversation: 'C'.repeat(4000),
+      recentConversation: 'C'.repeat(10000),
     });
     expect(limited.jobDescription).toHaveLength(INTERVIEW_CONTEXT_LIMITS.jobDescription);
     expect(limited.resumeText).toHaveLength(INTERVIEW_CONTEXT_LIMITS.resumeText);

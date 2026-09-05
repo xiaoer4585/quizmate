@@ -124,13 +124,18 @@ export default function Exam() {
 
   // 启动笔试悬浮窗
   const handleStartExam = async () => {
-    // 语音播报模式无需悬浮框，直接标记为已启动
+    // 语音播报模式没有文字悬浮框，不能伪装成已启动。
     if (processingMode === 'voice') {
-      setOverlayActive(true);
+      setOverlayActive(false);
       setOverlayVisible(false);
+      setDiagnosticError({ error: '当前为语音播报模式，无法启动笔试助手悬浮框，请切换为悬浮框文字模式后再使用。' });
       return;
     }
-    await api.app.launchExamClient();
+    const result = await api.app.launchExamClient();
+    if (result?.success === false) {
+      setDiagnosticError({ error: result.error || '无法启动笔试助手悬浮框' });
+      return;
+    }
     setOverlayActive(true);
     setOverlayVisible(true);
   };
@@ -255,7 +260,7 @@ export default function Exam() {
               )}
             </div>
             <p className="text-xs text-slate-400">
-              先按全屏截图快捷键，再按搜题快捷键；答案显示在悬浮框
+              先按全屏截图快捷键，再按搜题快捷键；长题可分次截图，最多 3 张后一次一起发给 AI，答案显示在悬浮框
             </p>
           </button>
           {/* 语音播报 */}
@@ -397,14 +402,23 @@ export default function Exam() {
           <Info size={16} /> 操作提示
         </h3>
         <ul className="text-sm text-slate-300 space-y-2">
-          <li>· 点击「开始使用」启动笔试悬浮框，或按 {formatAccelerator(shortcutBindings.toggle_visibility || defaultShortcutBindings.toggle_visibility)} 快捷键启动/切换</li>
-          <li>· 拖动悬浮框顶部提示栏可移动位置</li>
-          <li>· 拖动悬浮框四边或四角可调整大小</li>
-          <li>· 使用「悬浮框显示」开关或 {formatAccelerator(shortcutBindings.toggle_visibility || defaultShortcutBindings.toggle_visibility)} 快捷键可显示/隐藏悬浮框</li>
-          <li>· 透明度可通过上方进度条实时调节</li>
-          {processingMode === 'voice' && (
-            <li>· 语音播报模式下，按 {formatAccelerator(shortcutBindings.voice_search || defaultShortcutBindings.voice_search)} 即可完成截图+分析+播报全流程</li>
-          )}
+            {processingMode === 'overlay' ? (
+              <>
+                <li>· 点击「开始使用」启动笔试悬浮框，或按 {formatAccelerator(shortcutBindings.toggle_visibility || defaultShortcutBindings.toggle_visibility)} 快捷键启动/切换</li>
+                <li>· 拖动悬浮框顶部提示栏可移动位置</li>
+                <li>· 拖动悬浮框四边或四角可调整大小</li>
+                <li>· 使用「悬浮框显示」开关或 {formatAccelerator(shortcutBindings.toggle_visibility || defaultShortcutBindings.toggle_visibility)} 快捷键可显示/隐藏悬浮框</li>
+              </>
+            ) : (
+              <li className="text-red-400">· 语音播报模式无法启动笔试助手悬浮框；如需截图和查看文字答案，请先切换为悬浮框文字模式</li>
+            )}
+            <li>· 透明度可通过上方进度条实时调节</li>
+            {processingMode === 'overlay' && (
+              <li>· 题目太长时可分次截图，最多 3 张后按 {formatAccelerator(shortcutBindings.search || defaultShortcutBindings.search)} 一次搜题，AI 会一起分析当前截图队列</li>
+            )}
+            {processingMode === 'voice' && (
+              <li>· 语音播报模式下，按 {formatAccelerator(shortcutBindings.voice_search || defaultShortcutBindings.voice_search)} 即可完成截图+分析+播报全流程</li>
+            )}
           {processingMode === 'voice' && (
             <li>· 按 {formatAccelerator(shortcutBindings.replay || defaultShortcutBindings.replay)} 可重听上次答案</li>
           )}
@@ -422,8 +436,8 @@ export default function Exam() {
         ] : [
           { title: '选择工作模式并设置常用快捷键', description: '选择“悬浮框文字呈现”。下方常用快捷键可以逐项修改，重点确认全屏截图、搜题和显示/隐藏悬浮框。', target: '[data-guide-target="exam-mode"]' },
           { title: '开始使用', description: '点击“开始使用”打开笔试悬浮框。之后主要通过快捷键操作，不需要切回客户端。', target: '[data-guide-target="exam-start"]' },
-          { title: '先全屏截图', description: `题目完整显示后，先按 ${formatAccelerator(shortcutBindings.screenshot || '全屏截图快捷键')} 保存当前题目截图。`, target: '[data-guide-target="shortcut-screenshot"]' },
-          { title: '再启动搜题', description: `截图完成后，再按 ${formatAccelerator(shortcutBindings.search || '搜题快捷键')}。AI 答案会显示在悬浮框中。`, target: '[data-guide-target="shortcut-search"]' },
+          { title: '先全屏截图', description: `题目完整显示后，先按 ${formatAccelerator(shortcutBindings.screenshot || '全屏截图快捷键')} 保存当前题目截图；长题可分次截图，最多 3 张。`, target: '[data-guide-target="shortcut-screenshot"]' },
+          { title: '再启动搜题', description: `截图完成后，再按 ${formatAccelerator(shortcutBindings.search || '搜题快捷键')}。AI 会一次分析当前截图队列，答案显示在悬浮框中。`, target: '[data-guide-target="shortcut-search"]' },
           { title: '按需设置悬浮框', description: '可在这里显示或隐藏悬浮框，并调整透明度；下方还能切换深色或浅色主题。', target: '[data-guide-target="exam-overlay-settings"]' },
         ]) as FeatureGuideStep[]}
         onClose={finishGuide}
