@@ -20,6 +20,7 @@ const cloudBaseActions = [
   "queryPaymentOrder", "registerAccount", "resetAccountPassword", "sendRegisterCode",
   "sendResetPasswordCode", "startTrial", "trackWebsiteVisit", "uploadKnowledge", "alipayNotify",
   "payjsNotify", "epayNotify", "adminListModelCallFailures", "adminListXiaohongshuRewards",
+  "adminGetModelFailureWhitelist", "adminAddModelFailureWhitelist", "adminRemoveModelFailureWhitelist", "adminDeleteModelCallFailures",
   "adminReviewXiaohongshuReward", "submitXiaohongshuReward", "listMyXiaohongshuRewards"
 ];
 
