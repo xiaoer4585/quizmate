@@ -138,33 +138,41 @@ export default function Exam() {
 
   // 启动笔试悬浮窗
   const handleStartExam = async () => {
-    // 语音播报模式没有文字悬浮框，不能伪装成已启动。
-    if (processingMode === 'voice') {
-      setOverlayActive(false);
-      setOverlayVisible(false);
-      setDiagnosticError({ error: '当前为语音播报模式，无法启动笔试助手悬浮框，请切换为悬浮框文字模式后再使用。' });
-      return;
-    }
-    if (isMacPlatform()) {
-      setPermissionBusy(true);
-      try {
-        const checked = await api.permissions.authorizeAll() as PermissionOnboardingState;
-        setPermissionState(checked);
-        if (!checked?.completed) {
-          setDiagnosticError({ error: '笔试助手需要屏幕录制权限。请在系统设置中允许 QuizMate 后，再点击开始使用。', code: checked?.errorCode || 'EXAM_PERMISSION_REQUIRED', stage: 'capture-permission' });
-          return;
-        }
-      } finally {
-        setPermissionBusy(false);
+    try {
+      // 语音播报模式没有文字悬浮框，不能伪装成已启动。
+      if (processingMode === 'voice') {
+        setOverlayActive(false);
+        setOverlayVisible(false);
+        setDiagnosticError({ error: '当前为语音播报模式，无法启动笔试助手悬浮框，请切换为悬浮框文字模式后再使用。' });
+        return;
       }
+      if (isMacPlatform()) {
+        setPermissionBusy(true);
+        try {
+          const checked = await api.permissions.authorizeAll() as PermissionOnboardingState;
+          setPermissionState(checked);
+          if (!checked?.completed) {
+            setDiagnosticError({ error: '笔试助手需要屏幕录制权限。请在系统设置中允许 QuizMate 后，再点击开始使用。', code: checked?.errorCode || 'EXAM_PERMISSION_REQUIRED', stage: 'capture-permission' });
+            return;
+          }
+        } finally {
+          setPermissionBusy(false);
+        }
+      }
+      const result = await api.app.launchExamClient();
+      if (result?.success === false) {
+        setDiagnosticError({ error: result.error || '无法启动笔试助手悬浮框' });
+        return;
+      }
+      setDiagnosticError(null);
+      setOverlayActive(true);
+      setOverlayVisible(true);
+    } catch (error) {
+      // IPC/权限异常以前会让按钮看起来“无反应”；将错误显式反馈给用户。
+      setDiagnosticError({ error: error instanceof Error ? error.message : '无法启动笔试助手悬浮框，请检查系统权限后重试。', code: 'EXAM_LAUNCH_FAILED', stage: 'launch' });
+    } finally {
+      setPermissionBusy(false);
     }
-    const result = await api.app.launchExamClient();
-    if (result?.success === false) {
-      setDiagnosticError({ error: result.error || '无法启动笔试助手悬浮框' });
-      return;
-    }
-    setOverlayActive(true);
-    setOverlayVisible(true);
   };
 
   // 关闭笔试悬浮窗

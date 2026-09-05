@@ -199,6 +199,12 @@ const electronAPI = {
     getTtsPreferences: () => invoke('config:getTtsPreferences'),
     updateTtsPreferences: (prefs: any) => invoke('config:updateTtsPreferences', prefs),
   },
+  // macOS permission checks used by the legacy Exam page compatibility layer.
+  permissions: {
+    getState: () => invoke('permissions:getState'),
+    authorizeAll: () => invoke('permissions:authorizeAll'),
+    openSettings: (kind: 'microphone' | 'screen') => invoke('permissions:openSettings', kind),
+  },
   // Auth
   auth: {
     fetchUserInfo: () => invoke('auth:getProfile'),
