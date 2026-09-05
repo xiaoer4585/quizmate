@@ -136,15 +136,25 @@ export class ShortcutsHelper {
       // Electron's macOS accelerator grammar calls Option "Alt". Normalize
       // both persisted text and captured browser aliases before registration.
       const electronAccelerator = toElectronAccelerator(normalizeMacAccelerator(accelerator))
-      const ret = globalShortcut.register(electronAccelerator, () => {
+      const callback = () => {
         if (this.testMode && this.testCallback) {
           this.testCallback(accelerator)
           return
         }
         this.handler?.(action)
-      })
+      }
+      const ret = globalShortcut.register(electronAccelerator, callback)
       if (ret) this.registered.add(accelerator)
-      else {
+      if (!ret && process.platform === 'darwin' && electronAccelerator !== accelerator) {
+        // Electron versions differ on whether Option or Alt is accepted in
+        // globalShortcut. Retry the native spelling once for compatibility.
+        const nativeRet = globalShortcut.register(accelerator, callback)
+        if (nativeRet) {
+          this.registered.add(accelerator)
+          return
+        }
+      }
+      if (!ret) {
         console.warn(`[ShortcutsHelper] Failed to register: ${accelerator} for ${action}`)
         this.reportRegistrationError({ action, accelerator, mode })
       }

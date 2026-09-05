@@ -251,7 +251,7 @@ export function formatAcceleratorText(accelerator: string): string {
     if (lower === 'command' || lower === 'cmd' || lower === 'super' || lower === 'meta') return 'command'
     if (lower === 'control' || lower === 'ctrl') return 'ctrl'
     if (lower === 'shift') return 'shift'
-    if (index === parts.length - 1 && p.length === 1) return p.toUpperCase()
+    if (index === parts.length - 1 && p.length === 1) return p.toLowerCase()
     return p
   }).join('+')
 }

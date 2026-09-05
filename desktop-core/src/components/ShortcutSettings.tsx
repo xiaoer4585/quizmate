@@ -9,6 +9,19 @@ import {
   type ShortcutAction,
 } from '../../shared/shortcuts'
 
+/** Read the physical key so macOS Option+Q (which reports "œ" as event.key)
+ * is persisted as option+q and remains a valid Electron accelerator. */
+function getCapturedKey(event: React.KeyboardEvent): string {
+  const code = event.nativeEvent.code || ''
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3).toLowerCase()
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5)
+  if (code === 'Space') return 'Space'
+  if (code === 'ArrowUp' || code === 'ArrowDown' || code === 'ArrowLeft' || code === 'ArrowRight') return code.slice(5)
+  if (code === 'Minus') return '-'
+  if (code === 'Equal') return '='
+  return event.key
+}
+
 interface ShortcutSettingsProps {
   commonActions: ShortcutAction[]
   bindings: Record<string, string>
@@ -96,9 +109,10 @@ export default function ShortcutSettings({
     if (event.shiftKey) parts.push('Shift')
     if (event.altKey) parts.push(isMacPlatform() ? 'Option' : 'Alt')
     if (event.metaKey) parts.push(isMacPlatform() ? 'Command' : 'Super')
-    let key = event.key === ' ' ? 'Space' : event.key
+    let key = getCapturedKey(event)
+    if (key === ' ') key = 'Space'
     if (key.startsWith('Arrow')) key = key.slice('Arrow'.length)
-    if (key.length === 1) key = key.toUpperCase()
+    if (key.length === 1) key = key.toLowerCase()
     parts.push(key)
     const accelerator = parts.join('+')
     const action = editingAction

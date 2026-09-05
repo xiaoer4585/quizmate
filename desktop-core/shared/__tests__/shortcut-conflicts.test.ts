@@ -95,7 +95,7 @@ describe('shortcut conflict validation', () => {
   })
 
   it('renders readable textual shortcut names', () => {
-    expect(formatAcceleratorText('Option+Q')).toBe('option+Q')
-    expect(formatAcceleratorText('Command+Shift+C')).toBe('command+shift+C')
+    expect(formatAcceleratorText('Option+Q')).toBe('option+q')
+    expect(formatAcceleratorText('Command+Shift+C')).toBe('command+shift+c')
   })
 })
