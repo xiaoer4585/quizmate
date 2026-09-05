@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   canonicalizeAccelerator,
   getDefaultShortcutBindings,
+  isMacPlatform,
   migrateMacLegacyShortcut,
   normalizeWindowsAccelerator,
   formatAcceleratorText,
@@ -103,8 +104,7 @@ describe('shortcut conflict validation', () => {
   })
 
   it('renders readable textual shortcut names', () => {
-    // The test runner is Windows here: settings must show Alt, not the macOS alias Option.
-    expect(formatAcceleratorText('Option+Q')).toBe('alt+q')
-    expect(formatAcceleratorText('Command+Shift+C')).toBe('ctrl+shift+c')
+    expect(formatAcceleratorText('Option+Q')).toBe(isMacPlatform() ? 'option+q' : 'alt+q')
+    expect(formatAcceleratorText('Command+Shift+C')).toBe(isMacPlatform() ? 'command+shift+c' : 'ctrl+shift+c')
   })
 })
