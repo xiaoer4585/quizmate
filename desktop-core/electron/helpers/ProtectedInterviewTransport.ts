@@ -27,6 +27,7 @@ export class ProtectedInterviewTransport {
     }
     this.id=value.id;this.sequence=0;this.revision=-1;this.stopped=false;this.queue=Promise.resolve();this.queued=0;
     this.timer=setInterval(()=>void this.poll(),500);await this.poll();
+    if(generation!==this.generation||!this.id)throw new Error('面试连接未建立，请重新开始');
   }
   async ingest(text:string,isFinal:boolean,source:'voice'|'manual'='voice',force=false){
     if(!this.id||this.stopped)return;

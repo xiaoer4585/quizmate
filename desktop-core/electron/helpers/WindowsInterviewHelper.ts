@@ -137,6 +137,7 @@ export class InterviewHelper {
       if(previous&&JSON.stringify(previous)===JSON.stringify(task))continue;
       this.store.set('tasks',[task,...this.getTasks().filter(t=>t.id!==task.id)].sort((a,b)=>b.ts-a.ts).slice(0,50));
       this.broadcast(previous?'interview:taskUpdated':'interview:taskAdded',task);
+      if(task.status==='error')this.broadcast('interview:answer',{question:task.question,error:task.error,taskId:task.id});
       if(task.status==='done'){this.lastAnswer=task.answer||'';this.broadcast('interview:answer',{question:task.question,answer:task.answer,keyPoints:task.keyPoints,taskId:task.id})}
     }
     this.overlay.renderTaskList(this.getTasks());

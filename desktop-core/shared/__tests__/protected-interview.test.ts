@@ -23,3 +23,10 @@ test('account switch suppresses late answers and blocks new transcription',async
   await client.open({},'test-device');receive.mockClear();token='two';await client.ingest('如何设计系统？',true);
   expect(client.active()).toBe(false);expect(receive).not.toHaveBeenCalled();expect(mock.post.mock.calls.some(c=>c[1]==='ingestInterviewTranscript')).toBe(false);
 });
+
+test('failed initial synchronization cannot leave a successful startup',async()=>{
+  mock.post.mockImplementation(async(_url,action)=>{if(action==='openInterviewSession')return {id:'session'};if(action==='pollInterviewSession')throw new Error('offline');return {}});
+  let client:ProtectedInterviewTransport;
+  client=new ProtectedInterviewTransport(()=> 'token',vi.fn(),()=>client.close());
+  await expect(client.open({},'device')).rejects.toThrow('未建立');expect(client.active()).toBe(false);
+});
