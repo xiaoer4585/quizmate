@@ -27,7 +27,7 @@ export interface AsrConfig {
 }
 
 export class RealtimeVoiceHelper {
-  constructor(private configHelper: ConfigHelper) {}
+  constructor(private configHelper: ConfigHelper, private partition = 'realtime-voice') {}
   private audioWindow: BrowserWindow | null = null;
   private onTextCallback: ((text: string, isFinal: boolean) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
@@ -89,7 +89,7 @@ export class RealtimeVoiceHelper {
     }
 
     // 创建独立 session，用于注入 ASR API 鉴权头 + 麦克风权限
-    const ses = session.fromPartition('realtime-voice');
+    const ses = session.fromPartition(this.partition);
 
     // 允许麦克风权限
     ses.setPermissionRequestHandler((_wc, permission, cb) => {

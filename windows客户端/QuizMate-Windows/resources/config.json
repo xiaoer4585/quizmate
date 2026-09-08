@@ -4,12 +4,18 @@
   "adminWebUrl": "https://www.quizmate.vip/admin-web/index.html",
   "websocketUrl": "",
   "environment": "production",
-  "version": "2026.09.06",
+  "version": "2026.09.08.1",
   "registerUrl": "https://www.quizmate.cn/#credits",
   "resetPasswordUrl": "https://www.quizmate.cn/#credits",
   "rechargeUrl": "https://www.quizmate.cn/recharge.html",
   "tutorialUrl": "https://www.quizmate.cn/",
-  "allowedExternalHosts": ["quizmate.cn", "www.quizmate.cn", "www.quizmate.vip", "offer.quizmate.cn", "www.offer.quizmate.cn"],
+  "allowedExternalHosts": [
+    "quizmate.cn",
+    "www.quizmate.cn",
+    "www.quizmate.vip",
+    "offer.quizmate.cn",
+    "www.offer.quizmate.cn"
+  ],
   "creditCostPerSuccess": 10,
   "creditCostPerInterview": 20,
   "maxScreenshots": 5,
@@ -21,10 +27,20 @@
   "sseConnectTimeoutMs": 30000,
   "screenshotHideDelayMs": 300,
   "screenshotRestoreDelayMs": 200,
-  "minResolution": { "width": 1280, "height": 720 },
+  "minResolution": {
+    "width": 1280,
+    "height": 720
+  },
   "aiModels": {
-    "examText": { "provider": "server-managed", "note": "笔试AI文字模型-由后台统一配置" },
-    "interviewRealtimeVoice": { "provider": "server-managed", "note": "面试实时语音模型-由后台统一配置", "configUrl": "https://www.quizmate.vip/admin-web/index.html#/ai/interview-voice" }
+    "examText": {
+      "provider": "server-managed",
+      "note": "笔试AI文字模型-由后台统一配置"
+    },
+    "interviewRealtimeVoice": {
+      "provider": "server-managed",
+      "note": "面试实时语音模型-由后台统一配置",
+      "configUrl": "https://www.quizmate.vip/admin-web/index.html#/ai/interview-voice"
+    }
   },
   "windowDefaults": {
     "loginWidth": 520,

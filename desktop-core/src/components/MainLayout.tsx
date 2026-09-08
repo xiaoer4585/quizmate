@@ -2,7 +2,7 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, PenLine, Mic,
+  LayoutDashboard, PenLine, Mic, Smartphone,
   User, Wallet, Menu, X,
   Download, Loader2, CheckCircle2, AlertCircle, BookOpen, Chrome, HelpCircle, Sparkles
 } from 'lucide-react';
@@ -16,8 +16,9 @@ interface NavItem { to: string; label: string; icon: ReactNode; badge?: string; 
 
 const NAV: NavItem[] = [
   { to: '/', label: '工作台', icon: <LayoutDashboard size={18} /> },
-  { to: '/exam', label: '笔试助手', icon: <PenLine size={18} />, badge: '积分' },
-  { to: '/interview', label: '面试助手', icon: <Mic size={18} />, badge: '积分' },
+  { to: '/exam', label: isMacPlatform() ? '笔试助手' : 'PC笔试助手', icon: <PenLine size={18} />, badge: '积分' },
+  { to: '/interview', label: isMacPlatform() ? '面试助手' : 'PC面试助手', icon: <Mic size={18} />, badge: '积分' },
+  ...(!isMacPlatform() ? [{ to: '/companion', label: 'PC+手机笔面试', icon: <Smartphone size={18} /> }] : []),
   { to: '/extension', label: '网申插件', icon: <Chrome size={18} />, badge: 'AI' },
 ];
 

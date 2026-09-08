@@ -1,0 +1,39 @@
+name: Windows companion isolated test
+on:
+  push:
+    branches: [codex/windows-companion-test-20260908]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  test-build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: windows客户端/QuizMate-Windows
+        shell: pwsh
+    env:
+      QUIZMATE_UPDATE_BASE_URL: https://quizmate.cn/temp/windows-companion-20260908
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --no-audit --no-fund
+      - run: npm run typecheck:node
+      - run: npm run typecheck:web
+      - run: npm run test:shared
+      - run: node --test ../../其他/手机联调服务/server.test.mjs
+      - run: npm run build
+      - run: npx electron-builder --win --ia32 --publish never
+      - name: Verify and upload draft test package
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $exe = Get-ChildItem release/QuizMate-Windows-*.exe | Select-Object -First 1
+          if (!$exe) { throw 'Installer missing' }
+          $update = Get-Content -Raw release/win-ia32-unpacked/resources/app-update.yml
+          if (!$update.Contains('https://quizmate.cn/temp/windows-companion-20260908/suite/')) { throw 'Update channel is not isolated' }
+          Get-FileHash -Algorithm SHA256 -LiteralPath $exe.FullName | Format-List | Out-File release/SHA256.txt
+          $tag = 'companion-test-${{ github.run_id }}'
+          gh release create $tag --repo '${{ github.repository }}' --target '${{ github.sha }}' --draft --prerelease --title 'Windows PC+手机测试包（未上线）' --notes '隔离测试构建；正式官网和自动更新未变更。手机测试服务需单独启用，未通过实机验收前不可发布。' $exe.FullName release/SHA256.txt

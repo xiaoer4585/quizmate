@@ -7,7 +7,7 @@ import { api, useProfile } from '../lib/ipc';
 import ShareInterviewModal from '../components/ShareInterviewModal';
 import ShortcutSettings from '../components/ShortcutSettings';
 import FeatureGuide, { type FeatureGuideStep } from '../components/FeatureGuide';
-import { defaultShortcutBindings, formatAccelerator, interviewShortcutActions } from '../../shared/shortcuts';
+import { defaultShortcutBindings, formatAccelerator, interviewShortcutActions, isMacPlatform } from '../../shared/shortcuts';
 import type { ComponentHealth, VoiceHealthSnapshot } from '../../shared/reliability';
 import { createIdleVoiceSnapshot, isVoiceSessionActive } from '../../shared/reliability';
 
@@ -395,7 +395,7 @@ export default function Interview() {
       <div className="flex items-start justify-between gap-3 flex-wrap">
         <div>
           <h1 className="text-xl font-bold flex items-center gap-2">
-            <Mic size={22} className="text-rose-400" /> 面试助手
+            <Mic size={22} className="text-rose-400" /> {isMacPlatform() ? '面试助手' : 'PC面试助手'}
           </h1>
           <p className="text-sm text-slate-400 mt-1">实时听写面试官问题 · AI 快速生成参考答案 · 结合简历作答</p>
         </div>

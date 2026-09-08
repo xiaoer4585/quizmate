@@ -1,5 +1,5 @@
-appId: vip.quizmate.app
-productName: QuizMate
+appId: vip.quizmate.companion.test
+productName: QuizMate Test
 copyright: Copyright (C) 2026 QuizMate
 directories:
   output: release
@@ -16,6 +16,7 @@ asarUnpack:
   - node_modules/koffi
   - node_modules/screenshot-desktop
 win:
+  executableName: QuizMate
   target: nsis
   icon: resources/icon.ico
 appx:
@@ -32,7 +33,7 @@ nsis:
   allowToChangeInstallationDirectory: true
   createDesktopShortcut: always
   createStartMenuShortcut: true
-  shortcutName: QuizMate
+  shortcutName: QuizMate Test
   artifactName: QuizMate-Windows-${version}.exe
   installerIcon: resources/icon.ico
   uninstallerIcon: resources/icon.ico

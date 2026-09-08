@@ -100,10 +100,11 @@ export class InterviewHelper {
     private overlay: OverlayManager,
     private tts: TtsHelper,
     private byteDanceTts?: ByteDanceTtsHelper,
-    private realtimeVoice?: RealtimeVoiceHelper
+    private realtimeVoice?: RealtimeVoiceHelper,
+    private companion?: { onEvent: (channel: string, payload: unknown) => void }
   ) {
     this.store = new Store<InterviewStoreSchema>({
-      name: 'interview-data',
+      name: companion ? 'mobile-interview-data' : 'interview-data',
       defaults: { resumes: [], tasks: [] },
     });
     this.contextAccountScope = this.configHelper.getInterviewAccountScope();
@@ -260,6 +261,17 @@ export class InterviewHelper {
 
   stop() {
     this.stopInternal(true);
+  }
+
+  /** Explicit workspace shutdown discards unsent fragments instead of generating a final answer. */
+  stopForWorkspace() {
+    this.answerGeneration += 1;
+    for (const controller of this.answerRequests.values()) controller.abort('workspace-ended');
+    this.answerRequests.clear();
+    this.stopInternal(false);
+    if (this.companion) this.clearTasks();
+    this.conversationTurns = [];
+    this.conversationContext = '';
   }
 
   private stopInternal(flushPending: boolean) {
@@ -640,7 +652,9 @@ export class InterviewHelper {
           const retryable = error instanceof ApiError
             && !requestController.signal.aborted
             && (error.kind === 'network' || error.kind === 'timeout' || error.statusCode >= 500);
-          if (!retryable || attempt >= MAX_ANSWER_RETRIES) throw error;
+          // Legacy interview API has no request idempotency. Never retry a mobile
+          // request with an unknown outcome automatically (it could charge twice).
+          if (this.companion || !retryable || attempt >= MAX_ANSWER_RETRIES) throw error;
           interviewDiagnostics.append('interview-audio', 'answer.request.retry', {
             attempt: attempt + 1,
             delayMs: RETRY_DELAYS_MS[attempt] || RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1],
@@ -650,6 +664,7 @@ export class InterviewHelper {
         }
       }
       if (!data) throw new Error('答案生成失败');
+      if (requestController.signal.aborted) return;
       const answer = data.answer || '暂无答案';
       this.lastAnswer = answer;
       this.updateTask(taskId, { status: 'done', answer, keyPoints: data.keyPoints });
@@ -683,6 +698,10 @@ export class InterviewHelper {
   }
 
   private broadcast(channel: string, payload: unknown) {
+    if (this.companion) {
+      this.companion.onEvent(channel, payload);
+      return;
+    }
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) win.webContents.send(channel, payload);
     }

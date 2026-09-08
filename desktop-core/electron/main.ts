@@ -31,6 +31,37 @@ import { UpdateChecker } from './UpdateChecker';
 import { ShortcutAction, ProcessingMode } from '../shared/shortcuts';
 import { selectActiveOverlay, selectFreshScreenshot, shouldEnsureExamOverlay } from '../shared/overlay-state';
 import { toBusinessVersion } from './version';
+import { CompanionController } from './helpers/CompanionController';
+import { routeWorkspaceShortcut, type AssistantWorkspace } from '../shared/workspace-routing';
+
+let assistantWorkspace: AssistantWorkspace = 'pc';
+let workspaceTransitioning = false;
+let companion: CompanionController | undefined;
+let mobileInterview: InterviewHelper | undefined;
+let pcSearchCount = 0;
+
+async function changeAssistantWorkspace(target: AssistantWorkspace) {
+  if (!IS_WIN || !companion) throw new Error('此功能目前仅用于 Windows 测试版');
+  if (workspaceTransitioning) throw new Error('正在切换工作区，请稍候');
+  if (target === assistantWorkspace) return companion.state();
+  if (screenshotInFlight || pcSearchCount > 0 || companion.state().capturing) throw new Error('请等待当前截图处理完成后切换');
+  workspaceTransitioning = true;
+  try {
+    if (target === 'mobile') {
+      if (!companion.state().connected) throw new Error('请先连接手机');
+      processingHelper.cancelStreaming();
+      interviewHelper.stopForWorkspace();
+      await closeExamClient();
+      closeInterviewOverlay();
+      ttsHelper.stop();
+      byteDanceTtsHelper.stop();
+      mobileInterview?.setContext({ ...interviewHelper.getContext(), resumeText: interviewHelper.getActiveResume()?.text });
+      await companion.activate();
+    } else companion.deactivate();
+    assistantWorkspace = target;
+    return companion.state();
+  } finally { workspaceTransitioning = false; }
+}
 
 // ===== 平台常量（唯一的平台差异入口） =====
 const IS_MAC = process.platform === 'darwin';
@@ -366,6 +397,7 @@ function activateRemainingOverlay(closedOrHidden: OverlayKind): void {
 }
 
 function createOverlayWindow() {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     showOverlay();
     return;
@@ -500,6 +532,7 @@ function createOverlayWindow() {
 }
 
 function showOverlay(markActive = true) {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     state.overlayWindow.showInactive();
     state.overlayWindow.setOpacity(1.0);
@@ -612,6 +645,7 @@ function closeWindow(which: 'main' | 'overlay') {
 
 // ===== 启动/关闭考试客户端（悬浮框生命周期管理，完全沿用原考试插件） =====
 async function launchExamClient(): Promise<{ success: boolean; error?: string }> {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return { success: false, error: '请先返回 PC 工作区' };
   if (configHelper.getProcessingMode() === 'voice') {
     return { success: false, error: '当前为语音播报模式，无法启动笔试助手悬浮框。' };
   }
@@ -653,6 +687,14 @@ function cancelShortcutTest() {
 // ===== 快捷键处理 =====
 // 笔试/面试生命周期独立；窗口调节类动作只路由到最近启动或显示的悬浮窗。
 async function handleShortcutAction(action: ShortcutAction): Promise<void> {
+  const destination = routeWorkspaceShortcut(assistantWorkspace, workspaceTransitioning, action);
+  if (destination === 'ignore') return;
+  if (destination === 'mobile-exam') { await companion?.screenshot(); return; }
+  if (destination === 'mobile-interview') {
+    try { await companion?.toggleInterview(); }
+    catch (error) { state.mainWindow?.webContents.send('companion:error', error instanceof Error ? error.message : '面试启动失败'); }
+    return;
+  }
   const activeOverlay = getActiveOverlayKind();
   switch (action) {
     case 'screenshot': {
@@ -775,6 +817,7 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
 
 // ===== 截图→分析编排（完全沿用原考试插件流程） =====
 async function handleScreenshot(isExtra: boolean): Promise<void> {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   const operation: AnalysisOperationState = {
     operationId: crypto.randomUUID(),
     requestId: `desktop-${crypto.randomUUID()}`,
@@ -913,6 +956,9 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
 }
 
 async function handleSearchAction(mode: ProcessingMode): Promise<void> {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
+  pcSearchCount++;
+  try {
   const procMode = configHelper.getProcessingMode();
   // A visible exam overlay is an explicit request for the overlay workflow,
   // even if the persisted mode is still voice. In that case search the queued
@@ -1048,6 +1094,7 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   }
   // overlay 模式：analyze() 已通过 sendEvent 将结果发送给悬浮框
   setTrayBusy(false);
+  } finally { pcSearchCount--; }
 }
 
 /** voice 模式进度通知：向主窗口发送进度状态（null 表示清除） */
@@ -1297,6 +1344,7 @@ function closeInterviewOverlay() {
 }
 
 async function startInterviewSession(context?: unknown): Promise<{ running: boolean }> {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) throw new Error('请先返回 PC 工作区');
   const createdForStart = !state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed();
   if (createdForStart) createInterviewOverlayWindow();
   else showInterviewOverlay();
@@ -1475,6 +1523,26 @@ async function initializeApp(): Promise<void> {
   interviewHelper = new InterviewHelper(configHelper, authManager, overlayAdapter as unknown as OverlayManager, ttsHelper, byteDanceTtsHelper, realtimeVoiceHelper);
   ctx.interview = interviewHelper;
 
+  if (IS_WIN) {
+    const silentOverlay = { render() {}, renderTaskList() {}, show() {}, hide() {}, clear() {} };
+    mobileInterview = new InterviewHelper(configHelper, authManager, silentOverlay as unknown as OverlayManager,
+      ttsHelper, undefined, new RealtimeVoiceHelper(configHelper, 'mobile-realtime-voice'),
+      { onEvent: (channel, payload) => companion?.onInterviewEvent(channel, payload) });
+    companion = new CompanionController(configHelper, mobileInterview, (snapshot) => {
+      state.mainWindow?.webContents.send('companion:state', snapshot);
+    });
+    ipcMain.handle('companion:state', () => companion!.state());
+    ipcMain.handle('companion:service', (_event, value: unknown) => companion!.setServiceUrl(value));
+    ipcMain.handle('companion:pair', () => companion!.pair());
+    ipcMain.handle('companion:workspace', (_event, target: unknown) => {
+      if (target !== 'pc' && target !== 'mobile') throw new Error('无效工作区');
+      return changeAssistantWorkspace(target);
+    });
+    ipcMain.handle('companion:disconnect', async () => { await changeAssistantWorkspace('pc'); await companion!.disconnect(); });
+    ipcMain.handle('companion:interview', () => companion!.toggleInterview());
+    ipcMain.handle('companion:screenshot', () => companion!.screenshot());
+  }
+
   updateChecker = new UpdateChecker();
   ctx.updateChecker = updateChecker;
 
@@ -1485,6 +1553,15 @@ async function initializeApp(): Promise<void> {
 
   // 注册 IPC
   registerIpcHandlers(ctx, () => state.mainWindow, () => state.overlayWindow, {
+    assertPcWorkspace: () => {
+      if (assistantWorkspace !== 'pc' || workspaceTransitioning) throw new Error('请先返回 PC 工作区');
+    },
+    onAccountExit: async () => {
+      processingHelper.cancelStreaming();
+      interviewHelper.stopForWorkspace();
+      await companion?.disconnect();
+      assistantWorkspace = 'pc';
+    },
     createOverlayWindow,
     showOverlay,
     hideOverlay,
@@ -1587,6 +1664,7 @@ if (!gotLock) {
   });
 
   app.on('before-quit', () => {
+    companion?.deactivate();
     state.quitting = true;
     shortcutsHelper?.unregisterAll();
     processingHelper?.cancelStreaming();

@@ -1,15 +1,17 @@
 // 工作台 - 功能总览、快捷入口、积分/引流卡片
 import { useNavigate } from 'react-router-dom';
 import {
-  PenLine, Mic, Chrome,
+  PenLine, Mic, Chrome, Smartphone,
   Wallet, ArrowRight, Sparkles, TrendingUp, ShieldCheck, Zap, RefreshCw
 } from 'lucide-react';
 import { useState } from 'react';
 import { api, useProfile, useUpdateStatus } from '../lib/ipc';
+import { isMacPlatform } from '../../shared/shortcuts';
 
 const MODULES = [
-  { to: '/exam', title: '笔试助手', desc: '截图搜题 · AI智能答题 · 多题批量解析', icon: <PenLine size={22} />, color: 'from-exam to-exam-dark', cost: '积分' },
-  { to: '/interview', title: '面试助手', desc: '实时听写面试官问题 · AI秒出参考答案 · 隐身模式', icon: <Mic size={22} />, color: 'from-rose-500 to-rose-700', cost: '积分' },
+  { to: '/exam', title: isMacPlatform() ? '笔试助手' : 'PC笔试助手', desc: '截图搜题 · AI智能答题 · 多题批量解析', icon: <PenLine size={22} />, color: 'from-exam to-exam-dark', cost: '积分' },
+  { to: '/interview', title: isMacPlatform() ? '面试助手' : 'PC面试助手', desc: '实时听写面试官问题 · AI秒出参考答案 · 隐身模式', icon: <Mic size={22} />, color: 'from-rose-500 to-rose-700', cost: '积分' },
+  ...(!isMacPlatform() ? [{ to: '/companion', title: 'PC+手机笔面试', desc: '电脑截图与听写 · 手机查看题目和答案', icon: <Smartphone size={22} />, color: 'from-cyan-600 to-teal-700', cost: '积分' }] : []),
   { to: '/extension', title: 'AI 网申插件', desc: '简历识别 · 自动填写 · 投递管理', icon: <Chrome size={22} />, color: 'from-indigo-500 to-indigo-700', cost: '10积分/次' },
 ];
 
