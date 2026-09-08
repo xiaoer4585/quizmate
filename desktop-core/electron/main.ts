@@ -39,12 +39,13 @@ let workspaceTransitioning = false;
 let companion: CompanionController | undefined;
 let mobileInterview: InterviewHelper | undefined;
 let pcSearchCount = 0;
+let pcInterviewStarting = false;
 
 async function changeAssistantWorkspace(target: AssistantWorkspace) {
   if (!IS_WIN || !companion) throw new Error('此功能目前仅用于 Windows 测试版');
   if (workspaceTransitioning) throw new Error('正在切换工作区，请稍候');
   if (target === assistantWorkspace) return companion.state();
-  if (screenshotInFlight || pcSearchCount > 0 || companion.state().capturing) throw new Error('请等待当前截图处理完成后切换');
+  if (screenshotInFlight || pcSearchCount > 0 || companion.state().capturing || pcInterviewStarting) throw new Error('请等待当前截图或面试启动完成后切换');
   workspaceTransitioning = true;
   try {
     if (target === 'mobile') {
@@ -1345,9 +1346,11 @@ function closeInterviewOverlay() {
 
 async function startInterviewSession(context?: unknown): Promise<{ running: boolean }> {
   if (assistantWorkspace !== 'pc' || workspaceTransitioning) throw new Error('请先返回 PC 工作区');
+  if (pcInterviewStarting) throw new Error('面试正在启动，请稍候');
   const createdForStart = !state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed();
   if (createdForStart) createInterviewOverlayWindow();
   else showInterviewOverlay();
+  pcInterviewStarting = true;
   try {
     await interviewHelper.start(context as any);
     if (!interviewHelper.isListening()) throw new Error('请先登录后再开始面试');
@@ -1358,7 +1361,7 @@ async function startInterviewSession(context?: unknown): Promise<{ running: bool
   } catch (error) {
     if (createdForStart) closeInterviewOverlay();
     throw error;
-  }
+  } finally { pcInterviewStarting = false; }
 }
 
 async function stopInterviewSession(): Promise<{ running: boolean }> {

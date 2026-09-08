@@ -18,6 +18,7 @@ export class CompanionController {
   private timer?: NodeJS.Timeout;
   private polling = false;
   private enabled = false;
+  private interviewStarting = false;
   private view: CompanionState = { workspace: 'pc', transitioning: false, connected: false, listening: false, capturing: false, pending: 0 };
   private processor: LightweightProcessingHelper;
   private capture: ScreenshotHelper;
@@ -121,10 +122,12 @@ export class CompanionController {
 
   async toggleInterview() {
     if (!this.enabled) throw new Error('请先启用 PC+手机工作区');
+    if (this.interviewStarting) { this.interview.stopForWorkspace(); this.emit({ listening: false }); return; }
     if (this.interview.isListening()) this.interview.stopForWorkspace();
     else {
       if (!this.view.connected) throw new Error('手机已离线，请恢复连接后开始面试');
-      await this.interview.start();
+      this.interviewStarting = true;
+      try { await this.interview.start(); } finally { this.interviewStarting = false; }
     }
     this.emit({ listening: this.interview.isListening() });
   }

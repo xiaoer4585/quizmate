@@ -1,6 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createRelay } from './server.mjs';
+import { createRelay, startServer } from './server.mjs';
+import http from 'node:http';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { once } from 'node:events';
 
 function fixture() {
   let time = 1000000, stored=[];
@@ -42,4 +47,46 @@ test('saved state can be restored and contains only hashed tokens',async()=>{
   const d=await restored({action:'getRelayEvents',accountToken:'phone',sessionId:p.sessionId});assert.equal(d.connected,true);
   await restored({action:'revokeRelaySession',accountToken:'phone',sessionId:p.sessionId});
   await assert.rejects(restored({action:'getRelayEvents',accountToken:'phone',sessionId:p.sessionId}));
+});
+
+test('HTTP login, publish and phone read survive encrypted service restart without AI or credit actions',async()=>{
+  const actions=[];
+  const auth=http.createServer(async(req,res)=>{
+    let raw='';for await(const chunk of req)raw+=chunk;
+    const input=JSON.parse(raw);actions.push(input.action);
+    res.setHeader('Content-Type','application/json');
+    res.end(JSON.stringify({ok:true,data:input.action==='loginAccount'?{token:'phone'}:{account:{accountId:'a',credits:80}}}));
+  });
+  auth.listen(0,'127.0.0.1');await once(auth,'listening');
+  const directory=fs.mkdtempSync(path.join(os.tmpdir(),'quizmate-relay-test-'));
+  const names=['RELAY_PUBLIC_URL','RELAY_AUTH_ENDPOINT','RELAY_DATA_DIR','PORT','HOST'];
+  const previous=Object.fromEntries(names.map(k=>[k,process.env[k]]));
+  Object.assign(process.env,{RELAY_PUBLIC_URL:'https://relay.example/companion/',RELAY_AUTH_ENDPOINT:`http://127.0.0.1:${auth.address().port}`,RELAY_DATA_DIR:directory,PORT:'0',HOST:'127.0.0.1'});
+  let server;
+  try{
+    server=startServer();await once(server,'listening');
+    let base=`http://127.0.0.1:${server.address().port}/companion/`;
+    const call=async input=>{const response=await fetch(`${base}api`,{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://relay.example'},body:JSON.stringify(input)});return response.json()};
+    assert.equal((await fetch(`${base}health`)).status,200);
+    assert.match(await(await fetch(base)).text(),/手机阅读/);
+    const login=await call({action:'loginAccount',email:'fixture@example.test',password:'fixture-only'});assert.equal(login.data.token,'phone');
+    const {data:p}=await call({action:'createRelayPairing',accountToken:'pc'});
+    assert.equal(p.phoneUrl,`https://relay.example/companion/#code=${p.code}`);
+    assert.equal((await call({action:'confirmRelayPairing',accountToken:'phone',code:p.code})).ok,true);
+    const card={id:'q1',kind:'interview',status:'pending',question:'中文问题',answer:'',createdAt:Date.now()};
+    await call({action:'publishRelayResult',accountToken:'pc',sessionId:p.sessionId,card});
+    await call({action:'publishRelayResult',accountToken:'pc',sessionId:p.sessionId,card:{...card,status:'done',answer:'中文回答'}});
+    assert.equal(fs.readFileSync(path.join(directory,'sessions.enc')).includes(Buffer.from('中文回答')),false);
+    await new Promise(resolve=>server.close(resolve));
+    server=startServer();await once(server,'listening');base=`http://127.0.0.1:${server.address().port}/companion/`;
+    const result=await call({action:'getRelayEvents',accountToken:'phone',sessionId:p.sessionId});
+    assert.equal(result.data.cards[0].answer,'中文回答');assert.equal(result.data.credits,80);
+    const denied=await fetch(`${base}api`,{method:'POST',headers:{Origin:'https://other.example'},body:'{}'});assert.equal(denied.status,403);
+    assert.deepEqual([...new Set(actions)].sort(),['getAccountProfile','loginAccount']);
+  }finally{
+    if(server)await new Promise(resolve=>server.close(resolve));await new Promise(resolve=>auth.close(resolve));
+    for(const key of names){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key]}
+    // This directory is created above by mkdtemp under the OS temp folder only.
+    fs.rmSync(directory,{recursive:true,force:true});
+  }
 });
