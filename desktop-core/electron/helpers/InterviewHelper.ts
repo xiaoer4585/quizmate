@@ -75,6 +75,7 @@ export class InterviewHelper {
   // 等待第一题完整生成（6~15 秒）才开始请求，是面试响应变慢的主要客户端原因。
   private static readonly MAX_CONCURRENT_ANSWERS = 2;
   private listening = false;
+  private companionStartup?: AbortController;
   private voiceState: VoiceHealthSnapshot = createIdleVoiceSnapshot();
   private context: InterviewContext = { language: 'zh', answerStyle: 'concise' };
   private lastAnswer = '';
@@ -229,6 +230,7 @@ export class InterviewHelper {
       return;
     }
     this.listening = true;
+    if (this.companion) this.companionStartup = new AbortController();
     this.clearPendingTranscript();
     // 启动火山引擎大模型流式语音识别。
     if (this.realtimeVoice) {
@@ -238,6 +240,7 @@ export class InterviewHelper {
           (error) => this.broadcast('interview:transcript', { error }),
           {
             audioMode: this.context.audioMode || 'demo',
+            signal: this.companionStartup?.signal,
             onState: (snapshot) => this.handleVoiceState(snapshot),
           }
         );
@@ -265,6 +268,7 @@ export class InterviewHelper {
 
   /** Explicit workspace shutdown discards unsent fragments instead of generating a final answer. */
   stopForWorkspace() {
+    this.companionStartup?.abort();
     this.answerGeneration += 1;
     for (const controller of this.answerRequests.values()) controller.abort('workspace-ended');
     this.answerRequests.clear();

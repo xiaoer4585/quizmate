@@ -67,6 +67,9 @@ export function createRelay({ authenticate, now = Date.now, save = () => {}, ini
 }
 
 export function startServer() {
+  const publicUrl = new URL(process.env.RELAY_PUBLIC_URL || '');
+  if (publicUrl.protocol !== 'https:' || publicUrl.username || publicUrl.password || publicUrl.search || publicUrl.hash) throw new Error('RELAY_PUBLIC_URL must be a clean HTTPS URL');
+  if (!publicUrl.pathname.endsWith('/')) publicUrl.pathname += '/';
   const dataDir = process.env.RELAY_DATA_DIR || path.join(root, 'private-data');
   fs.mkdirSync(dataDir, { recursive: true, mode: 0o700 });
   const keyPath = path.join(dataDir, 'key');
@@ -112,16 +115,18 @@ export function startServer() {
       }
       if (req.method !== 'POST' || !url.pathname.endsWith('/api')) throw fail('接口不存在', 'NOT_FOUND', 404);
       const origin = req.headers.origin;
-      if (origin && origin !== (process.env.RELAY_PUBLIC_ORIGIN || 'https://api.quizmate.vip')) throw fail('请求来源不允许', 'ORIGIN_DENIED', 403);
+      if (origin && origin !== publicUrl.origin) throw fail('请求来源不允许', 'ORIGIN_DENIED', 403);
       const ip = req.socket.remoteAddress; const slot = Math.floor(Date.now() / 60000);
       const limiter = rate.get(ip); const count = limiter?.slot === slot ? limiter.count + 1 : 1;
       rate.set(ip, { slot, count }); if (count > 600) throw fail('请求过于频繁', 'RATE_LIMIT', 429);
-      let raw = ''; for await (const chunk of req) { raw += chunk; if (Buffer.byteLength(raw) > 90000) throw fail('请求过大', 'BODY_TOO_LARGE', 413); }
+      const chunks = []; let bytes = 0;
+      for await (const chunk of req) { bytes += chunk.length; if (bytes > 90000) throw fail('请求过大', 'BODY_TOO_LARGE', 413); chunks.push(chunk); }
+      const raw = Buffer.concat(chunks).toString('utf8');
       const input = JSON.parse(raw); let data;
       if (input.action === 'loginAccount') data = await call({ action: 'loginAccount', email: input.email, password: input.password, platform: 'mobile-web-test', deviceId: input.deviceId });
       else if (input.action === 'logoutAccount') { cache.delete(hash(input.accountToken)); data = await call({ action: 'logoutAccount', accountToken: input.accountToken }); }
       else data = await relay(input);
-      if (input.action === 'createRelayPairing') data.phoneUrl = `${process.env.RELAY_PUBLIC_URL || 'https://api.quizmate.vip/companion-test/'}#code=${data.code}`;
+      if (input.action === 'createRelayPairing') data.phoneUrl = `${publicUrl.href}#code=${data.code}`;
       res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ ok: true, data }));
     } catch (e) { res.statusCode = e.status || 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ ok: false, code: e.code || 'RELAY_ERROR', error: e.code ? e.message : '服务暂时不可用' })); }
   });
