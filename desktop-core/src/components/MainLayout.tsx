@@ -16,10 +16,10 @@ interface NavItem { to: string; label: string; icon: ReactNode; badge?: string; 
 
 const NAV: NavItem[] = [
   { to: '/', label: '工作台', icon: <LayoutDashboard size={18} /> },
-  { to: '/exam', label: isMacPlatform() ? '笔试助手' : 'PC笔试助手', icon: <PenLine size={18} />, badge: '积分' },
-  { to: '/interview', label: isMacPlatform() ? '面试助手' : 'PC面试助手', icon: <Mic size={18} />, badge: '积分' },
-  ...(!isMacPlatform() ? [{ to: '/companion', label: 'PC+手机笔面试', icon: <Smartphone size={18} /> }] : []),
-  { to: '/extension', label: '网申插件', icon: <Chrome size={18} />, badge: 'AI' },
+  { to: '/exam', label: isMacPlatform() ? '笔试助手' : 'PC笔试助手', icon: <PenLine size={18} /> },
+  { to: '/interview', label: isMacPlatform() ? '面试助手' : 'PC面试助手', icon: <Mic size={18} /> },
+  ...(!isMacPlatform() ? [{ to: '/companion', label: '双机协作笔面试', icon: <Smartphone size={18} /> }] : []),
+  { to: '/extension', label: '网申插件', icon: <Chrome size={18} /> },
 ];
 
 export default function MainLayout({ children }: { children: ReactNode }) {
@@ -27,6 +27,19 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { data: profile } = useProfile();
   const [collapsed, setCollapsed] = useState(false);
+  const [entryError, setEntryError] = useState('');
+  const [approvedPath, setApprovedPath] = useState('');
+  useEffect(() => {
+    let alive = true;
+    const path = location.pathname;
+    if (isMacPlatform() || !['/exam', '/interview', '/companion'].includes(path)) { setApprovedPath(path); return; }
+    api.companion.checkEntry(path).then((message: string) => {
+      if (!alive) return;
+      if (message) { setEntryError(message); navigate('/', { replace: true }); }
+      else setApprovedPath(path);
+    }).catch(() => { if (alive) { setEntryError('无法确认助手状态，请稍后重试'); navigate('/', { replace: true }); } });
+    return () => { alive = false; };
+  }, [location.pathname, navigate]);
   const [version, setVersion] = useState('');
   const updateStatus = useUpdateStatus();
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
@@ -85,7 +98,17 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100">
+    <div className="flex h-screen bg-slate-950 text-slate-100" onClickCapture={event => {
+      if (isMacPlatform()) return;
+      const anchor = (event.target as HTMLElement).closest('a,[data-assistant-route]');
+      const path = anchor?.getAttribute('data-assistant-route') || anchor?.getAttribute('href')?.replace(/^#/, '');
+      if (!path || !['/exam', '/interview', '/companion'].includes(path)) return;
+      event.preventDefault(); event.stopPropagation();
+      api.companion.checkEntry(path).then((message: string) => {
+        if (message) setEntryError(message); else { setEntryError(''); navigate(path); }
+      }).catch(() => setEntryError('无法确认助手状态，请稍后重试'));
+    }}>
+      {entryError && <div role="alertdialog" aria-label="助手正在运行" className="fixed inset-0 z-[100] bg-black/50 flex items-center justify-center"><div className="bg-slate-900 rounded-xl border border-slate-700 p-6 shadow-xl"><p className="mb-5">{entryError}</p><button className="btn-primary" onClick={() => setEntryError('')}>知道了</button></div></div>}
       {/* 侧边栏 */}
       <aside className={`${collapsed ? 'w-16' : 'w-56'} flex-shrink-0 bg-slate-900/80 border-r border-slate-800 flex flex-col transition-all`}>
         <div className="h-14 flex items-center gap-2 px-4 border-b border-slate-800">
@@ -238,7 +261,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
         {/* 内容区 */}
-        <main className="flex-1 overflow-auto p-5">{children}</main>
+        <main className="flex-1 overflow-auto p-5">{approvedPath === location.pathname ? children : <p className="text-slate-400">正在确认助手状态…</p>}</main>
       </div>
       <FeedbackButton />
       {/* 充值弹窗 */}

@@ -49,7 +49,7 @@ test('saved state can be restored and contains only hashed tokens',async()=>{
   await assert.rejects(restored({action:'getRelayEvents',accountToken:'phone',sessionId:p.sessionId}));
 });
 
-test('HTTP login, publish and phone read survive encrypted service restart without AI or credit actions',async()=>{
+test('HTTP phone reads encrypted results and restart requires fresh reader login without AI or credit actions',async()=>{
   const actions=[];
   const auth=http.createServer(async(req,res)=>{
     let raw='';for await(const chunk of req)raw+=chunk;
@@ -68,7 +68,7 @@ test('HTTP login, publish and phone read survive encrypted service restart witho
     let base=`http://127.0.0.1:${server.address().port}/companion/`;
     const call=async input=>{const response=await fetch(`${base}api`,{method:'POST',headers:{'Content-Type':'application/json',Origin:'https://relay.example'},body:JSON.stringify(input)});return response.json()};
     assert.equal((await fetch(`${base}health`)).status,200);
-    assert.match(await(await fetch(base)).text(),/手机阅读/);
+    assert.match(await(await fetch(base)).text(),/双机协作/);
     const login=await call({action:'loginAccount',email:'fixture@example.test',password:'fixture-only'});assert.equal(login.data.token,'phone');
     const {data:p}=await call({action:'createRelayPairing',accountToken:'pc'});
     assert.equal(p.phoneUrl,`https://relay.example/companion/#code=${p.code}`);
@@ -77,12 +77,17 @@ test('HTTP login, publish and phone read survive encrypted service restart witho
     await call({action:'publishRelayResult',accountToken:'pc',sessionId:p.sessionId,card});
     await call({action:'publishRelayResult',accountToken:'pc',sessionId:p.sessionId,card:{...card,status:'done',answer:'中文回答'}});
     assert.equal(fs.readFileSync(path.join(directory,'sessions.enc')).includes(Buffer.from('中文回答')),false);
+    const live=await call({action:'getRelayEvents',accountToken:'phone',sessionId:p.sessionId});
+    assert.equal(live.data.cards[0].answer,'中文回答');assert.equal(live.data.credits,80);
+    await call({action:'closeMobileReader',accountToken:'phone',sessionId:p.sessionId});
+    assert.equal((await call({action:'getRelayEvents',accountToken:'phone',sessionId:p.sessionId})).code,'READER_EXPIRED');
+    assert.equal((await call({action:'relayHeartbeat',accountToken:'pc',sessionId:p.sessionId})).code,'RELAY_EXPIRED');
     await new Promise(resolve=>server.close(resolve));
     server=startServer();await once(server,'listening');base=`http://127.0.0.1:${server.address().port}/companion/`;
     const result=await call({action:'getRelayEvents',accountToken:'phone',sessionId:p.sessionId});
-    assert.equal(result.data.cards[0].answer,'中文回答');assert.equal(result.data.credits,80);
+    assert.equal(result.code,'READER_EXPIRED');
     const denied=await fetch(`${base}api`,{method:'POST',headers:{Origin:'https://other.example'},body:'{}'});assert.equal(denied.status,403);
-    assert.deepEqual([...new Set(actions)].sort(),['getAccountProfile','loginAccount']);
+    assert.deepEqual([...new Set(actions)].sort(),['getAccountProfile','loginAccount','logoutAccount']);
   }finally{
     if(server)await new Promise(resolve=>server.close(resolve));await new Promise(resolve=>auth.close(resolve));
     for(const key of names){if(previous[key]===undefined)delete process.env[key];else process.env[key]=previous[key]}

@@ -1,8 +1,18 @@
 import { describe, it, expect } from 'vitest';
-import { routeWorkspaceShortcut } from '../workspace-routing';
+import { routeWorkspaceShortcut, workspaceEntryError } from '../workspace-routing';
 import { getDefaultShortcutBindings, type ShortcutAction } from '../shortcuts';
 
 describe('exclusive PC and mobile shortcut ownership', () => {
+  it('blocks entry with exact messages and preserves PC-to-PC navigation', () => {
+    expect(workspaceEntryError('/companion','pc',true,false)).toBe('请先关闭PC笔试助手');
+    expect(workspaceEntryError('/companion','pc',false,true)).toBe('请先关闭PC面试助手');
+    expect(workspaceEntryError('/companion','pc',true,true)).toBe('请关闭PC笔试和面试助手');
+    for(const route of ['/exam','/interview']) {
+      expect(workspaceEntryError(route,'mobile',false,false)).toBe('请先关闭双机协作笔面试');
+      expect(workspaceEntryError(route,'pc',true,true)).toBe('');
+    }
+    expect(workspaceEntryError('/companion','pc',false,false)).toBe('');
+  });
   const actions = Object.keys(getDefaultShortcutBindings('win32')) as ShortcutAction[];
   it('preserves every existing PC action', () => {
     for (const action of actions) {

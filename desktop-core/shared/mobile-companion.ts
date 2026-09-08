@@ -16,6 +16,7 @@ export interface CompanionState {
   listening: boolean;
   capturing: boolean;
   pending: number;
+  audioMode?: 'demo' | 'formal';
   serviceUrl?: string;
   phoneUrl?: string;
   code?: string;

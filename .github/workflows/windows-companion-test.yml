@@ -23,8 +23,12 @@ jobs:
       - run: npm run typecheck:node
       - run: npm run typecheck:web
       - run: npm run test:shared
-      - run: node --test ../../其他/手机联调服务/server.test.mjs
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+        working-directory: 其他/手机联调服务
+      - run: npm test
+        working-directory: 其他/手机联调服务
       - run: npm run build
+      - run: node scripts/audit-protected-build.cjs
       - run: npx electron-builder --win --ia32 --publish never
       - name: Verify and upload draft test package
         env:
@@ -36,4 +40,4 @@ jobs:
           if (!$update.Contains('https://quizmate.cn/temp/windows-companion-20260908/suite/')) { throw 'Update channel is not isolated' }
           Get-FileHash -Algorithm SHA256 -LiteralPath $exe.FullName | Format-List | Out-File release/SHA256.txt
           $tag = 'companion-test-${{ github.run_id }}'
-          gh release create $tag --repo '${{ github.repository }}' --target '${{ github.sha }}' --draft --prerelease --title 'Windows PC+手机测试包（未上线）' --notes '隔离测试构建；正式官网和自动更新未变更。手机测试服务需单独启用，未通过实机验收前不可发布。' $exe.FullName release/SHA256.txt
+          gh release create $tag --repo '${{ github.repository }}' --target '${{ github.sha }}' --draft --prerelease --title 'Windows 双机协作与核心保护测试包（未上线）' --notes '隔离测试构建；正式官网和自动更新未变更。配套独立测试服务：https://api.quizmate.vip/companion-test/ 。包含双机协作 UI 优化及 Windows 面试策略服务端迁移；未通过实机验收前不可发布。' $exe.FullName release/SHA256.txt

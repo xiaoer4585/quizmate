@@ -29,7 +29,18 @@ export class CompanionController {
     this.capture.init();
   }
 
-  state(): CompanionState { return { ...this.view, serviceUrl: String(this.config.getClientSettings().companionServiceUrl || '') }; }
+  state(): CompanionState { return { ...this.view, audioMode: this.interview.getContext().audioMode || 'demo', serviceUrl: String(this.config.getClientSettings().companionServiceUrl || 'https://api.quizmate.vip/companion-test/') }; }
+  async setAudioMode(value: unknown) {
+    if (value !== 'demo' && value !== 'formal') throw new Error('音频模式无效');
+    if (this.interviewStarting) throw new Error('面试正在启动，请稍候');
+    const running = this.interview.isListening();
+    this.interview.setContext({ audioMode: value });
+    if (running) {
+      this.interviewStarting = true;
+      try { await this.interview.restart(); } finally { this.interviewStarting = false; }
+    }
+    this.emit({ listening: this.interview.isListening() });
+  }
   private endpoint() {
     const value = this.state().serviceUrl;
     if (!value) throw new Error('请先填写独立手机测试服务地址');
@@ -121,7 +132,7 @@ export class CompanionController {
   }
 
   async toggleInterview() {
-    if (!this.enabled) throw new Error('请先启用 PC+手机工作区');
+    if (!this.enabled) throw new Error('请先开始双机协作');
     if (this.interviewStarting) { this.interview.stopForWorkspace(); this.emit({ listening: false }); return; }
     if (this.interview.isListening()) this.interview.stopForWorkspace();
     else {
@@ -180,6 +191,10 @@ export class CompanionController {
       const data = await this.call<{ connected: boolean }>('relayHeartbeat', { sessionId });
       if (sessionId !== this.pairing?.sessionId || generation !== this.generation) return;
       this.emit({ connected: data.connected });
+      if (!data.connected && this.enabled && this.interview.isListening()) {
+        this.interview.stopForWorkspace();
+        this.emit({ listening: false, error: '手机已离线，面试已停止。重新连接后可再次开始。' });
+      }
       for (const [id, card] of Array.from(this.queued).slice(0, 20)) {
         await this.call('publishRelayResult', { sessionId, card });
         if (sessionId !== this.pairing?.sessionId) return;
@@ -187,6 +202,7 @@ export class CompanionController {
       }
       this.emit();
     } catch (error) {
+      if (sessionId === this.pairing?.sessionId && this.enabled && this.interview.isListening()) this.interview.stopForWorkspace();
       if (sessionId === this.pairing?.sessionId) this.emit({ connected: false, error: error instanceof Error ? error.message : '手机同步连接失败' });
     } finally { this.polling = false; }
   }

@@ -16,7 +16,7 @@ function fixture() {
   let settings: Record<string, unknown> = { companionServiceUrl: 'https://test.example/' };
   const controller = new CompanionController({ getAuthToken: () => token, getClientSettings: () => settings,
     updateClientSettings: (patch: object) => { settings = { ...settings, ...patch }; } } as any,
-  { stopForWorkspace: mocks.stop, isListening: () => false, start: vi.fn(), getTasks: () => [] } as any, () => {});
+  { stopForWorkspace: mocks.stop, isListening: () => false, start: vi.fn(), getTasks: () => [], getContext: () => ({ audioMode: 'demo' }) } as any, () => {});
   return { controller, changeAccount: () => { token = 'another-account'; } };
 }
 beforeEach(() => {
@@ -59,4 +59,26 @@ test('service endpoint requires HTTPS and cannot change while paired', async () 
   expect(() => controller.setServiceUrl('https://user:password@example.test/')).toThrow();
   controller.setServiceUrl('https://example.test/reader'); expect(controller.state().serviceUrl).toBe('https://example.test/reader/');
   await controller.pair(); expect(() => controller.setServiceUrl('https://other.example/')).toThrow();
+});
+
+test('mobile audio selection persists and restarts only its own running interview', async () => {
+  let context = { audioMode: 'demo' }, listening = false;
+  const restart = vi.fn(async () => {}), setContext = vi.fn(p => { context = { ...context, ...p }; });
+  const controller = new CompanionController({getClientSettings: () => ({})} as any,
+    {getContext: () => context, setContext, isListening: () => listening, restart} as any, () => {});
+  await controller.setAudioMode('formal'); expect(controller.state().audioMode).toBe('formal');
+  expect(restart).not.toHaveBeenCalled(); listening = true;
+  await controller.setAudioMode('demo'); expect(restart).toHaveBeenCalledTimes(1);
+  expect(controller.state().audioMode).toBe('demo');
+  await expect(controller.setAudioMode('invalid')).rejects.toThrow();
+});
+
+test('reader offline stops audio while preserving mobile shortcut ownership', async () => {
+  let listening = false;
+  const stop = vi.fn(() => { listening = false; });
+  const controller = new CompanionController({getAuthToken: () => 'desktop-token', getClientSettings: () => ({companionServiceUrl: 'https://test.example/'})} as any,
+    {stopForWorkspace: stop, isListening: () => listening, getContext: () => ({})} as any, () => {});
+  await controller.pair(); await controller.activate(); listening = true; stop.mockClear();
+  mocks.post.mockResolvedValue({connected:false}); await controller.sync();
+  expect(stop).toHaveBeenCalledTimes(1); expect(controller.state()).toMatchObject({workspace:'mobile',connected:false,listening:false});
 });

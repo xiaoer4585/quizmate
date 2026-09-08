@@ -16,3 +16,12 @@ export function routeWorkspaceShortcut(
   if (action === 'interview_start') return 'mobile-interview';
   return 'ignore';
 }
+
+export function workspaceEntryError(route: string, workspace: AssistantWorkspace, exam: boolean, interview: boolean): string {
+  if (workspace === 'mobile' && (route === '/exam' || route === '/interview')) return '请先关闭双机协作笔面试';
+  if (route !== '/companion' || workspace === 'mobile') return '';
+  if (exam && interview) return '请关闭PC笔试和面试助手';
+  if (exam) return '请先关闭PC笔试助手';
+  if (interview) return '请先关闭PC面试助手';
+  return '';
+}

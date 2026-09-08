@@ -11,17 +11,21 @@ export default defineConfig({
   main: {
     plugins: [externalizeDepsPlugin()],
     build: {
+      minify: true,
+      sourcemap: false,
       rollupOptions: {
         input: { index: resolve(desktopCore, 'electron/main.ts') },
       },
     },
     resolve: {
-      alias: { '@shared': resolve(desktopCore, 'shared') },
+      alias: [{ find: /^(?:\.\/helpers\/|\.\/)InterviewHelper$/, replacement: resolve(desktopCore, 'electron/helpers/WindowsInterviewHelper.ts') }, { find: /^(?:\.\/helpers\/|\.\/)RealtimeVoiceHelper$/, replacement: resolve(desktopCore, 'electron/helpers/WindowsRealtimeVoiceHelper.ts') }, { find: '@shared', replacement: resolve(desktopCore, 'shared') }],
     },
   },
   preload: {
     plugins: [externalizeDepsPlugin()],
     build: {
+      minify: true,
+      sourcemap: false,
       rollupOptions: {
         input: { index: resolve(desktopCore, 'electron/preload.ts') },
         output: { format: 'cjs' },
@@ -34,6 +38,8 @@ export default defineConfig({
   renderer: {
     root: resolve(desktopCore, 'src'),
     build: {
+      minify: true,
+      sourcemap: false,
       rollupOptions: {
         input: { index: resolve(desktopCore, 'src/index.html') },
       },

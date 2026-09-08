@@ -32,7 +32,7 @@ import { ShortcutAction, ProcessingMode } from '../shared/shortcuts';
 import { selectActiveOverlay, selectFreshScreenshot, shouldEnsureExamOverlay } from '../shared/overlay-state';
 import { toBusinessVersion } from './version';
 import { CompanionController } from './helpers/CompanionController';
-import { routeWorkspaceShortcut, type AssistantWorkspace } from '../shared/workspace-routing';
+import { workspaceEntryError, routeWorkspaceShortcut, type AssistantWorkspace } from '../shared/workspace-routing';
 
 let assistantWorkspace: AssistantWorkspace = 'pc';
 let workspaceTransitioning = false;
@@ -41,22 +41,25 @@ let mobileInterview: InterviewHelper | undefined;
 let pcSearchCount = 0;
 let pcInterviewStarting = false;
 
+function assistantEntryError(route: string): string {
+  return workspaceEntryError(route, assistantWorkspace, !!state.overlayLocked || pcSearchCount > 0 || screenshotInFlight, !!state.interviewOverlayActive || pcInterviewStarting || interviewHelper?.isListening());
+}
+
 async function changeAssistantWorkspace(target: AssistantWorkspace) {
   if (!IS_WIN || !companion) throw new Error('此功能目前仅用于 Windows 测试版');
   if (workspaceTransitioning) throw new Error('正在切换工作区，请稍候');
   if (target === assistantWorkspace) return companion.state();
-  if (screenshotInFlight || pcSearchCount > 0 || companion.state().capturing || pcInterviewStarting) throw new Error('请等待当前截图或面试启动完成后切换');
+  if (target === 'mobile' && (screenshotInFlight || pcSearchCount > 0 || pcInterviewStarting)) throw new Error('请等待当前截图或面试启动完成后切换');
   workspaceTransitioning = true;
   try {
     if (target === 'mobile') {
       if (!companion.state().connected) throw new Error('请先连接手机');
+      const error = assistantEntryError('/companion');
+      if (error) throw new Error(error);
       processingHelper.cancelStreaming();
-      interviewHelper.stopForWorkspace();
-      await closeExamClient();
-      closeInterviewOverlay();
       ttsHelper.stop();
       byteDanceTtsHelper.stop();
-      mobileInterview?.setContext({ ...interviewHelper.getContext(), resumeText: interviewHelper.getActiveResume()?.text });
+      mobileInterview?.setContext({ ...interviewHelper.getContext(), audioMode: configHelper.getInterviewContext().audioMode || 'demo', resumeText: interviewHelper.getActiveResume()?.text });
       await companion.activate();
     } else companion.deactivate();
     assistantWorkspace = target;
@@ -646,7 +649,7 @@ function closeWindow(which: 'main' | 'overlay') {
 
 // ===== 启动/关闭考试客户端（悬浮框生命周期管理，完全沿用原考试插件） =====
 async function launchExamClient(): Promise<{ success: boolean; error?: string }> {
-  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return { success: false, error: '请先返回 PC 工作区' };
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return { success: false, error: '请先关闭双机协作笔面试' };
   if (configHelper.getProcessingMode() === 'voice') {
     return { success: false, error: '当前为语音播报模式，无法启动笔试助手悬浮框。' };
   }
@@ -1345,7 +1348,7 @@ function closeInterviewOverlay() {
 }
 
 async function startInterviewSession(context?: unknown): Promise<{ running: boolean }> {
-  if (assistantWorkspace !== 'pc' || workspaceTransitioning) throw new Error('请先返回 PC 工作区');
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) throw new Error('请先关闭双机协作笔面试');
   if (pcInterviewStarting) throw new Error('面试正在启动，请稍候');
   const createdForStart = !state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed();
   if (createdForStart) createInterviewOverlayWindow();
@@ -1535,6 +1538,8 @@ async function initializeApp(): Promise<void> {
       state.mainWindow?.webContents.send('companion:state', snapshot);
     });
     ipcMain.handle('companion:state', () => companion!.state());
+    ipcMain.handle('companion:entry', (_event, route: string) => assistantEntryError(route));
+    ipcMain.handle('companion:audioMode', (_event, value: unknown) => companion!.setAudioMode(value));
     ipcMain.handle('companion:service', (_event, value: unknown) => companion!.setServiceUrl(value));
     ipcMain.handle('companion:pair', () => companion!.pair());
     ipcMain.handle('companion:workspace', (_event, target: unknown) => {
@@ -1557,7 +1562,7 @@ async function initializeApp(): Promise<void> {
   // 注册 IPC
   registerIpcHandlers(ctx, () => state.mainWindow, () => state.overlayWindow, {
     assertPcWorkspace: () => {
-      if (assistantWorkspace !== 'pc' || workspaceTransitioning) throw new Error('请先返回 PC 工作区');
+      if (assistantWorkspace !== 'pc' || workspaceTransitioning) throw new Error('请先关闭双机协作笔面试');
     },
     onAccountExit: async () => {
       processingHelper.cancelStreaming();

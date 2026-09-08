@@ -3,6 +3,8 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createInterviewEngine } from './interview-engine.mjs';
+import { createVoiceProxy } from './voice-proxy.mjs';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 const hash = value => crypto.createHash('sha256').update(String(value)).digest('hex');
@@ -12,7 +14,7 @@ export function createRelay({ authenticate, now = Date.now, save = () => {}, ini
   const sessions = new Map(initial.map(s => [s.id, s]));
   const attempts = new Map();
   const persist = () => save([...sessions.values()]);
-  return async input => {
+  const handle = async input => {
     for (const [id, s] of sessions) if (s.expiresAt <= now()) sessions.delete(id);
     const account = await authenticate(input.accountToken);
     if (!account?.accountId) throw fail('请重新登录', 'AUTH_REQUIRED', 401);
@@ -64,6 +66,8 @@ export function createRelay({ authenticate, now = Date.now, save = () => {}, ini
     }
     throw fail('未知操作', 'UNKNOWN_ACTION');
   };
+  handle.closeReader = tokenHash => { for (const [id,s] of sessions) if (s.mobile === tokenHash) sessions.delete(id); persist(); };
+  return handle;
 }
 
 export function startServer() {
@@ -88,21 +92,31 @@ export function startServer() {
     fs.renameSync(`${dataPath}.tmp`, dataPath);
   };
   const upstream = process.env.RELAY_AUTH_ENDPOINT || 'https://api.quizmate.vip/study-auth-api';
-  const call = async input => {
-    const response = await fetch(upstream, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: AbortSignal.timeout(15000) });
+  const call = async (input, signal) => {
+    const response = await fetch(upstream, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(input), signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(60000)]) : AbortSignal.timeout(15000) });
     const result = await response.json();
     if (!result.ok) throw fail(result.error || '账号服务不可用', result.code || 'AUTH_ERROR', response.status);
     return result.data;
   };
   const cache = new Map();
-  const relay = createRelay({ initial, save, authenticate: async token => {
+  const authenticate = async token => {
     if (typeof token !== 'string' || !token) throw fail('请先登录', 'AUTH_REQUIRED', 401);
-    const h = hash(token); const hit = cache.get(h);
-    if (hit && hit.expires > Date.now()) return hit.account;
-    const data = await call({ action: 'getAccountProfile', accountToken: token });
-    if (cache.size > 1000) cache.clear();
-    cache.set(h, { account: data.account, expires: Date.now() + 10000 }); return data.account;
-  }});
+    const h=hash(token),hit=cache.get(h);if(hit&&hit.expires>Date.now())return hit.account;
+    const data=await call({action:'getAccountProfile',accountToken:token});
+    if(cache.size>1000)cache.clear();cache.set(h,{account:data.account,expires:Date.now()+10000});return data.account;
+  };
+  const relay=createRelay({initial,save,authenticate});
+  const interview=createInterviewEngine({authenticate,answer:(input,signal)=>call({action:'generateInterviewAnswer',...input},signal)});
+  const voice=createVoiceProxy({authenticate,loadConfig:token=>call({action:'getAsrConfig',accountToken:token}),publicUrl:publicUrl.href});
+  const readers=new Map();
+  const closeReader=async token=>{
+    const h=hash(token);readers.delete(h);cache.delete(h);relay.closeReader(h);
+    await call({action:'logoutAccount',accountToken:token});
+  };
+  const housekeeping=setInterval(()=>{
+    interview.sweep();voice.sweep();
+    for(const value of readers.values())if(value.until<=Date.now())void closeReader(value.token).catch(()=>{});
+  },5000);housekeeping.unref();
   const rate = new Map();
   const server = http.createServer(async (req, res) => {
     res.setHeader('Cache-Control', 'no-store'); res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -116,20 +130,34 @@ export function startServer() {
       if (req.method !== 'POST' || !url.pathname.endsWith('/api')) throw fail('接口不存在', 'NOT_FOUND', 404);
       const origin = req.headers.origin;
       if (origin && origin !== publicUrl.origin) throw fail('请求来源不允许', 'ORIGIN_DENIED', 403);
-      const ip = req.socket.remoteAddress; const slot = Math.floor(Date.now() / 60000);
+      const ip = req.socket.remoteAddress === '127.0.0.1' ? String(req.headers['x-real-ip'] || req.socket.remoteAddress) : req.socket.remoteAddress; const slot = Math.floor(Date.now() / 60000);
       const limiter = rate.get(ip); const count = limiter?.slot === slot ? limiter.count + 1 : 1;
-      rate.set(ip, { slot, count }); if (count > 600) throw fail('请求过于频繁', 'RATE_LIMIT', 429);
+      if(rate.size>5000)rate.clear();rate.set(ip, { slot, count }); if (count > 600) throw fail('请求过于频繁', 'RATE_LIMIT', 429);
       const chunks = []; let bytes = 0;
-      for await (const chunk of req) { bytes += chunk.length; if (bytes > 90000) throw fail('请求过大', 'BODY_TOO_LARGE', 413); chunks.push(chunk); }
+      for await (const chunk of req) { bytes += chunk.length; if (bytes > 250000) throw fail('请求过大', 'BODY_TOO_LARGE', 413); chunks.push(chunk); }
       const raw = Buffer.concat(chunks).toString('utf8');
-      const input = JSON.parse(raw); let data;
-      if (input.action === 'loginAccount') data = await call({ action: 'loginAccount', email: input.email, password: input.password, platform: 'mobile-web-test', deviceId: input.deviceId });
-      else if (input.action === 'logoutAccount') { cache.delete(hash(input.accountToken)); data = await call({ action: 'logoutAccount', accountToken: input.accountToken }); }
-      else data = await relay(input);
+      const input=JSON.parse(raw);let data;
+      if(!input||typeof input!=='object'||Array.isArray(input))throw fail('请求格式无效');
+      const reader=readers.get(hash(input.accountToken||''));
+      if(input.action==='loginAccount'){
+        data=await call({action:'loginAccount',email:input.email,password:input.password,platform:'mobile-web-test',deviceId:input.deviceId});
+        readers.set(hash(data.token),{token:data.token,until:Date.now()+90000});
+      }else if(input.action==='closeMobileReader'||input.action==='logoutAccount'){
+        if(!reader)throw fail('手机会话已结束','READER_EXPIRED',401);
+        await closeReader(input.accountToken);data={closed:true};
+      }else if(['confirmRelayPairing','getRelayEvents','readerHeartbeat'].includes(input.action)){
+        if(!reader||reader.until<=Date.now())throw fail('手机会话已结束，请重新登录','READER_EXPIRED',401);
+        reader.until=Date.now()+90000;
+        if(input.action==='readerHeartbeat'){await authenticate(input.accountToken);data={alive:true}}else data=await relay(input);
+      }else if(['openInterviewSession','ingestInterviewTranscript','pollInterviewSession','stopInterviewSession','closeInterviewSession'].includes(input.action))data=await interview.handle(input);
+      else if(['getVoiceProxyConfig','createVoiceProxyTicket'].includes(input.action))data=await voice.handle(input);
+      else data=await relay(input);
       if (input.action === 'createRelayPairing') data.phoneUrl = `${publicUrl.href}#code=${data.code}`;
       res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ ok: true, data }));
     } catch (e) { res.statusCode = e.status || 400; res.setHeader('Content-Type', 'application/json'); res.end(JSON.stringify({ ok: false, code: e.code || 'RELAY_ERROR', error: e.code ? e.message : '服务暂时不可用' })); }
   });
+  voice.attach(server);
+  server.on('close',()=>{clearInterval(housekeeping);interview.close();voice.close();readers.clear()});
   server.listen(Number(process.env.PORT || 8235), process.env.HOST || '127.0.0.1');
   return server;
 }
