@@ -29,8 +29,9 @@ async function api(path, options = {}) {
 
 async function main() {
   const baseCommit = process.env.GITHUB_BASE_COMMIT || 'b5966f2f797b029ea57534db50f1a714584289da';
+  const localBaseCommit = process.env.GITHUB_LOCAL_BASE_COMMIT || 'b5966f2f797b029ea57534db50f1a714584289da';
   const base = (await api(`/repos/${owner}/${repo}/git/commits/${baseCommit}`));
-  const files = git('diff-tree', '--no-commit-id', '--name-only', '-r', commit).split(/\r?\n/).filter(Boolean);
+  const files = git('diff', '--name-only', `${localBaseCommit}..${commit}`).split(/\r?\n/).filter(Boolean);
   const tree = [];
   for (const file of files) {
     const content = execFileSync('git', ['cat-file', 'blob', `${commit}:${file}`]);
