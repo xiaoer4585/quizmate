@@ -1,6 +1,6 @@
 import type { AppConfig } from "../config.js";
 import { PublicError } from "../errors.js";
-import type { AnalysisItem, AnalysisModelRequest, AnalysisModelResult } from "../types.js";
+import type { AnalysisItem, AnalysisModelRequest, AnalysisModelResult, StructuredModelRequest } from "../types.js";
 import { DEFAULT_SYSTEM_PROMPT } from "../actions/configuration.js";
 
 const SYSTEM_PROMPT = [
@@ -398,6 +398,108 @@ function buildImageContent(apiFormat: "openai" | "anthropic", text: string, scre
   ];
 }
 
+function buildImageCollectionContent(apiFormat: "openai" | "anthropic", text: string, images: string[]): unknown {
+  const blocks: unknown[] = [{ type: "text", text }];
+  for (const image of images.slice(0, 6)) {
+    if (apiFormat === "anthropic") {
+      const match = /^data:(image\/(?:jpeg|png|webp));base64,(.+)$/is.exec(image);
+      if (match) blocks.unshift({ type: "image", source: { type: "base64", media_type: match[1], data: match[2] } });
+      else if (/^https:\/\//i.test(image)) blocks.unshift({ type: "image", source: { type: "url", url: image } });
+    } else {
+      const url = image.startsWith("data:") || /^https:\/\//i.test(image) ? image : `data:image/png;base64,${image}`;
+      blocks.push({ type: "image_url", image_url: { url } });
+    }
+  }
+  return blocks;
+}
+
+function parseStructuredObject(content: string): Record<string, unknown> {
+  const trimmed = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "");
+  const json = extractJsonObject(trimmed);
+  if (!json) throw new PublicError("AI 未返回有效的结构化数据，请重试。", "INVALID_MODEL_RESULT", 502);
+  try {
+    const value = JSON.parse(json) as unknown;
+    if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  } catch {
+    try {
+      const value = JSON.parse(escapeRawControlChars(json)) as unknown;
+      if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+    } catch {
+      // The public error below intentionally avoids echoing resume contents.
+    }
+  }
+  throw new PublicError("AI 未返回有效的结构化数据，请重试。", "INVALID_MODEL_RESULT", 502);
+}
+
+export function createStructuredModel(
+  config: AppConfig,
+  textLoader: ModelSettingLoader,
+  imageLoader: ModelSettingLoader,
+  recorder?: ModelCallRecorder,
+  failureRecorder?: ModelCallFailureRecorder,
+  failureContext?: () => ModelFailureContext | undefined,
+  resumeTextLoader?: ModelSettingLoader,
+  resumeImageLoader?: ModelSettingLoader
+) {
+  return async (request: StructuredModelRequest): Promise<Record<string, unknown>> => {
+    const images = (request.images || []).filter((item) => typeof item === "string" && item.length > 20).slice(0, 6);
+    const scopedTextLoader = request.modelScope === "resume_autofill" && resumeTextLoader ? resumeTextLoader : textLoader;
+    const scopedImageLoader = request.modelScope === "resume_autofill" && resumeImageLoader ? resumeImageLoader : imageLoader;
+    let modelType: "text" | "image" = "text";
+    let resolved: ResolvedModel;
+    if (images.length) {
+      const imageResolved = resolveImageModel(config, await scopedImageLoader());
+      if (imageResolved.baseUrl && imageResolved.apiKey && imageResolved.model) {
+        resolved = imageResolved;
+        modelType = "image";
+      } else {
+        resolved = resolveTextModel(config, await scopedTextLoader());
+      }
+    } else {
+      resolved = resolveTextModel(config, await scopedTextLoader());
+    }
+    resolved.systemPrompt = request.systemPrompt;
+    const content = images.length
+      ? buildImageCollectionContent(resolved.apiFormat, request.prompt, images)
+      : request.prompt;
+    try {
+      let raw = await callChatModel(resolved, content, Math.max(800, Math.min(8000, request.maxTokens ?? 4000)), { disableThinking: true });
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = parseStructuredObject(raw);
+      } catch (error) {
+        if (!(error instanceof PublicError) || error.code !== "INVALID_MODEL_RESULT") throw error;
+        const retryPrompt = `${request.prompt}\n\n${STRICT_JSON_RETRY_HINT}`;
+        raw = await callChatModel(
+          resolved,
+          images.length ? buildImageCollectionContent(resolved.apiFormat, retryPrompt, images) : retryPrompt,
+          Math.max(800, Math.min(8000, request.maxTokens ?? 4000)),
+          { disableThinking: true }
+        );
+        parsed = parseStructuredObject(raw);
+      }
+      recorder?.({ modelType, modelName: resolved.model });
+      return parsed;
+    } catch (error) {
+      if (error instanceof PublicError && failureRecorder) {
+        const ctx = failureContext?.();
+        failureRecorder({
+          modelType,
+          modelName: resolved.model,
+          errorCode: error.code || "MODEL_ERROR",
+          errorMessage: (error.message || "").slice(0, 500),
+          ...(ctx?.requestMode ? { requestMode: ctx.requestMode } : {}),
+          ...(ctx?.accountId ? { accountId: ctx.accountId } : {}),
+          ...(ctx?.accountEmail ? { accountEmail: ctx.accountEmail } : {}),
+          ...(ctx?.requestId ? { requestId: ctx.requestId } : {}),
+          ...(ctx?.clientIp ? { clientIp: ctx.clientIp } : {})
+        });
+      }
+      throw error;
+    }
+  };
+}
+
 export function createAnalysisModel(
   config: AppConfig,
   textLoader?: ModelSettingLoader,
@@ -405,7 +507,9 @@ export function createAnalysisModel(
   voiceLoader?: ModelSettingLoader,
   recorder?: ModelCallRecorder,
   failureRecorder?: ModelCallFailureRecorder,
-  failureContext?: () => ModelFailureContext | undefined
+  failureContext?: () => ModelFailureContext | undefined,
+  resumeTextLoader?: ModelSettingLoader,
+  resumeImageLoader?: ModelSettingLoader
 ) {
   const recordFailureFor = (modelType: "text" | "image", modelName: string, error: PublicError, httpStatus?: number) => {
     if (!failureRecorder) return;
@@ -425,6 +529,8 @@ export function createAnalysisModel(
     failureRecorder(info);
   };
   return async (request: AnalysisModelRequest): Promise<AnalysisModelResult> => {
+    const scopedTextLoader = request.modelScope === "resume_autofill" && resumeTextLoader ? resumeTextLoader : textLoader;
+    const scopedImageLoader = request.modelScope === "resume_autofill" && resumeImageLoader ? resumeImageLoader : imageLoader;
     const isVoiceMode = request.mode === "voice";
     const isInterviewMode = request.mode === "interview";
     const hasImage = Boolean(request.screenshot);
@@ -438,7 +544,7 @@ export function createAnalysisModel(
       if (interviewResolved.baseUrl && interviewResolved.apiKey && interviewResolved.model) {
         resolved = interviewResolved;
       } else {
-        const textSetting = textLoader ? await textLoader() : {};
+        const textSetting = scopedTextLoader ? await scopedTextLoader() : {};
         resolved = resolveTextModel(config, textSetting);
       }
       resolved.systemPrompt = INTERVIEW_SYSTEM_PROMPT;
@@ -451,7 +557,7 @@ export function createAnalysisModel(
         modelType = hasImage ? "image" : "text";
       } else if (hasImage) {
         // voice_model_config 未配置，回退到图片模型
-        const imageSetting = imageLoader ? await imageLoader() : {};
+        const imageSetting = scopedImageLoader ? await scopedImageLoader() : {};
         const imageResolved = resolveImageModel(config, imageSetting);
         if (imageResolved.baseUrl && imageResolved.apiKey && imageResolved.model) {
           modelType = "image";
@@ -459,28 +565,28 @@ export function createAnalysisModel(
           // 覆盖提示词为 voice 专用
           resolved.systemPrompt = imageResolved.systemPrompt || VOICE_SYSTEM_PROMPT;
         } else {
-          const textSetting = textLoader ? await textLoader() : {};
+          const textSetting = scopedTextLoader ? await scopedTextLoader() : {};
           resolved = resolveTextModel(config, textSetting);
           resolved.systemPrompt = VOICE_SYSTEM_PROMPT;
         }
       } else {
-        const textSetting = textLoader ? await textLoader() : {};
+        const textSetting = scopedTextLoader ? await scopedTextLoader() : {};
         resolved = resolveTextModel(config, textSetting);
         resolved.systemPrompt = VOICE_SYSTEM_PROMPT;
       }
     } else if (hasImage) {
       // 非语音模式：有图片时优先用图片模型；若图片模型未配置，回退到文字模型
-      const imageSetting = imageLoader ? await imageLoader() : {};
+      const imageSetting = scopedImageLoader ? await scopedImageLoader() : {};
       const imageResolved = resolveImageModel(config, imageSetting);
       if (imageResolved.baseUrl && imageResolved.apiKey && imageResolved.model) {
         modelType = "image";
         resolved = imageResolved;
       } else {
-        const textSetting = textLoader ? await textLoader() : {};
+        const textSetting = scopedTextLoader ? await scopedTextLoader() : {};
         resolved = resolveTextModel(config, textSetting);
       }
     } else {
-      const textSetting = textLoader ? await textLoader() : {};
+      const textSetting = scopedTextLoader ? await scopedTextLoader() : {};
       resolved = resolveTextModel(config, textSetting);
     }
 
