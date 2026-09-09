@@ -10,6 +10,7 @@ import os from 'os';
 import path from 'path';
 import { ConfigHelper } from '../ConfigHelper';
 import { postAction } from '../apiClient';
+import { PROTECTED_API } from './ProtectedInterviewTransport';
 import type { VoiceHealthSnapshot } from '../../shared/reliability';
 import { createIdleVoiceSnapshot, isVoiceHealthSnapshot, mergeVoiceHealthSnapshot } from '../../shared/reliability';
 import { DiagnosticLogger } from './DiagnosticLogger';
@@ -22,7 +23,7 @@ export interface AsrConfig {
   wsUrl: string;
   resourceId: string;
   model: string;
-  apiKey: string;
+
   interviewSystemPrompt?: string;
 }
 
@@ -47,17 +48,15 @@ export class RealtimeVoiceHelper {
     wsUrl: DEFAULT_ASR_WSS_URL,
     resourceId: DEFAULT_RESOURCE_ID,
     model: 'bigmodel',
-    apiKey: '',
+
   };
 
   /** 从登录后的后端读取 ASR 配置，密钥不再放在公开 OSS 或安装包中。 */
   private async loadAsrConfig(): Promise<void> {
     const token = this.configHelper.getAuthToken();
     if (!token) throw new Error('请先登录后再开始听写');
-    const endpoint = this.configHelper.getAppConfig().apiBaseUrl;
-    const data = await postAction<AsrConfig>(endpoint, 'getAsrConfig', {}, { token, timeoutMs: 10000 });
+    const data = await postAction<AsrConfig>(PROTECTED_API, 'getVoiceProxyConfig', {}, { token, timeoutMs: 10000 });
     this.asrConfig = { ...data, model: data.model || 'bigmodel' };
-    console.log('[RealtimeVoice] ASR config loaded from backend:', { ...this.asrConfig, apiKey: '***' });
   }
 
   async init(): Promise<void> {
@@ -84,7 +83,7 @@ export class RealtimeVoiceHelper {
     } catch {
       throw new Error('实时语音识别地址配置无效，请联系管理员');
     }
-    if (asrUrl.protocol !== 'wss:' || !this.asrConfig.resourceId || !this.asrConfig.apiKey) {
+    if (asrUrl.protocol !== 'wss:' || !this.asrConfig.resourceId) {
       throw new Error('实时语音识别配置不完整，请检查 API Key、Resource-Id 和 WebSocket 地址');
     }
 
@@ -104,18 +103,15 @@ export class RealtimeVoiceHelper {
         .catch(() => callback({}));
     });
 
-    // 注入 ASR API 鉴权头到 WebSocket 握手请求
     ses.webRequest.onBeforeSendHeaders(
       { urls: [`${asrUrl.protocol}//${asrUrl.host}/*`] },
-      (details, cb) => {
-        const headers = { ...details.requestHeaders };
-        const requestId = crypto.randomUUID();
-        headers['X-Api-Key'] = this.asrConfig.apiKey;
-        headers['X-Api-Resource-Id'] = this.asrConfig.resourceId;
-        headers['X-Api-Request-Id'] = requestId;
-        headers['X-Api-Connect-Id'] = requestId;
-        headers['X-Api-Sequence'] = '-1';
-        cb({ requestHeaders: headers });
+      async (details, cb) => {
+        const token = this.configHelper.getAuthToken();
+        if (!token) { cb({cancel:true}); return; }
+        try {
+          const { ticket } = await postAction<{ticket:string}>(PROTECTED_API, 'createVoiceProxyTicket', {}, {token,timeoutMs:10000});
+          cb({requestHeaders:{...details.requestHeaders,'X-QuizMate-Ticket':ticket}});
+        } catch { cb({cancel:true}); }
       }
     );
 

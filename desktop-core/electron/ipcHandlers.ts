@@ -30,6 +30,8 @@ export interface AppContext {
 }
 
 export interface OverlayControls {
+  assertPcWorkspace?: () => void;
+  onAccountExit?: () => Promise<void>;
   createOverlayWindow: () => void;
   showOverlay: () => void;
   hideOverlay: () => void;
@@ -78,7 +80,7 @@ export function registerIpcHandlers(
     void ctx.updateChecker?.checkForUpdates();
     return result;
   });
-  ipcMain.handle('auth:logout', () => ctx.authManager!.logout());
+  ipcMain.handle('auth:logout', async () => { await controls.onAccountExit?.(); await ctx.authManager!.logout(); });
   ipcMain.handle('auth:getProfile', () => ctx.authManager!.getProfile());
   ipcMain.handle('auth:isAuthenticated', () => ctx.authManager!.isAuthenticated());
 
@@ -190,7 +192,7 @@ export function registerIpcHandlers(
 
   // ===== 面试助手 =====
   ipcMain.handle('interview:start', (_e, context?) => controls.startInterviewSession(context));
-  ipcMain.handle('interview:restart', (_e, context?) => ctx.interview!.restart(context));
+  ipcMain.handle('interview:restart', (_e, context?) => { controls.assertPcWorkspace?.(); return ctx.interview!.restart(context); });
   ipcMain.handle('interview:stop', () => controls.stopInterviewSession());
   ipcMain.handle('interview:toggle', () => controls.toggleInterviewSession());
   ipcMain.handle('interview:activateShortcuts', () => { controls.shortcutsHelper.registerGlobalShortcutsForMode('interview'); return true; });
@@ -198,8 +200,8 @@ export function registerIpcHandlers(
   ipcMain.handle('interview:setContext', (_e, context) => ctx.interview!.setContext(context));
   ipcMain.handle('interview:getContext', () => ctx.interview!.getContext());
   ipcMain.handle('interview:saveContext', (_e, context) => ctx.interview!.saveContext(context));
-  ipcMain.handle('interview:transcript', (_e, text: string) => ctx.interview!.onTranscript(text));
-  ipcMain.handle('interview:generateAnswer', (_e, question: string) => ctx.interview!.generateAnswer(question));
+  ipcMain.handle('interview:transcript', (_e, text: string) => { controls.assertPcWorkspace?.(); return ctx.interview!.onTranscript(text); });
+  ipcMain.handle('interview:generateAnswer', (_e, question: string) => { controls.assertPcWorkspace?.(); return ctx.interview!.generateAnswer(question); });
   // 简历管理
   ipcMain.handle('interview:listResumes', () => ctx.interview!.listResumes());
   ipcMain.handle('interview:saveResume', (_e, payload: { id?: string; name?: string; text?: string }) => {
@@ -252,7 +254,7 @@ export function registerIpcHandlers(
   // 实时语音模型配置
   ipcMain.handle('interview:getVoiceConfig', () => ctx.interview!.getRealtimeVoiceConfig());
   ipcMain.handle('interview:getState', () => ctx.interview!.getVoiceState());
-  ipcMain.handle('interview:retry', () => ctx.interview!.retryVoice());
+  ipcMain.handle('interview:retry', () => { controls.assertPcWorkspace?.(); return ctx.interview!.retryVoice(); });
   ipcMain.handle('interview:copyDiagnostic', () => ctx.interview!.copyVoiceDiagnostic());
   ipcMain.handle('interview:openDiagnosticFolder', () => ctx.interview!.openVoiceDiagnosticFolder());
 
@@ -411,6 +413,7 @@ export function registerIpcHandlers(
 
   // TTS 语音（映射到 TtsHelper）
   ipcMain.handle('tts:speak', async (_e, text: string) => {
+    controls.assertPcWorkspace?.();
     if (!ctx.tts) return { success: false, error: 'TTS 未初始化' };
     return await ctx.tts.speak(text);
   });

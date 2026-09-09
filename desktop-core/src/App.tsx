@@ -6,6 +6,7 @@ import MainLayout from './components/MainLayout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Exam from './pages/Exam';
+import Companion from './pages/Companion';
 import Interview from './pages/Interview';
 import Extension from './pages/Extension';
 import Profile from './pages/Profile';
@@ -109,6 +110,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/exam" element={<Exam />} />
+        <Route path="/companion" element={<Companion />} />
         <Route path="/interview" element={<Interview />} />
         <Route path="/extension" element={<Extension />} />
         <Route path="/profile" element={<Profile onLogout={async () => { await api.auth.logout(); setAuthed(false); }} />} />

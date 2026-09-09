@@ -9,6 +9,19 @@ const on = (channel: string, cb: (...args: unknown[]) => void) => {
 };
 
 const api = {
+  companion: {
+    getState: () => invoke('companion:state'),
+    checkEntry: (route: string) => invoke('companion:entry', route),
+    setAudioMode: (mode: string) => invoke('companion:audioMode', mode),
+    setServiceUrl: (value: string) => invoke('companion:service', value),
+    pair: () => invoke('companion:pair'),
+    workspace: (target: 'pc' | 'mobile') => invoke('companion:workspace', target),
+    disconnect: () => invoke('companion:disconnect'),
+    interview: () => invoke('companion:interview'),
+    screenshot: () => invoke('companion:screenshot'),
+    onState: (cb: (data: unknown) => void) => on('companion:state', cb),
+    onError: (cb: (data: unknown) => void) => on('companion:error', cb),
+  },
   // 认证
   auth: {
     login: (email: string, password: string) => invoke('auth:login', email, password),

@@ -20,6 +20,7 @@ import {
   mergeFinalTranscript,
   mergeIncrementalTranscript,
   limitInterviewRequestContext,
+  limitInterviewQuestion,
   normalizeTranscript,
 } from '../../shared/interviewTranscript';
 import type { VoiceHealthSnapshot } from '../../shared/reliability';
@@ -70,11 +71,10 @@ interface InterviewStoreSchema {
 }
 
 export class InterviewHelper {
-  // 并发生成上限：新问题立即调用 AI 与上一题并行生成（后端按请求独立事务扣积分，并发安全），
-  // 超过上限才短暂排队，避免连续快速提问触发模型限流。原先的串行队列会让第二题
-  // 等待第一题完整生成（6~15 秒）才开始请求，是面试响应变慢的主要客户端原因。
-  private static readonly MAX_CONCURRENT_ANSWERS = 2;
+  // 答案请求采用有序单通道，避免连续问题争抢账号扣费事务或模型会话；转写仍持续接收，后续问题自动排队。
+  private static readonly MAX_CONCURRENT_ANSWERS = 1;
   private listening = false;
+  private companionStartup?: AbortController;
   private voiceState: VoiceHealthSnapshot = createIdleVoiceSnapshot();
   private context: InterviewContext = { language: 'zh', answerStyle: 'concise' };
   private lastAnswer = '';
@@ -100,10 +100,11 @@ export class InterviewHelper {
     private overlay: OverlayManager,
     private tts: TtsHelper,
     private byteDanceTts?: ByteDanceTtsHelper,
-    private realtimeVoice?: RealtimeVoiceHelper
+    private realtimeVoice?: RealtimeVoiceHelper,
+    private companion?: { onEvent: (channel: string, payload: unknown) => void }
   ) {
     this.store = new Store<InterviewStoreSchema>({
-      name: 'interview-data',
+      name: companion ? 'mobile-interview-data' : 'interview-data',
       defaults: { resumes: [], tasks: [] },
     });
     this.contextAccountScope = this.configHelper.getInterviewAccountScope();
@@ -228,6 +229,7 @@ export class InterviewHelper {
       return;
     }
     this.listening = true;
+    if (this.companion) this.companionStartup = new AbortController();
     this.clearPendingTranscript();
     // 启动火山引擎大模型流式语音识别。
     if (this.realtimeVoice) {
@@ -237,6 +239,7 @@ export class InterviewHelper {
           (error) => this.broadcast('interview:transcript', { error }),
           {
             audioMode: this.context.audioMode || 'demo',
+            signal: this.companionStartup?.signal,
             onState: (snapshot) => this.handleVoiceState(snapshot),
           }
         );
@@ -262,6 +265,18 @@ export class InterviewHelper {
     this.stopInternal(true);
   }
 
+  /** Explicit workspace shutdown discards unsent fragments instead of generating a final answer. */
+  stopForWorkspace() {
+    this.companionStartup?.abort();
+    this.answerGeneration += 1;
+    for (const controller of this.answerRequests.values()) controller.abort('workspace-ended');
+    this.answerRequests.clear();
+    this.stopInternal(false);
+    if (this.companion) this.clearTasks();
+    this.conversationTurns = [];
+    this.conversationContext = '';
+  }
+
   private stopInternal(flushPending: boolean) {
     const pendingTranscript = flushPending ? this.takePendingTranscript() : '';
     const pendingVoiceQuestion = flushPending ? this.takeVoiceQuestionDraft() : '';
@@ -269,12 +284,14 @@ export class InterviewHelper {
     if (!flushPending) {
       this.clearPendingTranscript();
       this.takeVoiceQuestionDraft();
+      this.releaseQueuedAnswerWaiters();
     }
     this.listening = false;
     if (flushPending) {
       this.answerGeneration += 1;
       for (const controller of this.answerRequests.values()) controller.abort('listening-stopped');
       this.answerRequests.clear();
+      this.releaseQueuedAnswerWaiters();
     }
     this.tts.stop();
     this.byteDanceTts?.stop();
@@ -380,6 +397,7 @@ export class InterviewHelper {
     this.answerGeneration += 1;
     for (const controller of this.answerRequests.values()) controller.abort('account-changed');
     this.answerRequests.clear();
+    this.releaseQueuedAnswerWaiters();
     this.context = {
       language: 'zh',
       answerStyle: 'concise',
@@ -455,7 +473,7 @@ export class InterviewHelper {
       this.voiceQuestionDraftTimer = null;
       const draft = this.takeVoiceQuestionDraft();
       if (draft) void this.submitInterviewQuestion(draft, this.contextAccountScope);
-    }, ASR_FRAGMENT_SETTLE_MS);
+    }, this.voiceQuestionDraft?.text && /[?？。！!]$/.test(this.voiceQuestionDraft.text) ? ASR_SILENCE_COMMIT_MS : ASR_FRAGMENT_SETTLE_MS);
   }
 
   private mergeVoiceQuestionDraft(text: string, accountScope: string) {
@@ -474,23 +492,39 @@ export class InterviewHelper {
     const raw = normalizeTranscript(text);
     if (!raw) return;
 
+    if (source === 'voice') {
+      // Do not classify each ASR phrase independently. A long interviewer turn
+      // commonly arrives as several finals; classify only after the turn has
+      // been assembled. Ignore obvious filler-only packets to avoid keeping a
+      // draft alive forever.
+      if (!isLikelyInterviewQuestion(raw, this.context.audioMode || 'demo')
+        && raw.length <= 8
+        && /^(好的|好|嗯|啊|哦|呃|那个|这个|就是|然后|对|是的|谢谢|感谢)[。！？?!,.，\s…]*$/i.test(raw)) {
+        this.broadcast('interview:transcript', { text: raw, skipped: true, display: false });
+        return;
+      }
+      const hadDraft = Boolean(this.voiceQuestionDraft?.accountScope === accountScope);
+      const completeSingle = !hadDraft
+        && !isLikelyIncompleteInterviewFragment(raw)
+        && isLikelyInterviewQuestion(raw, this.context.audioMode || 'demo');
+      if (completeSingle) {
+        await this.submitInterviewQuestion(raw, accountScope);
+        return;
+      }
+      if (this.voiceQuestionDraft?.accountScope === accountScope && /[?？。！!]$/.test(this.voiceQuestionDraft.text)
+        && isLikelyInterviewQuestion(raw, this.context.audioMode || 'demo')) {
+        const draft = this.takeVoiceQuestionDraft();
+        void this.submitInterviewQuestion(draft, accountScope);
+      }
+      this.mergeVoiceQuestionDraft(raw, accountScope);
+      return;
+    }
+
     // 非问题自动过滤：不在悬浮框左侧显示
     if (!isLikelyInterviewQuestion(raw, this.context.audioMode || 'demo')) {
       console.log('[Interview] Filtered non-question:', raw);
       this.broadcast('interview:transcript', { text: raw, skipped: true, display: false });
       return;
-    }
-
-    if (source === 'voice') {
-      if (isLikelyIncompleteInterviewFragment(raw)) {
-        this.mergeVoiceQuestionDraft(raw, accountScope);
-        return;
-      }
-      if (this.voiceQuestionDraft?.accountScope === accountScope) {
-        const draft = this.takeVoiceQuestionDraft();
-        await this.submitInterviewQuestion(mergeFinalTranscript(draft, raw), accountScope);
-        return;
-      }
     }
 
     await this.submitInterviewQuestion(raw, accountScope);
@@ -502,13 +536,18 @@ export class InterviewHelper {
 
     // Snapshot only prior turns. The current transcript is the question being
     // answered and should not be duplicated inside its own context field.
+    // The API rejects questions longer than 2,000 characters. Compact only at
+    // the final submission boundary so one long ASR turn remains one request,
+    // while preserving both its setup and its actual question ending.
+    const question = limitInterviewQuestion(raw);
+    if (!question) return;
     const requestContext = this.createRequestContext();
-    this.appendConversationContext(raw);
-    this.broadcast('interview:transcript', { text: raw });
-    const task = this.addTask(raw);
+    this.appendConversationContext(question);
+    this.broadcast('interview:transcript', { text: question });
+    const task = this.addTask(question);
     // 并行生成：每个问题立即调用 AI，不再串行等待上一题生成完成；
     // 积分扣减由后端每请求独立事务保证，余额不足时该题按既有 402 逻辑提示。
-    await this.enqueueAnswer(raw, task.id, requestContext);
+    await this.enqueueAnswer(question, task.id, requestContext);
   }
 
   private appendConversationContext(text: string) {
@@ -595,6 +634,13 @@ export class InterviewHelper {
     }
   }
 
+  private releaseQueuedAnswerWaiters(): void {
+    const waiters = this.answerWaiters.splice(0);
+    // Wake every waiter so its generation check marks the task cancelled;
+    // otherwise stopping a long interview can leave promises pending forever.
+    for (const resolve of waiters) resolve();
+  }
+
   /** 调后端 AI 生成答案（结合简历+岗位+公司） */
   async generateAnswer(question: string, taskId?: string, slotWaitMs = 0, requestContext = this.createRequestContext()) {
     const cfg = this.configHelper.getAppConfig();
@@ -640,7 +686,9 @@ export class InterviewHelper {
           const retryable = error instanceof ApiError
             && !requestController.signal.aborted
             && (error.kind === 'network' || error.kind === 'timeout' || error.statusCode >= 500);
-          if (!retryable || attempt >= MAX_ANSWER_RETRIES) throw error;
+          // Legacy interview API has no request idempotency. Never retry a mobile
+          // request with an unknown outcome automatically (it could charge twice).
+          if (this.companion || !retryable || attempt >= MAX_ANSWER_RETRIES) throw error;
           interviewDiagnostics.append('interview-audio', 'answer.request.retry', {
             attempt: attempt + 1,
             delayMs: RETRY_DELAYS_MS[attempt] || RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1],
@@ -650,6 +698,7 @@ export class InterviewHelper {
         }
       }
       if (!data) throw new Error('答案生成失败');
+      if (requestController.signal.aborted) return;
       const answer = data.answer || '暂无答案';
       this.lastAnswer = answer;
       this.updateTask(taskId, { status: 'done', answer, keyPoints: data.keyPoints });
@@ -683,6 +732,10 @@ export class InterviewHelper {
   }
 
   private broadcast(channel: string, payload: unknown) {
+    if (this.companion) {
+      this.companion.onEvent(channel, payload);
+      return;
+    }
     for (const win of BrowserWindow.getAllWindows()) {
       if (!win.isDestroyed()) win.webContents.send(channel, payload);
     }
