@@ -3,7 +3,7 @@ const { execFileSync } = require('child_process');
 
 const owner = 'xiaoer4585';
 const repo = 'quizmate';
-const commit = '35ca6aa';
+const commit = process.env.GITHUB_LOCAL_COMMIT || '35ca6aa';
 const token = process.env.GH_TOKEN;
 if (!token) throw new Error('GH_TOKEN is required');
 
@@ -28,7 +28,8 @@ async function api(path, options = {}) {
 }
 
 async function main() {
-  const base = (await api(`/repos/${owner}/${repo}/git/commits/b5966f2f797b029ea57534db50f1a714584289da`));
+  const baseCommit = process.env.GITHUB_BASE_COMMIT || 'b5966f2f797b029ea57534db50f1a714584289da';
+  const base = (await api(`/repos/${owner}/${repo}/git/commits/${baseCommit}`));
   const files = git('diff-tree', '--no-commit-id', '--name-only', '-r', commit).split(/\r?\n/).filter(Boolean);
   const tree = [];
   for (const file of files) {
