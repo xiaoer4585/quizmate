@@ -48,3 +48,13 @@
 - 真实新账号注册、邮箱验证码、登录后 AI 简历解析和真实招聘网站填写仍需用户提供可用测试账号并在 Chrome/Edge 实机验收；自动化仅验证了未登录 401、界面与降级路径，未伪造 AI 成功。
 - Chrome 扩展运行时规则仍可被浏览器观察；本次将可变站点规则、模型配置和 API Key 移至后端，但不宣称客户端代码绝对不可逆向。
 - 未更新 Windows、Mac、Android 安装包、更新清单或其下载链接。
+
+## 2026-09-10 主线同步与下载页纠正
+
+- 网申发布合并提交：`f5bd148d00d9b646307538cd84d402541998fb7d`；与 GitHub 主线同步后的最终 `main` 提交：`12860e6b8d328d3ca6641c6540ee9260337c2281`。
+- 两个远程的最终 `main` 均指向 `12860e6b`；发布标签：`v20260910.1`（网申核心提交）与 `v20260910.2`（同步后的最终主线）。
+- 发现官网此前被后续静态发布覆盖为旧的 `input-Resume-Autofill-3.1.0.zip`，已仅重发 `quizmate-cn` 的网申公共静态资源：
+  - `downloads/QuizMate-网申助手-2026.9.9.zip`：HTTP 200，2,798,834 bytes，SHA-256 `67B444933D4DC3AE5B847045BB05E5C355D7169874CE938123F9C4CA84E539F6`。
+  - `download.html`、`index.html`：页面版本显示 `2026.9.9`，新 ZIP 链接存在，旧 `input-Resume-Autofill-3.1.0.zip` 链接不存在。
+  - 本次静态重发备份：`rollback/CHG-20260909-07/extension-package.before.zip`、`download.before.html`、`index.before.html`。
+- 未改动或发布 Windows、Mac、Android 客户端代码、安装包、更新清单及下载对象。
