@@ -1,0 +1,74 @@
+{
+  "manifest_version": 3,
+  "name": "QuizMate 网申助手",
+  "description": "QuizMate 网申 AI 助手：简历维护、智能识别与网申自动填写。",
+  "version": "2026.9.9",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "scripting",
+    "tabs",
+    "webNavigation"
+  ],
+  "host_permissions": [
+    "http://*/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_popup": "sidepanel.html",
+    "default_title": "打开 QuizMate 网申助手",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ],
+      "js": [
+        "adapter-registry.js",
+        "extraction-rules.js",
+        "form-adapters.js",
+        "form-runtime.js",
+        "form-control-drivers.js",
+        "content.js"
+      ],
+      "run_at": "document_idle",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "sidepanel.html",
+        "sidepanel.js",
+        "preview-shim.js",
+        "ui.css",
+        "profile-schema.js",
+        "auth.js",
+        "icons/*"
+      ],
+      "matches": [
+        "http://*/*",
+        "https://*/*"
+      ]
+    }
+  ],
+  "options_page": "resume.html"
+}

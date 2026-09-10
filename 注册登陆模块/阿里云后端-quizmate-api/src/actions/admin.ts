@@ -849,6 +849,37 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
       }))
     };
   });
+  actions.set("adminListResumeRules", async (input) => {
+    await authenticateAdmin(deps, input);
+    const hostname = String(input.hostname ?? "").trim().slice(0, 255);
+    const result = await deps.db.query<Record<string, unknown>>(
+      `SELECT rule_id, hostname, signature, label, control_type, locator, source_path, success_count, failure_count, option_stats, last_reason, updated_at
+         FROM resume_page_rules WHERE ($1 = '' OR hostname = $1)
+        ORDER BY updated_at DESC LIMIT 500`, [hostname]
+    );
+    return { items: result.rows.map((row) => ({ ruleId: String(row.rule_id), hostname: String(row.hostname ?? ''), signature: String(row.signature ?? ''), label: String(row.label ?? ''), controlType: String(row.control_type ?? 'text'), locator: row.locator || {}, sourcePath: String(row.source_path ?? ''), successCount: Number(row.success_count ?? 0), failureCount: Number(row.failure_count ?? 0), optionStats: row.option_stats || [], lastReason: String(row.last_reason ?? ''), updatedAt: date(row.updated_at) })) };
+  });
+  actions.set("adminUpsertResumeRule", async (input) => {
+    await authenticateAdmin(deps, input);
+    const hostname = String(input.hostname ?? '').trim().toLowerCase().slice(0, 255);
+    const signature = String(input.signature ?? '').trim().slice(0, 500);
+    if (!hostname || !signature) throw new PublicError('网站域名和字段签名不能为空。', 'INVALID_RESUME_RULE');
+    const label = String(input.label ?? '').trim().slice(0, 300);
+    const controlType = String(input.controlType ?? 'text').trim().slice(0, 40);
+    const sourcePath = String(input.sourcePath ?? '').trim().slice(0, 300);
+    const locator = input.locator && typeof input.locator === 'object' && !Array.isArray(input.locator) ? input.locator : {};
+    const optionStats = Array.isArray(input.optionStats) ? input.optionStats.slice(0, 100) : [];
+    await deps.db.query(`INSERT INTO resume_page_rules(hostname, signature, label, control_type, locator, source_path, option_stats, last_reason, updated_at) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb,$8,now()) ON CONFLICT(hostname,signature) DO UPDATE SET label=EXCLUDED.label, control_type=EXCLUDED.control_type, locator=EXCLUDED.locator, source_path=EXCLUDED.source_path, option_stats=EXCLUDED.option_stats, last_reason=EXCLUDED.last_reason, updated_at=now()`, [hostname, signature, label, controlType, JSON.stringify(locator), sourcePath, JSON.stringify(optionStats), String(input.lastReason ?? '').slice(0, 160)]);
+    return { saved: true, hostname, signature };
+  });
+  actions.set("adminDeleteResumeRule", async (input) => {
+    await authenticateAdmin(deps, input);
+    const hostname = String(input.hostname ?? '').trim().toLowerCase();
+    const signature = String(input.signature ?? '').trim();
+    if (!hostname || !signature) throw new PublicError('网站域名和字段签名不能为空。', 'INVALID_RESUME_RULE');
+    const result = await deps.db.query('DELETE FROM resume_page_rules WHERE hostname = $1 AND signature = $2', [hostname, signature]);
+    return { deleted: Number(result.rowCount || 0) };
+  });
   actions.set("adminResetAdminCredentials", async (input) => {
     await authenticateAdmin(deps, input);
     const newEmail = normalizeEmail(input.newEmail);

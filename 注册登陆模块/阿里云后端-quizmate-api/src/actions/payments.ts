@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 import QRCode from "qrcode";
-import { CREDIT_PACKAGES } from "../domain/credits.js";
+import { ALL_CREDIT_PACKAGES, creditPackagesForProduct } from "../domain/credits.js";
 import { PublicError } from "../errors.js";
 import { hashToken } from "../security/crypto.js";
 import type { ActionDependencies, ActionHandler, ActionInput } from "../types.js";
@@ -66,7 +66,7 @@ export async function authenticate(deps: ActionDependencies, input: ActionInput)
 
 function creditPackage(input: ActionInput) {
   const id = String(input.packageId ?? input.planId ?? "").trim();
-  const found = CREDIT_PACKAGES.find((item) => item.id === id);
+  const found = ALL_CREDIT_PACKAGES.find((item) => item.id === id);
   if (!found) throw new PublicError("积分套餐不存在。", "PACKAGE_NOT_FOUND", 404);
   return found;
 }
@@ -263,8 +263,8 @@ async function autoExpireCreditOrder(deps: ActionDependencies, outTradeNo: strin
   return true;
 }
 
-function publicPackages() {
-  return CREDIT_PACKAGES.map((item) => ({
+function publicPackages(product?: unknown) {
+  return creditPackagesForProduct(product).map((item) => ({
     ...item,
     totalCredits: item.baseCredits + item.bonusCredits
   }));
@@ -367,7 +367,9 @@ export async function reconcileEpayCreditOrder(
   }
 }
 
-// Reconcile independently of client polling because provider callbacks can be delayed or dropped.
+// Reconcile independently of client polling because provider callbacks can be dropped or delayed.
+// 覆盖 created/waiting/expired：本地 15 分钟过期后仍可能完成支付（用户扫码后延迟付款），
+// notify 丢失时这是唯一的自动补偿路径（由 server.ts 定时调度，事故 CR1788011017301FD5D6D5C）。
 export async function reconcilePendingCreditOrders(deps: ActionDependencies, limit = 50): Promise<{ checked: number; settled: number }> {
   const config = await runtimePaymentConfig(deps);
   if (!paymentReadiness(config).epay) return { checked: 0, settled: 0 };
@@ -379,8 +381,8 @@ export async function reconcilePendingCreditOrders(deps: ActionDependencies, lim
        FROM orders o JOIN accounts a ON a.account_id = o.account_id
        JOIN credit_accounts ca ON ca.account_id = a.account_id
       WHERE o.order_type = 'credits' AND o.provider = 'epay'
-        AND o.status IN ('created', 'waiting')
-        AND o.created_at >= now() - interval '24 hours'
+        AND o.status IN ('created', 'waiting', 'expired')
+        AND o.created_at >= now() - interval '6 hours'
       ORDER BY o.created_at ASC LIMIT $1`,
     [Math.max(1, Math.min(200, limit))]
   );
@@ -509,7 +511,7 @@ function callbackAction(deps: ActionDependencies, provider: PaymentProvider): Ac
 }
 
 export function createPaymentActions(deps: ActionDependencies): Map<string, ActionHandler> {
-  const getPaymentConfig: ActionHandler = async () => {
+  const getPaymentConfig: ActionHandler = async (input) => {
     const setting = deps.settings ? await loadPaymentSetting(deps) : null;
     const config = setting ? paymentRuntimeFromSetting(setting) : paymentDeps(deps).config;
     const ready = paymentReadiness(config);
@@ -526,7 +528,7 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
         { id: "alipay", label: "支付宝官方", enabled: ready.alipay },
         { id: "wechat", label: "微信支付(PayJS)", enabled: ready.wechat }
       ],
-      creditPackages: publicPackages()
+      creditPackages: publicPackages(input.product)
     };
   };
 
@@ -654,10 +656,12 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
       const qrCode = String(result.qrcode ?? result.pay_info ?? target);
       const payUrl = String(result.pay_info ?? result.payurl ?? result.urlscheme ?? target);
       const qrDataUrl = await QRCode.toDataURL(qrCode, { errorCorrectionLevel: "M", margin: 1, width: 260 });
+      // 持久化二维码字段（原先只落 provider_trade_no，导致刷新/复用订单时无法用本地二维码兜底）
       await deps.db.query(
-        `UPDATE orders SET status = 'waiting', provider_trade_no = $2, updated_at = now()
+        `UPDATE orders SET status = 'waiting', qr_code = $2, pay_url = $3, qr_data_url = $4,
+            provider_trade_no = $5, updated_at = now()
           WHERE out_trade_no = $1`,
-        [outTradeNo, String(result.trade_no ?? "")]
+        [outTradeNo, qrCode, payUrl, qrDataUrl, String(result.trade_no ?? "")]
       );
       return publicOrder({ ...order, status: "waiting", qrCode, payUrl, qrDataUrl, refreshable: orderRefreshable({ ...order, status: "waiting" }) });
     } catch (error) {
@@ -684,8 +688,8 @@ export function createPaymentActions(deps: ActionDependencies): Map<string, Acti
     // 自动过期：超时未支付则置 expired，避免继续轮询/对账已失效订单
     await autoExpireCreditOrder(deps, outTradeNo, order.status, order.expires_at);
 
-    // 仅 PENDING 态（created/waiting）才向聚合易支付对账，expired/paid/closed/failed 跳过
-    if (!["paid", "closed", "failed", "expired"].includes(order.status)) {
+    // 仅终态（paid/closed/failed）跳过对账；expired 仍需对账——本地过期后仍可能已支付（延迟付款 + notify 丢失）
+    if (!["paid", "closed", "failed"].includes(order.status)) {
       try {
         const config = await runtimePaymentConfig(deps);
         if (paymentReadiness(config).epay) await reconcileEpayCreditOrder(deps, config, account, order);

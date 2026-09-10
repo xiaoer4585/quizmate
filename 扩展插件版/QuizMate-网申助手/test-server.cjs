@@ -1,2 +1,0 @@
-const http=require('http'),fs=require('fs'),path=require('path');
-http.createServer((request,response)=>{const file=path.join(__dirname,request.url==='/'?'popup-test.html':request.url);fs.readFile(file,(error,data)=>{if(error){response.statusCode=404;response.end();return;}response.setHeader('Content-Type',file.endsWith('.js')?'text/javascript':file.endsWith('.mjs')?'text/javascript':file.endsWith('.css')?'text/css':'text/html');response.end(data);});}).listen(8767,'127.0.0.1');

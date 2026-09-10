@@ -913,6 +913,16 @@
               <div class="actions" style="align-self:end"><button id="searchResumeObservationsBtn" type="button">查询</button><button id="clearResumeObservationsBtn" class="secondary" type="button">清空</button></div>
             </div>
           </div>
+          <div class="panel" style="margin-top:14px">
+            <h3>维护网申热规则</h3><p>规则保存在后端，插件仅按域名和签名读取；不要填写个人简历值。</p>
+            <div class="form-grid two"><div class="field"><label for="resumeRuleHostname">网站域名</label><input id="resumeRuleHostname" placeholder="jobs.example.com"></div><div class="field"><label for="resumeRuleSignature">字段签名</label><input id="resumeRuleSignature"></div><div class="field"><label for="resumeRuleLabel">字段标签</label><input id="resumeRuleLabel"></div><div class="field"><label for="resumeRuleControlType">控件类型</label><input id="resumeRuleControlType" value="text"></div><div class="field"><label for="resumeRuleSourcePath">匹配字段路径</label><input id="resumeRuleSourcePath" placeholder="basic.name"></div><div class="field"><label for="resumeRuleLocator">定位器 JSON</label><input id="resumeRuleLocator" value="{}"></div></div>
+            <div class="actions" style="margin-top:10px"><button id="saveResumeRuleBtn" type="button">保存规则</button><button id="deleteResumeRuleBtn" class="secondary" type="button">删除规则</button><button id="listResumeRulesBtn" class="secondary" type="button">读取规则</button></div>
+          </div>
+          <div class="panel" style="margin-top:14px">
+            <h3>站点引擎配置</h3><p>维护声明式选择器、字段映射和填写策略。配置登录后按域名实时下发，不执行远程 JavaScript。</p>
+            <div class="form-grid two"><div class="field"><label for="siteEngineHostname">网站域名</label><input id="siteEngineHostname" placeholder="jobs.example.com"></div><div class="field"><label for="siteEngineNote">维护说明</label><input id="siteEngineNote" placeholder="例如：修复日期组件"></div><div class="field wide"><label for="siteEngineConfig">配置 JSON</label><textarea id="siteEngineConfig" class="code-output" style="min-height:220px" placeholder='{"adapterRegistry":{"companies":{"example":{"hosts":["^jobs\\.example\\.com$"],"mappings":[{"key":"fullName","pattern":"姓名"}]}}}}'></textarea></div></div>
+            <div class="actions" style="margin-top:10px"><button id="saveSiteEngineBtn" type="button">保存站点配置</button><button id="loadSiteEngineBtn" class="secondary" type="button">读取站点配置</button><button id="deleteSiteEngineBtn" class="secondary" type="button">删除站点配置</button></div>
+          </div>
           <div class="table-wrap"><table><thead data-head="resumeFieldObservations"></thead><tbody data-body="resumeFieldObservations"></tbody></table></div>
         </section>
 
@@ -1726,6 +1736,38 @@
       $("#addAiFailureWhitelistBtn").addEventListener("click", () => run(addModelFailureWhitelistFromInput));
       $("#searchResumeObservationsBtn").addEventListener("click", () => { state.tables.resumeFieldObservations.page = 1; run(() => loadTable("resumeFieldObservations")); });
       $("#clearResumeObservationsBtn").addEventListener("click", () => { els.resumeObservationHostname.value = ""; run(() => loadTable("resumeFieldObservations")); });
+      $("#saveResumeRuleBtn").addEventListener("click", () => run(async () => {
+        let locator = {};
+        try { locator = JSON.parse($("#resumeRuleLocator").value || "{}"); } catch { throw new Error("定位器 JSON 格式无效"); }
+        await api("adminUpsertResumeRule", { hostname: $("#resumeRuleHostname").value, signature: $("#resumeRuleSignature").value, label: $("#resumeRuleLabel").value, controlType: $("#resumeRuleControlType").value, sourcePath: $("#resumeRuleSourcePath").value, locator });
+        setStatus("规则已保存。", "success"); await loadTable("resumeFieldObservations");
+      }));
+      $("#deleteResumeRuleBtn").addEventListener("click", () => run(async () => {
+        await api("adminDeleteResumeRule", { hostname: $("#resumeRuleHostname").value, signature: $("#resumeRuleSignature").value });
+        setStatus("规则已删除。", "success"); await loadTable("resumeFieldObservations");
+      }));
+      $("#listResumeRulesBtn").addEventListener("click", () => run(async () => {
+        const data = await api("adminListResumeRules", { hostname: $("#resumeRuleHostname").value });
+        setStatus(`已读取 ${data.items?.length || 0} 条后端规则。`, "success");
+        if (data.items?.[0]) { const row = data.items[0]; $("#resumeRuleSignature").value = row.signature || ""; $("#resumeRuleLabel").value = row.label || ""; $("#resumeRuleSourcePath").value = row.sourcePath || ""; $("#resumeRuleControlType").value = row.controlType || "text"; $("#resumeRuleLocator").value = JSON.stringify(row.locator || {}); }
+      }));
+      $("#saveSiteEngineBtn").addEventListener("click", () => run(async () => {
+        let config;
+        try { config = JSON.parse($("#siteEngineConfig").value || "{}"); } catch { throw new Error("站点配置 JSON 格式无效"); }
+        await api("adminSetSiteConfig", { hostname: $("#siteEngineHostname").value, note: $("#siteEngineNote").value, config });
+        setStatus("站点引擎配置已保存并可供插件实时读取。", "success");
+      }));
+      $("#loadSiteEngineBtn").addEventListener("click", () => run(async () => {
+        const data = await api("adminGetSiteConfig", { hostname: $("#siteEngineHostname").value });
+        $("#siteEngineConfig").value = JSON.stringify(data.config || {}, null, 2);
+        $("#siteEngineNote").value = data.note || "";
+        setStatus(data.config ? "已读取站点引擎配置。" : "该域名尚无站点配置。", data.config ? "success" : "");
+      }));
+      $("#deleteSiteEngineBtn").addEventListener("click", () => run(async () => {
+        await api("adminDeleteSiteConfig", { hostname: $("#siteEngineHostname").value });
+        $("#siteEngineConfig").value = "";
+        setStatus("站点引擎配置已删除。", "success");
+      }));
       // 提成记录复选框
       document.addEventListener("change", handleCommissionCheckboxChange);
       document.addEventListener("change", handleModelFailureCheckboxChange);

@@ -62,9 +62,9 @@ const DEFAULT_PURCHASE = {
 
 const DEFAULT_TUTORIAL = { title: "教学视频", videoUrl: "" };
 const DEFAULT_INPUT_EXTENSION_DOWNLOAD = {
-  version: "3.1.0",
-  fileName: "input-Resume-Autofill-3.1.0.zip",
-  downloadUrl: "https://www.quizmate.cn/downloads/input-Resume-Autofill-3.1.0.zip"
+  version: "2026.9.9",
+  fileName: "QuizMate-网申助手-2026.9.9.zip",
+  downloadUrl: "https://www.quizmate.cn/downloads/QuizMate-%E7%BD%91%E7%94%B3%E5%8A%A9%E6%89%8B-2026.9.9.zip"
 };
 
 export const DEFAULT_PAYMENT_SETTING: RuntimeSetting = {
@@ -151,9 +151,12 @@ function publicInputExtensionDownload(value: RuntimeSetting) {
   if (parsed.protocol !== "https:" || !["quizmate.cn", "www.quizmate.cn"].includes(parsed.hostname) || !/\.zip$/i.test(parsed.pathname)) {
     throw new PublicError("网申插件下载地址配置无效。", "INVALID_EXTENSION_DOWNLOAD_URL", 503);
   }
+  const encodedFileName = parsed.pathname.split("/").pop() || DEFAULT_INPUT_EXTENSION_DOWNLOAD.fileName;
+  let urlFileName = encodedFileName;
+  try { urlFileName = decodeURIComponent(encodedFileName); } catch { /* keep the safe URL segment */ }
   return {
     version: text(value.version, DEFAULT_INPUT_EXTENSION_DOWNLOAD.version, 40),
-    fileName: text(value.fileName, parsed.pathname.split("/").pop() || DEFAULT_INPUT_EXTENSION_DOWNLOAD.fileName, 180),
+    fileName: text(value.fileName, urlFileName, 180),
     downloadUrl: parsed.toString(),
     updatedAt: text(value.updatedAt)
   };
