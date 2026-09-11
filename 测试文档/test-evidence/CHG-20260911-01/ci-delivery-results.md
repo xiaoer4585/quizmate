@@ -2,7 +2,7 @@
 
 - 构建提交：`6b28c63162e44703e8d3dcee89febc04bebe0f65`
 - 隔离分支：`codex/mac-companion-test-20260911`
-- 测试标签：`mac-delivery-20260911-companion-1`
+- 测试标签：`mac-delivery-20260911-companion-1`（构建与回读完成后已删除引用，避免短期 PUT 签名继续暴露）
 - GitHub Actions：[运行 34606435578](https://github.com/xiaoer4585/quizmate/actions/runs/34606435578)
 - 结果：Apple Silicon 3m54s、Intel 9m55s，两个 job 全部成功。
 - 临时对象前缀：`quizmate-cn/temp/mac-delivery-20260911-companion-1/`；不属于正式下载或自动更新路径。
@@ -35,6 +35,7 @@
 - 四个隔离对象以 `Range: bytes=0-1023` 回读均得到 HTTP 206 和 1024 字节。
 - 本地交付目录：`E:/ai项目/考试插件/交付包/CHG-20260911-01-Mac双机协作/`。
 - 交付后只读检查 `https://quizmate.cn/mac/latest-mac.yml` 仍为 `2026.9.6000`，生产自动更新清单未切换。
+- 私有 GitHub prerelease `mac-build-manual-115` 保留 CI 原始 DMG/ZIP 和架构/签名/启动日志作为短期交付备份；不属于官网或客户端生产更新通道。
 
 ## 未执行/阻塞
 
