@@ -1,8 +1,16 @@
 import { describe, it, expect } from 'vitest';
-import { routeWorkspaceShortcut, workspaceEntryError } from '../workspace-routing';
+import { routeWorkspaceShortcut, supportsCompanionDesktopPlatform, workspaceEntryError } from '../workspace-routing';
 import { getDefaultShortcutBindings, type ShortcutAction } from '../shortcuts';
 
 describe('exclusive PC and mobile shortcut ownership', () => {
+  it.each(['win32', 'darwin'])('supports companion routing on %s', (platform) => {
+    expect(supportsCompanionDesktopPlatform(platform)).toBe(true);
+  });
+
+  it('does not expose companion routing on unsupported desktop platforms', () => {
+    expect(supportsCompanionDesktopPlatform('linux')).toBe(false);
+  });
+
   it('allows navigation and lets the main process switch workspaces', () => {
     expect(workspaceEntryError('/companion','pc',true,false)).toBe('');
     expect(workspaceEntryError('/companion','pc',false,true)).toBe('');

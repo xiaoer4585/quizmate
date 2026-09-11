@@ -3,6 +3,11 @@ import type { ShortcutAction } from './shortcuts';
 export type AssistantWorkspace = 'pc' | 'mobile';
 export type ShortcutDestination = 'pc' | 'mobile-exam' | 'mobile-interview' | 'system' | 'ignore';
 
+/** The companion workflow is available in both maintained desktop clients. */
+export function supportsCompanionDesktopPlatform(platform: string): boolean {
+  return platform === 'win32' || platform === 'darwin';
+}
+
 /** Resolve before touching any window, capture queue, or audio session. */
 export function routeWorkspaceShortcut(
   workspace: AssistantWorkspace,

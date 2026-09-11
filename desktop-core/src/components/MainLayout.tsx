@@ -18,7 +18,7 @@ const NAV: NavItem[] = [
   { to: '/', label: '工作台', icon: <LayoutDashboard size={18} /> },
   { to: '/exam', label: isMacPlatform() ? '笔试助手' : 'PC笔试助手', icon: <PenLine size={18} /> },
   { to: '/interview', label: isMacPlatform() ? '面试助手' : 'PC面试助手', icon: <Mic size={18} /> },
-  ...(!isMacPlatform() ? [{ to: '/companion', label: '双机协作笔面试', icon: <Smartphone size={18} /> }] : []),
+  { to: '/companion', label: '双机协作笔面试', icon: <Smartphone size={18} /> },
   { to: '/extension', label: '网申插件', icon: <Chrome size={18} /> },
 ];
 
@@ -32,7 +32,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   useEffect(() => {
     let alive = true;
     const path = location.pathname;
-    if (isMacPlatform() || !['/exam', '/interview', '/companion'].includes(path)) { setApprovedPath(path); return; }
+    if (!['/exam', '/interview', '/companion'].includes(path)) { setApprovedPath(path); return; }
     const target = path === '/companion' ? 'mobile' : 'pc';
     // Route changes own workspace lifecycle. Entering the companion page
     // enables it immediately (pairing can happen afterwards); entering either
@@ -102,7 +102,6 @@ export default function MainLayout({ children }: { children: ReactNode }) {
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100" onClickCapture={event => {
-      if (isMacPlatform()) return;
       const anchor = (event.target as HTMLElement).closest('a,[data-assistant-route]');
       const path = anchor?.getAttribute('data-assistant-route') || anchor?.getAttribute('href')?.replace(/^#/, '');
       if (!path || !['/exam', '/interview', '/companion'].includes(path)) return;
