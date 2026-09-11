@@ -42,5 +42,5 @@
 ## 阻塞与交付边界
 
 - 阻塞：实体 Mac 屏幕录制/麦克风/电脑声音权限、真实截图三连拍、真实面试音频、实体手机扫码/掉线、真实账号 AI/积分、DMG 安装/覆盖/卸载、Gatekeeper 提示和旧版降级。
-- 待 CI：Intel 与 Apple Silicon DMG/ZIP 架构、ad-hoc 嵌套签名、macOS 26 启动冒烟和隔离更新 URL。
+- 双架构 CI、哈希与隔离地址回读结果已补充到 `ci-delivery-results.md`。
 - 未上线：未修改生产后端、官网、正式 OSS 路径、`mac/latest-mac.yml` 或正式更新清单；不得将 ad-hoc 测试包描述为已签名/公证的生产包。
