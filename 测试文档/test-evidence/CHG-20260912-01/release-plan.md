@@ -37,6 +37,7 @@
 - GitHub Actions：`34626245089`；Intel/Apple Silicon 均成功，生产上传步骤成功。
 - `mac/latest-mac.yml`：HTTP 200，内部版本 `2026.9.12000`；arm64 ZIP 105,328,604 字节，x64 ZIP 112,324,226 字节，SHA-512 与清单一致。
 - Mac Intel DMG：117,906,078 字节；Apple Silicon DMG：109,493,884 字节。
+- Mac Intel DMG SHA-256：`6278a42dd68c6713fc5eedbaab2693a3188c7c46fbe21027e7d33a754a1a1d1e`；Apple Silicon DMG SHA-256：`8778e3178d4f58e0d7caf2da951b2bc6a5d6a9cecb3d04981c2464506360f802`。
 - Mac 操作手册：`downloads/QuizMate-客户端使用操作手册.pdf`，HTTP 200，1,839,513 字节；Intel/Apple Silicon 共用这一份手册。
 - 官网 `https://www.quizmate.cn/download.html`、`/docs.html` 与 `https://www.quizmate.cn/`（www canonical）已回读；根域无 User-Agent 请求返回 403，www 根域及相关页面均 HTTP 200。
 - 回滚备份已确认存在：`rollback/CHG-20260912-01/` 下 9 个旧生产对象。
