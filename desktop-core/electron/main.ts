@@ -32,7 +32,7 @@ import { ShortcutAction, ProcessingMode } from '../shared/shortcuts';
 import { selectActiveOverlay, selectFreshScreenshot, shouldEnsureExamOverlay } from '../shared/overlay-state';
 import { toBusinessVersion } from './version';
 import { CompanionController } from './helpers/CompanionController';
-import { workspaceEntryError, routeWorkspaceShortcut, type AssistantWorkspace } from '../shared/workspace-routing';
+import { workspaceEntryError, routeWorkspaceShortcut, supportsCompanionDesktopPlatform, type AssistantWorkspace } from '../shared/workspace-routing';
 
 let assistantWorkspace: AssistantWorkspace = 'pc';
 let workspaceTransitioning = false;
@@ -46,7 +46,7 @@ function assistantEntryError(route: string): string {
 }
 
 async function changeAssistantWorkspace(target: AssistantWorkspace) {
-  if (!IS_WIN || !companion) throw new Error('此功能目前仅用于 Windows 测试版');
+  if (!SUPPORTS_COMPANION || !companion) throw new Error('当前桌面平台暂不支持双机协作');
   if (workspaceTransitioning) throw new Error('正在切换工作区，请稍候');
   if (target === assistantWorkspace) return companion.state();
   workspaceTransitioning = true;
@@ -71,7 +71,7 @@ async function changeAssistantWorkspace(target: AssistantWorkspace) {
 
 // ===== 平台常量（唯一的平台差异入口） =====
 const IS_MAC = process.platform === 'darwin';
-const IS_WIN = process.platform === 'win32';
+const SUPPORTS_COMPANION = supportsCompanionDesktopPlatform(process.platform);
 /** 客户端平台标识, 与后端账号体系/官网注入头保持一致 */
 const CLIENT_PLATFORM = IS_MAC ? 'darwin-desktop' : 'win32-desktop';
 
@@ -1545,7 +1545,7 @@ async function initializeApp(): Promise<void> {
   interviewHelper = new InterviewHelper(configHelper, authManager, overlayAdapter as unknown as OverlayManager, ttsHelper, byteDanceTtsHelper, realtimeVoiceHelper);
   ctx.interview = interviewHelper;
 
-  if (IS_WIN) {
+  if (SUPPORTS_COMPANION) {
     const silentOverlay = { render() {}, renderTaskList() {}, show() {}, hide() {}, clear() {} };
     mobileInterview = new InterviewHelper(configHelper, authManager, silentOverlay as unknown as OverlayManager,
       ttsHelper, undefined, new RealtimeVoiceHelper(configHelper, 'mobile-realtime-voice'),
