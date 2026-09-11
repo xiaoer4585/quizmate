@@ -1,7 +1,7 @@
 # CHG-20260912-01 发布证据
 
 - 发布分支：`codex/resume-extension-main-20260910`（正式 main 工作树）
-- Mac 发布提交：合并提交待创建；来源提交 `c0a6fac29cb660bcefb7335ebef3019fc3de5765`
+- Mac 发布提交：`0574ad0`（合并提交，来源提交 `c0a6fac29cb660bcefb7335ebef3019fc3de5765`）
 - 版本：公开 `2026.09.12`，内部 `2026.9.12000`
 - 目标：仅 `quizmate-cn` / `quizmate.cn`；Mac DMG/ZIP、`mac/latest-mac.yml`、官网下载页和 Mac 操作手册。
 - 回滚目录：`quizmate-cn/rollback/CHG-20260912-01/`；旧 Mac 版本化对象保留，不删除。
@@ -31,5 +31,15 @@
 - `mac/QuizMate-Mac-arm64-2026.09.12.zip`
 - `mac/latest-mac.yml`
 - `downloads/QuizMate-客户端使用操作手册.pdf`
+
+## CI 与公网结果
+
+- GitHub Actions：`34626245089`；Intel/Apple Silicon 均成功，生产上传步骤成功。
+- `mac/latest-mac.yml`：HTTP 200，内部版本 `2026.9.12000`；arm64 ZIP 105,328,604 字节，x64 ZIP 112,324,226 字节，SHA-512 与清单一致。
+- Mac Intel DMG：117,906,078 字节；Apple Silicon DMG：109,493,884 字节。
+- Mac 操作手册：`downloads/QuizMate-客户端使用操作手册.pdf`，HTTP 200，1,839,513 字节；Intel/Apple Silicon 共用这一份手册。
+- 官网 `https://www.quizmate.cn/download.html`、`/docs.html` 与 `https://www.quizmate.cn/`（www canonical）已回读；根域无 User-Agent 请求返回 403，www 根域及相关页面均 HTTP 200。
+- 回滚备份已确认存在：`rollback/CHG-20260912-01/` 下 9 个旧生产对象。
+- GitHub/Gitee：`main` 均为 `0574ad0`，`v20260912` 与 `mac-publish-20260912-prod-1789146662511` 均存在且指向相同发布提交。
 
 不包含凭据、私钥或签名 URL。Mac 工作流使用已验收的 ad-hoc 双架构包；除非正式 CI 使用 `mac-release-*` 且完成 Developer ID/公证，否则不宣称公证。
