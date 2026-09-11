@@ -41,6 +41,6 @@
 - Mac 操作手册：`downloads/QuizMate-客户端使用操作手册.pdf`，HTTP 200，1,839,513 字节；Intel/Apple Silicon 共用这一份手册。
 - 官网 `https://www.quizmate.cn/download.html`、`/docs.html` 与 `https://www.quizmate.cn/`（www canonical）已回读；根域无 User-Agent 请求返回 403，www 根域及相关页面均 HTTP 200。
 - 回滚备份已确认存在：`rollback/CHG-20260912-01/` 下 9 个旧生产对象。
-- GitHub/Gitee：`main` 均为 `469e248`；最终同步标签 `v20260912-3` 指向该提交。生产构建标签 `mac-publish-20260912-prod-1789146662511` 指向构建提交 `0574ad0`，两边均存在且未被改写。
+- GitHub/Gitee：`main` 均为 `11be973`；最终同步标签 `v20260912-5` 指向该提交。生产构建标签 `mac-publish-20260912-prod-1789146662511` 指向构建提交 `0574ad0`，两边均存在且未被改写。
 
 不包含凭据、私钥或签名 URL。Mac 工作流使用已验收的 ad-hoc 双架构包；除非正式 CI 使用 `mac-release-*` 且完成 Developer ID/公证，否则不宣称公证。
