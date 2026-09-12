@@ -6,6 +6,9 @@ export type RuntimeSetting = Record<string, unknown>;
 const SECRET_FIELDS: Readonly<Record<string, ReadonlySet<string>>> = {
   model_config: new Set(["apiKey"]),
   image_model_config: new Set(["apiKey"]),
+  resume_text_model_config: new Set(["apiKey"]),
+  resume_image_model_config: new Set(["apiKey"]),
+  voice_model_config: new Set(["apiKey"]),
   tts_config: new Set(["apiKey"]),
   payment_config: new Set(["appPrivateKey", "alipayPublicKey", "payjsKey", "epayKey", "epayMerchantPrivateKey", "epayPlatformPublicKey"]),
   email_config: new Set(["emailCodeSecret", "smtpPass"])

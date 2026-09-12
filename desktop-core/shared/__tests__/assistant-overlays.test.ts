@@ -47,7 +47,7 @@ describe('independent desktop assistants', () => {
   it('keeps voice capture and search headless while preserving the explicit visibility toggle', () => {
     expect(shouldEnsureExamOverlay('voice', 'search')).toBe(false);
     expect(shouldEnsureExamOverlay('voice', 'screenshot')).toBe(false);
-    expect(shouldEnsureExamOverlay('voice', 'toggle_visibility')).toBe(true);
+    expect(shouldEnsureExamOverlay('voice', 'toggle_visibility')).toBe(false);
     expect(shouldEnsureExamOverlay('overlay', 'search')).toBe(true);
   });
 

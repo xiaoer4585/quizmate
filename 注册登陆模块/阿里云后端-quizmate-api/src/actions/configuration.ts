@@ -48,7 +48,7 @@ export const DEFAULT_INTERVIEW_PROMPT = [
   "- 候选人简历：{context.resumeText}",
   "- 本次回答语言：{context.language}",
   "- 回答风格：{context.answerStyle}",
-  "- 最近对话上下文：{context.recentConversation}"
+  "- 最近一小时同一账户的对话上下文（仅用于判断延续、追问或新问题）：{context.recentConversation}"
 ].join("\n");
 
 const DEFAULT_PURCHASE = {
@@ -61,6 +61,11 @@ const DEFAULT_PURCHASE = {
 };
 
 const DEFAULT_TUTORIAL = { title: "教学视频", videoUrl: "" };
+const DEFAULT_INPUT_EXTENSION_DOWNLOAD = {
+  version: "2026.9.9",
+  fileName: "QuizMate-网申助手-2026.9.9.zip",
+  downloadUrl: "https://www.quizmate.cn/downloads/QuizMate-%E7%BD%91%E7%94%B3%E5%8A%A9%E6%89%8B-2026.9.9.zip"
+};
 
 export const DEFAULT_PAYMENT_SETTING: RuntimeSetting = {
   enabled: false,
@@ -104,6 +109,20 @@ function text(value: unknown, fallback = "", max = 20_000): string {
   return String(value ?? fallback).trim().slice(0, max);
 }
 
+function modelView(value: RuntimeSetting, fallbackPrompt = DEFAULT_SYSTEM_PROMPT) {
+  return {
+    baseUrl: text(value.baseUrl),
+    apiPath: text(value.apiPath, "/v1/chat/completions"),
+    apiFormat: text(value.apiFormat, "openai"),
+    model: text(value.model),
+    temperature: Number(value.temperature ?? 0.2),
+    systemPrompt: text(value.systemPrompt, fallbackPrompt),
+    apiKeyMasked: maskSecret(value.apiKey),
+    hasApiKey: Boolean(value.apiKey),
+    updatedAt: text(value.updatedAt)
+  };
+}
+
 function publicPurchase(value: RuntimeSetting) {
   return {
     title: text(value.title, DEFAULT_PURCHASE.title, 120),
@@ -120,6 +139,25 @@ function publicTutorial(value: RuntimeSetting) {
   return {
     title: text(value.title, DEFAULT_TUTORIAL.title, 120),
     videoUrl: text(value.videoUrl, DEFAULT_TUTORIAL.videoUrl, 2_000),
+    updatedAt: text(value.updatedAt)
+  };
+}
+
+function publicInputExtensionDownload(value: RuntimeSetting) {
+  const downloadUrl = text(value.downloadUrl, DEFAULT_INPUT_EXTENSION_DOWNLOAD.downloadUrl, 2_000);
+  let parsed: URL;
+  try { parsed = new URL(downloadUrl); }
+  catch { throw new PublicError("网申插件下载地址配置无效。", "INVALID_EXTENSION_DOWNLOAD_URL", 503); }
+  if (parsed.protocol !== "https:" || !["quizmate.cn", "www.quizmate.cn"].includes(parsed.hostname) || !/\.zip$/i.test(parsed.pathname)) {
+    throw new PublicError("网申插件下载地址配置无效。", "INVALID_EXTENSION_DOWNLOAD_URL", 503);
+  }
+  const encodedFileName = parsed.pathname.split("/").pop() || DEFAULT_INPUT_EXTENSION_DOWNLOAD.fileName;
+  let urlFileName = encodedFileName;
+  try { urlFileName = decodeURIComponent(encodedFileName); } catch { /* keep the safe URL segment */ }
+  return {
+    version: text(value.version, DEFAULT_INPUT_EXTENSION_DOWNLOAD.version, 40),
+    fileName: text(value.fileName, urlFileName, 180),
+    downloadUrl: parsed.toString(),
     updatedAt: text(value.updatedAt)
   };
 }
@@ -206,7 +244,9 @@ async function mergeAndSave(deps: ActionDependencies, key: string, input: Action
   const current = await settings(deps).get(key);
   const next = mergeSetting(current, input, allowed, preserveBlank);
   await settings(deps).set(key, next, "admin");
-  return next;
+  // Read back through the store so encrypted secrets, cache invalidation, and the
+  // value returned to the admin page all reflect the persisted configuration.
+  return settings(deps).get(key);
 }
 
 function mergeSetting(current: RuntimeSetting, input: ActionInput, allowed: readonly string[], preserveBlank: ReadonlySet<string> = new Set()) {
@@ -243,6 +283,42 @@ export function createConfigurationActions(deps: ActionDependencies): Map<string
   actions.set("adminSetImageModelConfig", async (input) => {
     const value = await mergeAndSave(deps, "image_model_config", input, ["baseUrl", "apiPath", "apiFormat", "model", "temperature", "systemPrompt", "apiKey"], new Set(["apiKey"]));
     return { baseUrl: text(value.baseUrl), apiPath: text(value.apiPath, "/v1/chat/completions"), apiFormat: text(value.apiFormat, "openai"), model: text(value.model), temperature: Number(value.temperature ?? 0.2), systemPrompt: text(value.systemPrompt, DEFAULT_SYSTEM_PROMPT), apiKeyMasked: maskSecret(value.apiKey), hasApiKey: Boolean(value.apiKey), updatedAt: text(value.updatedAt) };
+  });
+
+  // 网申专属模型配置。首次读取时由调用方继承考试插件的通用配置，保存后写入独立作用域。
+  actions.set("adminGetResumeAutofillAiConfig", async (input) => {
+    await authenticateAdmin(deps, input);
+    const [resumeText, resumeImage, baseText, baseImage, prompts] = await Promise.all([
+      settings(deps).get("resume_text_model_config"), settings(deps).get("resume_image_model_config"),
+      settings(deps).get("model_config"), settings(deps).get("image_model_config"), settings(deps).get("resume_autofill_prompts")
+    ]);
+    const textConfig = Object.keys(resumeText).length ? resumeText : baseText;
+    const imageConfig = Object.keys(resumeImage).length ? resumeImage : baseImage;
+    return {
+      text: modelView(textConfig), image: modelView(imageConfig),
+      prompts: { ...prompts },
+      inheritedText: !Object.keys(resumeText).length,
+      inheritedImage: !Object.keys(resumeImage).length
+    };
+  });
+  actions.set("adminSetResumeAutofillAiConfig", async (input) => {
+    await authenticateAdmin(deps, input);
+    const textInput = input.text && typeof input.text === "object" ? input.text as ActionInput : {};
+    const imageInput = input.image && typeof input.image === "object" ? input.image as ActionInput : {};
+    // The nested model payload must retain the outer admin authentication.
+    const authForNestedInput = {
+      ...(input.adminSecret !== undefined ? { adminSecret: input.adminSecret } : {}),
+      ...(input.accountToken !== undefined ? { accountToken: input.accountToken } : {}),
+      ...(input.token !== undefined ? { token: input.token } : {})
+    };
+    const textConfig = await mergeAndSave(deps, "resume_text_model_config", { ...textInput, ...authForNestedInput }, ["baseUrl", "apiPath", "apiFormat", "model", "temperature", "systemPrompt", "apiKey"], new Set(["apiKey"]));
+    const imageConfig = await mergeAndSave(deps, "resume_image_model_config", { ...imageInput, ...authForNestedInput }, ["baseUrl", "apiPath", "apiFormat", "model", "temperature", "systemPrompt", "apiKey"], new Set(["apiKey"]));
+    if (input.prompts && typeof input.prompts === "object") {
+      const promptInput = input.prompts as ActionInput;
+      const current = await settings(deps).get("resume_autofill_prompts");
+      await settings(deps).set("resume_autofill_prompts", mergeSetting(current, promptInput, ["parseSystemPrompt", "fillSystemPrompt", "optionSystemPrompt", "visualSystemPrompt"]), "admin");
+    }
+    return { text: modelView(textConfig), image: modelView(imageConfig), saved: true };
   });
 
   // 语音播报模式专用模型配置（独立于图片模型，提示词不同：只输出答案，不输出题目摘要和解析）
@@ -346,6 +422,11 @@ export function createConfigurationActions(deps: ActionDependencies): Map<string
   actions.set("getTutorialConfig", async () => publicTutorial(await settings(deps).get("tutorial_config")));
   actions.set("adminGetTutorialConfig", async (input) => { await authenticateAdmin(deps, input); return publicTutorial(await settings(deps).get("tutorial_config")); });
   actions.set("adminSetTutorialConfig", async (input) => publicTutorial(await mergeAndSave(deps, "tutorial_config", input, ["title", "videoUrl"])));
+
+  // 客户端每次点击下载时读取，避免把网申插件版本写死在客户端安装包内。
+  actions.set("getInputExtensionDownload", async () => publicInputExtensionDownload(await settings(deps).get("input_extension_download")));
+  actions.set("adminGetInputExtensionDownload", async (input) => { await authenticateAdmin(deps, input); return publicInputExtensionDownload(await settings(deps).get("input_extension_download")); });
+  actions.set("adminSetInputExtensionDownload", async (input) => publicInputExtensionDownload(await mergeAndSave(deps, "input_extension_download", input, ["version", "fileName", "downloadUrl"])));
 
   actions.set("adminGetPaymentConfig", async (input) => { await authenticateAdmin(deps, input); return publicAdminPayment(await loadPaymentSetting(deps)); });
   actions.set("adminSetPaymentConfig", async (input) => {

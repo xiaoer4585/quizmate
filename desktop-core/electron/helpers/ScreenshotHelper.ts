@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { exec, execFile } from 'child_process'
 import { ConfigHelper } from '../ConfigHelper'
 import { LightweightProcessingHelper } from './ProcessingHelper'
+import { composeVerticalBitmap } from '../../shared/screenshot-composite'
 import {
   getMacScreenPermission,
   requestScreenCaptureAccess,
@@ -266,6 +267,37 @@ $bmp.Dispose()
       return files.map(f => f.path)
     } catch {
       return []
+    }
+  }
+
+  public async getCombinedCompressedScreenshot(filePaths: string[]): Promise<CompressedScreenshotResult> {
+    const queue = filePaths.filter(Boolean)
+    if (queue.length === 0) {
+      throw new Error('没有可分析的截图')
+    }
+    if (queue.length === 1) {
+      return this.getCompressedScreenshot(queue[0])
+    }
+
+    const bitmaps = queue.map((filePath) => {
+      const buffer = fs.readFileSync(filePath)
+      const image = nativeImage.createFromBuffer(buffer)
+      if (image.isEmpty()) throw new Error(`截图无效：${path.basename(filePath)}`)
+      const size = image.getSize()
+      return { buffer: image.toBitmap(), width: size.width, height: size.height }
+    })
+    const composite = composeVerticalBitmap(bitmaps)
+    if (!composite) throw new Error('截图合成失败')
+
+    const compositeImage = nativeImage.createFromBitmap(composite.buffer, { width: composite.width, height: composite.height })
+    if (compositeImage.isEmpty()) throw new Error('截图合成失败')
+
+    const tempPath = path.join(this.tempDir, `bundle-${uuidv4()}.png`)
+    fs.writeFileSync(tempPath, compositeImage.toPNG())
+    try {
+      return await this.getCompressedScreenshot(tempPath)
+    } finally {
+      try { fs.unlinkSync(tempPath) } catch {}
     }
   }
 

@@ -35,10 +35,20 @@ export interface ActionDependencies {
   sendVerificationCode: (email: string, code: string, purpose: "register" | "reset_password") => Promise<void>;
   sendNotification?: NotificationSender;
   runAnalysisModel: (request: AnalysisModelRequest) => Promise<AnalysisModelResult>;
+  runStructuredModel?: (request: StructuredModelRequest) => Promise<Record<string, unknown>>;
   runTtsSynth?: (request: SpeakModelRequest) => Promise<SpeakModelResult>;
   payment?: PaymentDependencies;
   settings?: RuntimeSettingsStore;
   adminSecret?: string;
+}
+
+export interface StructuredModelRequest {
+  systemPrompt: string;
+  prompt: string;
+  images?: string[];
+  maxTokens?: number;
+  mode?: string;
+  modelScope?: "default" | "resume_autofill";
 }
 
 export interface AnalysisModelRequest {
@@ -47,6 +57,7 @@ export interface AnalysisModelRequest {
   screenshot: string;
   source: string;
   mode?: string; // 'voice' | 'overlay' | 'universal' — voice 模式使用独立模型配置和简洁提示词
+  modelScope?: "default" | "resume_autofill";
 }
 
 export interface AnalysisItem {

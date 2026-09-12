@@ -1,11 +1,11 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="QuizMate 笔试面试AI助手操作文档 - 笔试助手、面试助手、AI填网申、简历制作、校招公告、职位监控的完整使用说明。求职AI搭子QuizMate，不截屏不切屏录屏无痕。" />
+    <meta name="description" content="QuizMate AI 网申自动化插件与笔试面试辅助操作文档，覆盖中文/英文简历解析、模板维护、网申字段自动填写和统一账号积分使用。" />
     <meta name="theme-color" content="#ffffff" />
-    <meta name="keywords" content="QuizMate操作文档,笔试面试AI助手使用说明,求职AI搭子教程,笔试助手用法,面试助手用法,QuizMate帮助手册" />
+    <meta name="keywords" content="AI网申自动化插件,AI网申自动填写,网申简历助手,Chrome网申插件,英文网申,AI笔试面试辅助,QuizMate操作文档" />
     <link rel="canonical" href="https://www.quizmate.cn/docs.html" />
     <title>操作文档 - AI笔试助手_AI面试助手 - QuizMate</title>
     <link rel="icon" href="data:," />
@@ -221,8 +221,9 @@
             <a href="#exam-notes" class="sub-item">4.3 注意事项</a>
             <a href="#interview">五、面试助手</a>
             <a href="#interview-start" class="sub-item">5.1 启动与配置</a>
-            <a href="#interview-resume" class="sub-item">5.2 简历上传</a>
-            <a href="#interview-history" class="sub-item">5.3 历史记录</a>
+            <a href="#interview-voice" class="sub-item">5.2 长语音与失败重试</a>
+            <a href="#interview-resume" class="sub-item">5.3 简历上传</a>
+            <a href="#interview-history" class="sub-item">5.4 历史记录</a>
             <a href="#apply">六、AI 填网申</a>
             <a href="#resume">七、简历制作</a>
             <a href="#faq">八、常见问题</a>
@@ -230,7 +231,7 @@
         </aside>
         <div class="docs-content">
           <h1 id="intro">QuizMate AI 助手帮助手册</h1>
-          <p class="docs-updated">最后更新：2026年8月</p>
+          <p class="docs-updated">最后更新：2026年9月12日 · Mac 客户端 2026.09.12 · Windows 客户端 2026.09.10</p>
 
           <p>欢迎使用 <strong>QuizMate AI 助手</strong>，这是一款搭载先进 AI 大模型的在线笔试/面试助手。笔试截图题目生成答案，面试识别问题辅助回答。不惧任何检测方式：共享屏幕、切屏监控、眼神检测等均无法发现。</p>
           <p>除笔试/面试核心功能外，QuizMate 还提供 <strong>AI 填网申</strong>、<strong>简历制作</strong>、<strong>校招公告</strong>、<strong>职位监控</strong> 等一站式求职功能，助力应届生高效斩获心仪 Offer。</p>
@@ -255,11 +256,11 @@
             </div>
             <div class="docs-feature-card">
               <h4>校招公告</h4>
-              <p>聚合全网校招信息，7 维筛选，收藏追踪，定时抓取，永久免费</p>
+              <p>聚合全网校招信息，7 维筛选，收藏追踪，定时抓取，按积分使用</p>
             </div>
             <div class="docs-feature-card">
               <h4>职位监控</h4>
-              <p>监控心仪公司岗位变动，实时推送提醒，永久免费</p>
+              <p>监控心仪公司岗位变动，实时推送提醒，按积分使用</p>
             </div>
           </div>
           <p style="text-align:center;margin:24px 0"><img src="assets/stealth/img_09_0pVU1wrFT7.png" alt="QuizMate 客户端主界面" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
@@ -352,9 +353,15 @@
             <li>在首次打开 QuizMate 进入笔试进行截图时，系统会弹出授权框，请选择"打开系统设置"，打开 QuizMate 的开关，退出重新打开 QuizMate 即授权完成</li>
             <li>在首次打开 QuizMate 进入面试助手-测试模式时，系统会弹出授权框，请选择"允许"即授权完成</li>
           </ul>
+          <p><strong>Mac 双机协作（2026.09.12）</strong>：在客户端选择「双机协作」，使用手机扫描二维码或输入 6 位连接码配对。配对后可在手机端进行三张截图搜题或启动面试，桌面端会同步题目和答案；切回 PC 工作区前请先停止双机协作并确认手机已退出。</p>
+          <ul>
+            <li>演示模式会使用麦克风和电脑声音；正式模式仅采集电脑声音。首次使用请在「系统设置 → 隐私与安全性」中允许 QuizMate 的屏幕录制、麦克风和电脑声音权限。</li>
+            <li>若二维码失效，可改用 6 位连接码重新配对；退出账号或切换工作区后，按页面提示清理手机会话和本机权限状态。</li>
+          </ul>
           <p style="text-align:center;margin:20px 0"><img src="assets/stealth/img_10_JjdP1wrFT7.png" alt="Mac 系统权限授权" style="max-width:100%;border-radius:8px;border:1px solid #e5e6eb"></p>
+          <p>Mac 客户端安装、权限、双机配对、截图和面试模式的完整步骤请下载<a href="downloads/QuizMate-客户端使用操作手册.pdf" download>Mac 操作手册（2026.09.12）</a>。</p>
           <h4>Windows 用户</h4>
-          <p>如果你使用的是 Windows，则不需要特别的设置。</p>
+          <p>如果你使用的是 Windows，则不需要特别的设置。安装、快捷键和面试助手的完整图文步骤请查看 <a href="downloads/QuizMate-Windows-Manual.pdf" download>Windows 操作手册（2026.09.10）</a>。</p>
 
           <h2 id="credits">三、积分与充值</h2>
 
@@ -369,8 +376,8 @@
               <tr><td>面试助手</td><td>每次 AI 作答消耗 30 积分</td><td>语音识别免费，仅 AI 生成答案时消耗</td></tr>
               <tr><td>AI 填网申</td><td>每次填写消耗积分</td><td>AI 智能填写与笔试共用积分池</td></tr>
               <tr><td>简历制作</td><td>AI 优化/生成消耗积分</td><td>手动编辑、导出 PDF 不消耗积分</td></tr>
-              <tr><td>校招公告</td><td>永久免费 ✅</td><td>不消耗积分</td></tr>
-              <tr><td>职位监控</td><td>永久免费 ✅</td><td>不消耗积分</td></tr>
+              <tr><td>校招公告</td><td>按积分使用 ✅</td><td>不消耗积分</td></tr>
+              <tr><td>职位监控</td><td>按积分使用 ✅</td><td>不消耗积分</td></tr>
             </tbody>
           </table>
           <p style="text-align:center;margin:20px 0"><img src="assets/stealth/img_03_rmo61wrFT7.png" alt="积分余额显示" style="max-width:80%;border-radius:8px;border:1px solid #e5e6eb"></p>
@@ -436,6 +443,14 @@
           <h4>语音模型配置</h4>
           <p>语音模型 API 由管理后台统一配置，客户端无需本地配置，便于统一更新与计费。</p>
 
+          <h4 id="interview-voice">长语音与失败重试</h4>
+          <p>Windows 面试助手会把同一轮连续语音的多个识别片段合并后再提交，片段中的句号或问号不会立即把长问题拆成多次 AI 请求。说完后请留出短暂静音，系统会在静音、停止听写或重连时提交最后一段完整问题。</p>
+          <ul>
+            <li>长问题只生成一张问题卡和一次 AI 请求，避免答案被中间片段打断。</li>
+            <li>岗位描述、简历和历史面试内容过长时，系统会保留关键信息并压缩请求上下文，降低调用超时或输入过大的概率。</li>
+            <li>网络失败时可重试当前问题；重复识别片段不会重复创建任务或重复扣费。</li>
+          </ul>
+
           <h4>语音播报</h4>
           <p>可开启/关闭语音播报功能。开启后，AI 生成的答案将通过语音朗读出来，方便你在面试中快速获取参考。</p>
 
@@ -447,7 +462,7 @@
             隐身保护已启用：悬浮窗对屏幕共享、录屏软件、远程桌面不可见，可放心使用。
           </div>
 
-          <h3 id="interview-resume">5.2 简历上传</h3>
+          <h3 id="interview-resume">5.3 简历上传</h3>
           <p>面试助手支持上传简历，AI 将结合你的经历生成更精准的答案：</p>
           <ul>
             <li>支持 txt/md 格式简历上传（PDF/Word 需后端解析）</li>
@@ -455,18 +470,20 @@
             <li>上传后，AI 会在回答时参考你的项目经历、技能等信息</li>
           </ul>
 
-          <h3 id="interview-history">5.3 历史记录与面经分享</h3>
+          <h3 id="interview-history">5.4 历史记录与面经分享</h3>
           <p>面试过程中的所有 QA 记录会保存在历史记录中，方便你复盘。面试结束后，可点击「生成面经」将 QA 记录导出为图片分享。</p>
 
-          <h2 id="apply">六、AI 填网申</h2>
-          <p>AI 填网申功能结合浏览器自动化、Cookie 获取和 AI 智能匹配，帮你一键填写网申表单。</p>
+          <h2 id="apply">六、AI 网申自动化插件</h2>
+          <p>AI 网申简历助手以 Chrome/Edge 插件形式运行，使用 QuizMate 统一账号和积分。它负责识别简历、维护岗位模板、理解当前页面字段并执行填写，不会替你提交网申。</p>
 
           <h3>6.1 使用流程</h3>
           <ol>
-            <li><strong>打开网申网页</strong>：在输入框粘贴网申网址，点击「打开网页」在内置浏览器中打开并登录</li>
-            <li><strong>获取 Cookie</strong>：登录后点击「获取 Cookie」保存登录态（用于后续自动化填写）</li>
-            <li><strong>新建档案</strong>：点击「新建档案」完善个人信息（可创建多个，按岗位/公司区分）</li>
-            <li><strong>智能填写</strong>：点击「AI 智能填写」调用 AI 语义匹配字段（推荐，更精准），或「快速填写」使用简单字符串匹配</li>
+            <li><strong>安装插件并登录</strong>：从下载页获取 Chrome/Edge 扩展包，加载根目录后登录 QuizMate 账号。</li>
+            <li><strong>打开简历工作台</strong>：点击插件弹窗中的「打开简历工作台」，上传中文或英文 PDF、Word、TXT 或图片简历。</li>
+            <li><strong>命名并核对模板</strong>：按公司、岗位或语言自定义模板名称，核对基础字段以及多段教育、实习、工作和项目经历。</li>
+            <li><strong>进入网申页面</strong>：打开国央企、互联网企业或外企招聘页面，点击页面右下角的插件悬浮按钮。</li>
+            <li><strong>选择模板并填写</strong>：选择合适模板，点击「AI 填写当前页面」。AI 会匹配文本、下拉、单选、多选和级联字段。</li>
+            <li><strong>处理待确认字段</strong>：识别不到的特殊字段可在侧边栏补录，选择只写入当前页面或保存到模板，并多选同步至其他模板。</li>
           </ol>
 
           <h3>6.2 档案管理</h3>
@@ -475,11 +492,13 @@
             <li><strong>基本信息</strong>：姓名、性别、出生年月、籍贯、政治面貌、民族、身份证号</li>
             <li><strong>联系方式</strong>：手机号、邮箱、微信号、紧急联系人</li>
             <li><strong>教育背景</strong>：毕业院校、专业、学历、毕业时间、GPA、年级排名、英语等级</li>
-            <li><strong>求职意向</strong>：意向岗位、意向城市、期望薪资、到岗时间、实习经历、项目经历</li>
+            <li><strong>求职意向</strong>：意向岗位、意向城市、期望薪资、到岗时间、实习时长、每周到岗天数</li>
+            <li><strong>多段经历</strong>：教育、实习、工作、项目、校园活动、家庭成员、获奖与培训分别以子表格保存，不会把多段经历合并。</li>
+            <li><strong>英文网申</strong>：上传英文简历后保留姓名、学校、公司、岗位、项目等英文原文，并优先匹配英文页面选项。</li>
           </ul>
           <div class="docs-callout docs-callout-info">
             <strong>💡 小贴士</strong><br>
-            支持文本框、下拉框、单选、多选等常见控件。每次填写消耗一定积分（AI 智能填写与笔试共用积分池）。
+            支持文本框、下拉框、单选、多选和级联筛选等常见控件。自动化网申承诺永久免费；注册赠送的积分可用于体验 QuizMate 笔试与面试辅助。
           </div>
 
           <h2 id="resume">七、简历制作</h2>
@@ -521,7 +540,7 @@
           <p>不会。QuizMate 利用系统级窗口隔离技术，对屏幕共享、录屏软件、远程桌面均不可见。已有 2 千多位用户正常使用，未有检测反馈。请在使用前参照测试检查章节进行验证。</p>
 
           <h3>Q2：积分用完了怎么办？</h3>
-          <p>点击客户端右上角的积分按钮，进入充值中心即可购买积分套餐。校招公告和职位监控功能永久免费，不受积分影响。</p>
+          <p>点击客户端或官网的积分入口，进入充值中心购买积分套餐。网申助手与 QuizMate 笔试、面试功能共用同一账户、积分余额和订单记录。</p>
 
           <h3>Q3：支持哪些操作系统？</h3>
           <p>Windows 系统需不低于 2004 版本号（2020 年 4 月后的系统版本），Mac 系统需不低于 macOS 15.0。</p>
@@ -536,10 +555,10 @@
           <p>面试助手语音识别默认支持中文（zh-CN），使用 Chrome/Edge 内核。如需其他语言，请联系客服。</p>
 
           <h3>Q7：AI 填网申支持哪些网站？</h3>
-          <p>支持大部分标准网申网站，包括文本框、下拉框、单选、多选等常见控件。部分特殊网站可能需要手动辅助填写。</p>
+          <p>支持大部分标准网申网站，包括文本框、下拉框、单选、多选和级联控件。不同企业页面的字段命名、组件封装和登录状态可能不同，特殊字段会保留为待确认并支持人工补录。</p>
 
           <h3>Q8：校招公告和职位监控怎么用？</h3>
-          <p>校招公告和职位监控是 QuizMate 提供的<strong>永久免费</strong>功能，不消耗任何积分。</p>
+          <p>校招公告和职位监控是 QuizMate 提供的<strong>按积分使用</strong>功能，不消耗任何积分。</p>
           <ul>
             <li><strong>校招公告</strong>：聚合全网校招信息，支持 7 维度筛选（公司、岗位、城市、学历、薪资、行业、招聘类型），可收藏感兴趣的信息并追踪更新，系统定时抓取最新公告，助你不再错过任何机会。</li>
             <li><strong>职位监控</strong>：添加你心仪的目标公司，系统会实时监控其岗位变动情况，一旦有新岗位发布或状态变化，立即推送提醒，让你第一时间投递。</li>

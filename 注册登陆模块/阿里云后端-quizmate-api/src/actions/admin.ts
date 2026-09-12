@@ -46,6 +46,78 @@ function requestedCreditWhitelist(input: ActionInput): boolean {
     || String(input.excludeWhitelist ?? "").trim() === "1";
 }
 
+function escapeHtml(value: string): string {
+  return value
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#39;");
+}
+
+function buildUnusedBonusCampaignEmail(creditAmount: number) {
+  const subject = `QuizMate 全新升级，额外赠送你 ${creditAmount} 积分`;
+  const textBody = [
+    "你好，",
+    "",
+    "QuizMate 刚完成一次全新升级，已经修复偶发的截图问题，稳定性也更好了。",
+    "",
+    `同时，我们也想和你分享一个好消息：QuizMate 用户量已经累计突破 2000。为了感谢你的陪伴，这次额外送你 ${creditAmount} 积分，已经发放到你的账户里。`,
+    "",
+    "我们一直希望 QuizMate 不只是一个工具，而是能真正陪你拿到结果、斩获 offer 的伙伴。接下来我们还会继续把秋招场景做得更顺手、更高效。",
+    "",
+    "恭喜同学，你找到了打败秋招的“魔法”～",
+    "",
+    "主页传送门：https://quizmate.vip",
+    "不切屏，不截屏。悬浮隐藏窗口字幕，支持双机位语音播报模式，结合简历 + JD 的 AI 辅助笔试面试。",
+    "",
+    "QuizMate 团队"
+  ].join("\n");
+  const htmlBody = [
+    "<p>你好，</p>",
+    "<p>QuizMate 刚完成一次全新升级，已经修复偶发的截图问题，稳定性也更好了。</p>",
+    `<p>同时，我们也想和你分享一个好消息：QuizMate 用户量已经累计突破 2000。为了感谢你的陪伴，这次额外送你 <strong>${creditAmount} 积分</strong>，已经发放到你的账户里。</p>`,
+    "<p>我们一直希望 QuizMate 不只是一个工具，而是能真正陪你拿到结果、斩获 offer 的伙伴。接下来我们还会继续把秋招场景做得更顺手、更高效。</p>",
+    "<blockquote style=\"margin:16px 0;padding:14px 16px;border-left:4px solid #2563eb;background:#f8fbff\">",
+    "<p style=\"margin:0 0 8px\">恭喜同学，你找到了打败秋招的“魔法”～</p>",
+    "<p style=\"margin:0 0 8px\">主页传送门：https://quizmate.vip</p>",
+    "<p style=\"margin:0\">不切屏，不截屏。悬浮隐藏窗口字幕，支持双机位语音播报模式，结合简历 + JD 的 AI 辅助笔试面试。</p>",
+    "</blockquote>",
+    "<p>QuizMate 团队</p>"
+  ].join("");
+  return { subject, textBody, htmlBody };
+}
+
+async function loadUnusedBonusRecipients(client: ActionDependencies["db"]) {
+  const result = await client.query<{
+    account_id: string;
+    email: string;
+    credits: string | number;
+    total_charged_credits: string | number;
+    total_consumed_credits: string | number;
+    register_bonus_credits: string | number;
+  }>(
+    `SELECT a.account_id, a.email, c.credits, c.total_charged_credits, c.total_consumed_credits, a.register_bonus_credits
+       FROM accounts a
+       JOIN credit_accounts c USING(account_id)
+      WHERE a.status = 'active'
+        AND a.role = 'user'
+        AND a.register_bonus_credits = 50
+        AND c.total_charged_credits = 50
+        AND c.total_consumed_credits = 0
+        AND c.credits = 50
+      ORDER BY a.created_at ASC`
+  );
+  return result.rows.map((row) => ({
+    accountId: String(row.account_id),
+    email: String(row.email),
+    credits: Number(row.credits),
+    totalChargedCredits: Number(row.total_charged_credits),
+    totalConsumedCredits: Number(row.total_consumed_credits),
+    registerBonusCredits: Number(row.register_bonus_credits)
+  }));
+}
+
 export async function authenticateAdmin(deps: ActionDependencies, input: ActionInput): Promise<{ accountId: string; email: string }> {
   // 优先使用账户 token 认证
   if (input.accountToken || input.token) {
@@ -449,6 +521,101 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
       client.release();
     }
   });
+  actions.set("adminBroadcastEmail", async (input) => {
+    const admin = await authenticateAdmin(deps, input);
+    const segment = String(input.segment ?? input.campaign ?? "").trim();
+    const grantCredits = Math.max(0, Math.floor(Number(input.grantCredits ?? 50)));
+    const customSubject = String(input.subject ?? "").trim();
+    const customTextBody = String(input.textBody ?? "").trim();
+    const customHtmlBody = String(input.htmlBody ?? "").trim();
+    if (segment === "unused_bonus_50" && grantCredits <= 0) {
+      throw new PublicError("赠送积分必须大于 0。", "INVALID_CREDITS");
+    }
+
+    const manualRecipients = Array.isArray(input.emails)
+      ? Array.from(new Set(input.emails.map((value) => normalizeEmail(value)).filter(Boolean)))
+      : [];
+    const campaignRecipients = segment === "unused_bonus_50" ? await loadUnusedBonusRecipients(deps.db) : [];
+    const recipients = segment === "unused_bonus_50"
+      ? campaignRecipients.map((row) => row.email)
+      : manualRecipients;
+
+    if (!recipients.length) {
+      throw new PublicError("请提供收件人或目标分组。", "MISSING_RECIPIENTS");
+    }
+    if (!deps.sendNotification) {
+      throw new PublicError("邮件服务尚未配置。", "SMTP_NOT_CONFIGURED", 503);
+    }
+
+    let grantedCount = 0;
+    if (segment === "unused_bonus_50") {
+      if (!campaignRecipients.length) throw new PublicError("没有找到符合条件的用户。", "NO_RECIPIENTS", 404);
+      const client = await deps.db.connect();
+      try {
+        await client.query("BEGIN");
+        for (const recipient of campaignRecipients) {
+          const updateResult = await client.query<{ credits: string | number; total_charged_credits: string | number }>(
+            `UPDATE credit_accounts
+                SET credits = credits + $2,
+                    total_charged_credits = total_charged_credits + $2,
+                    updated_at = now()
+              WHERE account_id = $1
+              RETURNING credits, total_charged_credits`,
+            [recipient.accountId, grantCredits]
+          );
+          const updated = updateResult.rows[0];
+          if (!updated) throw new PublicError("用户积分账户不存在。", "CREDIT_ACCOUNT_NOT_FOUND", 409);
+          await client.query(
+            `INSERT INTO credit_ledger(account_id, operation_type, credits, balance_after, source, reason)
+             VALUES ($1, 'admin_adjust', $2, $3, 'campaign_bonus', NULLIF($4, ''))`,
+            [recipient.accountId, grantCredits, Number(updated.credits), "注册未使用用户活动赠送 50 积分"]
+          );
+          grantedCount += 1;
+        }
+        await client.query(
+          `INSERT INTO admin_audit_logs(actor_id, action, target_type, target_id, reason)
+           VALUES ($1, 'broadcast_email', 'credit_accounts', $2, $3)`,
+          [
+            admin.accountId,
+            `unused_bonus_50:${grantedCount}`,
+            `活动群发：未使用注册赠送用户=${grantedCount} 赠送积分=${grantCredits}`
+          ]
+        );
+        await client.query("COMMIT");
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
+
+    const template = segment === "unused_bonus_50"
+      ? buildUnusedBonusCampaignEmail(grantCredits)
+      : {
+          subject: customSubject || "QuizMate 通知",
+          textBody: customTextBody || "你好，",
+          htmlBody: customHtmlBody || "<p>你好，</p>"
+        };
+    const sendResults: { email: string; status: "sent" | "failed"; error?: string }[] = [];
+    for (const email of recipients) {
+      try {
+        await deps.sendNotification(email, template.subject, template.textBody, template.htmlBody);
+        sendResults.push({ email, status: "sent" });
+      } catch (error) {
+        sendResults.push({ email, status: "failed", error: error instanceof Error ? error.message : String(error) });
+      }
+    }
+    return {
+      segment: segment || "manual",
+      subject: template.subject,
+      recipientCount: recipients.length,
+      grantedCount,
+      sentCount: sendResults.filter((item) => item.status === "sent").length,
+      failedCount: sendResults.filter((item) => item.status === "failed").length,
+      results: sendResults
+    };
+  });
   actions.set("adminSetAccountRole", async (input) => {
     await authenticateAdmin(deps, input);
     const accountId = String(input.accountId ?? "").trim();
@@ -569,6 +736,9 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
     addEqual("model_type", input.modelType);
     addEqual("error_code", input.errorCode);
     addEqual("request_mode", input.requestMode);
+    if (input.excludeWhitelist === true || String(input.excludeWhitelist ?? "").trim().toLowerCase() === "true" || String(input.excludeWhitelist ?? "").trim() === "1") {
+      conditions.push("(account_email IS NULL OR lower(account_email) NOT IN (SELECT email FROM model_failure_whitelist))");
+    }
     addDateRange("created_at", input.startDate, input.endDate);
     const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
     const total = Number((await deps.db.query<{ count: string }>(
@@ -606,108 +776,109 @@ export function createAdminActions(deps: ActionDependencies): Map<string, Action
     )).rows.map((r) => String(r.request_mode));
     return { items, page, pageSize, total, totalPages, errorCodes: codes, requestModes: modes };
   });
-  actions.set("adminListResumeFillReports", async (input) => {
+  actions.set("adminGetModelFailureWhitelist", async (input) => {
     await authenticateAdmin(deps, input);
-    const { pageSize, requestedPage } = paging(input);
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    const addLike = (column: string, value: unknown) => {
-      const text = String(value ?? "").trim();
-      if (!text) return;
-      params.push(`%${text}%`);
-      conditions.push(`${column} ILIKE $${params.length}`);
-    };
-    const addEqual = (column: string, value: unknown) => {
-      const text = String(value ?? "").trim();
-      if (!text) return;
-      params.push(text);
-      conditions.push(`${column} = $${params.length}`);
-    };
-    const addDateRange = (column: string, start: unknown, end: unknown) => {
-      const startDate = String(start ?? "").trim();
-      const endDate = String(end ?? "").trim();
-      if (startDate) { params.push(`${startDate}T00:00:00+08:00`); conditions.push(`${column} >= $${params.length}`); }
-      if (endDate) { params.push(`${endDate}T23:59:59+08:00`); conditions.push(`${column} <= $${params.length}`); }
-    };
-    addLike("hostname", input.hostname);
-    addEqual("language", input.language);
-    addDateRange("created_at", input.startDate, input.endDate);
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
-    const total = Number((await deps.db.query<{ count: string }>(
-      `SELECT count(*)::text AS count FROM resume_fill_reports ${where}`, params
-    )).rows[0]?.count ?? 0);
-    const totalPages = Math.max(1, Math.ceil(total / pageSize));
-    const page = Math.min(requestedPage, totalPages);
-    params.push(pageSize, (page - 1) * pageSize);
-    const result = await deps.db.query<Record<string, unknown>>(
-      `SELECT report_id, request_id, hostname, page_title, language, detected, matched, filled,
-              jsonb_array_length(failed) + jsonb_array_length(unmatched) AS unresolved,
-              frames, created_at
-         FROM resume_fill_reports ${where} ORDER BY created_at DESC
-         LIMIT $${params.length - 1} OFFSET $${params.length}`,
-      params
+    const result = await deps.db.query<{ email: string; note: string | null; created_at: string | Date }>(
+      `SELECT email, note, created_at FROM model_failure_whitelist ORDER BY created_at DESC, email ASC`
     );
-    const items = result.rows.map((row) => ({
-      reportId: String(row.report_id ?? ""),
-      requestId: String(row.request_id ?? ""),
-      hostname: String(row.hostname ?? ""),
-      pageTitle: String(row.page_title ?? ""),
-      language: String(row.language ?? ""),
-      detected: Number(row.detected ?? 0),
-      matched: Number(row.matched ?? 0),
-      filled: Number(row.filled ?? 0),
-      unresolved: Number(row.unresolved ?? 0),
-      frames: Number(row.frames ?? 0),
-      createdAt: date(row.created_at)
-    }));
-    return { items, page, pageSize, total, totalPages };
+    return { items: result.rows.map((row) => ({ email: String(row.email ?? ""), note: String(row.note ?? ""), createdAt: date(row.created_at) })) };
   });
-  actions.set("adminResumeFieldSummary", async (input) => {
+  actions.set("adminAddModelFailureWhitelist", async (input) => {
     await authenticateAdmin(deps, input);
-    const conditions: string[] = [];
-    const params: unknown[] = [];
-    const addLike = (column: string, value: unknown) => {
-      const text = String(value ?? "").trim();
-      if (!text) return;
-      params.push(`%${text}%`);
-      conditions.push(`${column} ILIKE $${params.length}`);
-    };
-    const addEqual = (column: string, value: unknown) => {
-      const text = String(value ?? "").trim();
-      if (!text) return;
-      params.push(text);
-      conditions.push(`${column} = $${params.length}`);
-    };
-    const addDateRange = (column: string, start: unknown, end: unknown) => {
-      const startDate = String(start ?? "").trim();
-      const endDate = String(end ?? "").trim();
-      if (startDate) { params.push(`${startDate}T00:00:00+08:00`); conditions.push(`${column} >= $${params.length}`); }
-      if (endDate) { params.push(`${endDate}T23:59:59+08:00`); conditions.push(`${column} <= $${params.length}`); }
-    };
-    addLike("hostname", input.hostname);
-    addEqual("language", input.language);
-    addDateRange("created_at", input.startDate, input.endDate);
-    const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+    const email = normalizeEmail(input.email);
+    if (!email) throw new PublicError("请输入有效的邮箱地址。", "INVALID_EMAIL");
+    const note = String(input.note ?? "").trim().slice(0, 200);
+    await deps.db.query(
+      `INSERT INTO model_failure_whitelist(email, note, created_at) VALUES ($1, NULLIF($2, ''), now())
+       ON CONFLICT(email) DO UPDATE SET note = EXCLUDED.note`,
+      [email, note]
+    );
+    return { added: true, email, note };
+  });
+  actions.set("adminRemoveModelFailureWhitelist", async (input) => {
+    await authenticateAdmin(deps, input);
+    const email = normalizeEmail(input.email);
+    if (!email) throw new PublicError("请输入有效的邮箱地址。", "INVALID_EMAIL");
+    const result = await deps.db.query<{ email: string }>(`DELETE FROM model_failure_whitelist WHERE email = $1 RETURNING email`, [email]);
+    if (!result.rows[0]) throw new PublicError("白名单邮箱不存在。", "WHITELIST_EMAIL_NOT_FOUND", 404);
+    return { removed: true, email };
+  });
+  actions.set("adminDeleteModelCallFailures", async (input) => {
+    await authenticateAdmin(deps, input);
+    const ids = Array.from(new Set((Array.isArray(input.failureIds) ? input.failureIds : []).map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0))).slice(0, 100);
+    if (!ids.length) throw new PublicError("请至少选择一条 AI 失败记录。", "MISSING_FAILURE_IDS");
+    const client = await deps.db.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<{ failure_id: number }>(
+        "DELETE FROM model_call_failures WHERE failure_id = ANY($1::bigint[]) RETURNING failure_id",
+        [ids]
+      );
+      await client.query(
+        "INSERT INTO admin_audit_logs(actor_id, action, target_type, target_id, reason) VALUES ($1, 'delete_model_call_failures', 'model_call_failures', $2, $3)",
+        [input.accountToken ? "admin" : "admin_secret", ids.join(","), `删除 AI 调用失败记录：请求 ${ids.length} 条，实际 ${result.rows.length} 条`]
+      );
+      await client.query("COMMIT");
+      return { deleted: result.rows.length, failureIds: result.rows.map((row) => Number(row.failure_id)) };
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally {
+      client.release();
+    }
+  });
+  actions.set("adminResumeFieldObservations", async (input) => {
+    await authenticateAdmin(deps, input);
+    const hostname = String(input.hostname ?? "").trim();
     const result = await deps.db.query<Record<string, unknown>>(
-      `SELECT item->>'label' AS label,
-              COALESCE(NULLIF(item->>'reason', ''), '未说明') AS reason,
-              count(*)::int AS count, max(created_at) AS last_seen_at
-         FROM resume_fill_reports
-         CROSS JOIN LATERAL jsonb_array_elements(COALESCE(failed, '[]'::jsonb) || COALESCE(unmatched, '[]'::jsonb)) item
-         ${where ? `${where} AND` : "WHERE"} NULLIF(item->>'label', '') IS NOT NULL
-        GROUP BY item->>'label', COALESCE(NULLIF(item->>'reason', ''), '未说明')
-        ORDER BY count(*) DESC, max(created_at) DESC
-        LIMIT 200`,
-      params
+      `SELECT hostname, signature, label, control_type, source_path,
+              success_count, failure_count, option_stats, last_reason, updated_at
+         FROM resume_page_rules
+        WHERE ($1 = '' OR hostname ILIKE $2)
+        ORDER BY (success_count + failure_count) DESC, updated_at DESC
+        LIMIT 300`,
+      [hostname, `%${hostname}%`]
     );
     return {
       items: result.rows.map((row) => ({
-        label: String(row.label ?? ""),
-        reason: String(row.reason ?? ""),
-        count: Number(row.count ?? 0),
-        lastSeenAt: date(row.last_seen_at)
+        hostname: String(row.hostname ?? ""), signature: String(row.signature ?? ""),
+        label: String(row.label ?? ""), controlType: String(row.control_type ?? "text"),
+        sourcePath: String(row.source_path ?? ""), successCount: Number(row.success_count ?? 0),
+        failureCount: Number(row.failure_count ?? 0), optionStats: row.option_stats || [],
+        lastReason: String(row.last_reason ?? ""), updatedAt: date(row.updated_at)
       }))
     };
+  });
+  actions.set("adminListResumeRules", async (input) => {
+    await authenticateAdmin(deps, input);
+    const hostname = String(input.hostname ?? "").trim().slice(0, 255);
+    const result = await deps.db.query<Record<string, unknown>>(
+      `SELECT rule_id, hostname, signature, label, control_type, locator, source_path, success_count, failure_count, option_stats, last_reason, updated_at
+         FROM resume_page_rules WHERE ($1 = '' OR hostname = $1)
+        ORDER BY updated_at DESC LIMIT 500`, [hostname]
+    );
+    return { items: result.rows.map((row) => ({ ruleId: String(row.rule_id), hostname: String(row.hostname ?? ''), signature: String(row.signature ?? ''), label: String(row.label ?? ''), controlType: String(row.control_type ?? 'text'), locator: row.locator || {}, sourcePath: String(row.source_path ?? ''), successCount: Number(row.success_count ?? 0), failureCount: Number(row.failure_count ?? 0), optionStats: row.option_stats || [], lastReason: String(row.last_reason ?? ''), updatedAt: date(row.updated_at) })) };
+  });
+  actions.set("adminUpsertResumeRule", async (input) => {
+    await authenticateAdmin(deps, input);
+    const hostname = String(input.hostname ?? '').trim().toLowerCase().slice(0, 255);
+    const signature = String(input.signature ?? '').trim().slice(0, 500);
+    if (!hostname || !signature) throw new PublicError('网站域名和字段签名不能为空。', 'INVALID_RESUME_RULE');
+    const label = String(input.label ?? '').trim().slice(0, 300);
+    const controlType = String(input.controlType ?? 'text').trim().slice(0, 40);
+    const sourcePath = String(input.sourcePath ?? '').trim().slice(0, 300);
+    const locator = input.locator && typeof input.locator === 'object' && !Array.isArray(input.locator) ? input.locator : {};
+    const optionStats = Array.isArray(input.optionStats) ? input.optionStats.slice(0, 100) : [];
+    await deps.db.query(`INSERT INTO resume_page_rules(hostname, signature, label, control_type, locator, source_path, option_stats, last_reason, updated_at) VALUES ($1,$2,$3,$4,$5::jsonb,$6,$7::jsonb,$8,now()) ON CONFLICT(hostname,signature) DO UPDATE SET label=EXCLUDED.label, control_type=EXCLUDED.control_type, locator=EXCLUDED.locator, source_path=EXCLUDED.source_path, option_stats=EXCLUDED.option_stats, last_reason=EXCLUDED.last_reason, updated_at=now()`, [hostname, signature, label, controlType, JSON.stringify(locator), sourcePath, JSON.stringify(optionStats), String(input.lastReason ?? '').slice(0, 160)]);
+    return { saved: true, hostname, signature };
+  });
+  actions.set("adminDeleteResumeRule", async (input) => {
+    await authenticateAdmin(deps, input);
+    const hostname = String(input.hostname ?? '').trim().toLowerCase();
+    const signature = String(input.signature ?? '').trim();
+    if (!hostname || !signature) throw new PublicError('网站域名和字段签名不能为空。', 'INVALID_RESUME_RULE');
+    const result = await deps.db.query('DELETE FROM resume_page_rules WHERE hostname = $1 AND signature = $2', [hostname, signature]);
+    return { deleted: Number(result.rowCount || 0) };
   });
   actions.set("adminResetAdminCredentials", async (input) => {
     await authenticateAdmin(deps, input);

@@ -10,6 +10,7 @@
     "resolveJsonModule": true,
     "baseUrl": "../../desktop-core",
     "paths": {
+      "qrcode": ["../windows客户端/QuizMate-Windows/node_modules/@types/qrcode"],
       "@shared/*": ["shared/*"],
       "*": ["node_modules/*", "../windows客户端/QuizMate-Windows/node_modules/*"]
     }

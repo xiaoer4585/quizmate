@@ -5,22 +5,28 @@
   const ACCOUNT_STORAGE_KEY = "quizmate_credit_account";
   const REVIEW_STORAGE_KEY = "quizmate_xhs_reward_reviews_v1";
   const isResumeProduct = document.body?.dataset.product === "resume_autofill";
-  const postTitle = isResumeProduct ? "秋招网申终于不用每家都重填一遍了" : "同学们，发现打破秋招内卷的“魔法”神器";
-  const pinnedComment = isResumeProduct ? [
-    "这次分享的是 input：先把 PDF / Word 简历拆成结构化档案，再到招聘官网自动匹配字段。",
-    "多段实习、项目和教育经历会分开保存，不会挤成一大段。",
-    "AI 填不确定的字段会留给我确认，不会自动提交表单。",
-    "主页：inputmate.com"
-  ].join("\n") : [
-    "恭喜同学你找到了打败秋招的“魔法”～",
-    "关注官方小红📕：搜索quizmate，找到ai头像的官方账号",
-    "主页传送门👉 ⓠⓤⓘⓩⓜⓐⓣⓔ.ⓒⓝ",
-    "不切屏不截屏，悬浮隐藏窗口字幕，支持双机位语音播报模式，结合简历+JD AI辅助笔试面试，考前熟悉和练习"
-  ].join("\n");
-  const starterName = isResumeProduct ? "网申 Offer 实战包" : "网申&笔面试实战包";
-  const proName = isResumeProduct ? "网申 Offer 上岸包" : "网申&笔面试上岸包";
-  const firstImage = isResumeProduct ? "https://www.quizmate.cn/assets/showcase-resume.png" : "assets/xiaohongshu-written-test.png";
-  const secondImage = isResumeProduct ? "https://www.quizmate.cn/assets/showcase-apply.png" : "assets/xiaohongshu-interview.avif";
+  const postTitle = "分享网申插件体验，免费领备考包";
+  const starterName = "网申 Offer 实战包";
+  const proName = "网申 Offer 上岸包";
+  const firstImage = "assets/xiaohongshu-career-autofill.jpg";
+  const secondImage = "assets/xiaohongshu-dual-device.jpg";
+  let inviteCode = "";
+  let pinnedComment = "";
+
+  function buildPinnedComment() {
+    const inviteLine = inviteCode
+      ? `注册时填写我的邀请码：${inviteCode}，双方都能获得积分。`
+      : "登录后会自动显示你的专属邀请码，分享时记得带上。";
+    return [
+      "我最近在用 QuizMate 网申插件，分享一下真实体验：",
+      "导入简历后可以自动匹配招聘官网字段，网申重复填写省很多时间。",
+      "关注小红书官方账号：搜索 quizmate，认准 AI 头像。",
+      "主页传送门👉 ⓠⓤⓘⓩⓜⓐⓣⓔ点ⓒⓝ",
+      inviteLine
+    ].join("\n");
+  }
+
+  pinnedComment = buildPinnedComment();
 
   document.body.insertAdjacentHTML("beforeend", `
     <div class="credit-modal xhs-reward-modal" data-xhs-reward-modal hidden>
@@ -31,8 +37,8 @@
           <span class="xhs-reward-dialog-mark"><i data-lucide="heart"></i></span>
           <div>
             <p class="section-kicker">9月限时小红书集赞福利</p>
-            <h2 id="xhs-modal-title">提交笔记，审核通过自动发积分</h2>
-            <p>点赞或收藏任一项达到对应档位即可申请。客服核验通过后，奖励积分自动发放到当前登录账号。</p>
+            <h2 id="xhs-modal-title">分享网申插件体验，免费领备考包</h2>
+            <p>发布小红书体验笔记，点赞或收藏达到对应档位即可申请。客服核验通过后，奖励积分自动发放到当前登录账号。</p>
           </div>
         </div>
 
@@ -65,12 +71,12 @@
           </div>
           <div class="xhs-copy-blocks">
             <article class="xhs-copy-block">
-              <div class="xhs-copy-block-head"><span>小红书文案</span><button class="xhs-copy-button" type="button" data-copy-xhs="title"><i data-lucide="copy"></i>复制文案</button></div>
+              <div class="xhs-copy-block-head"><span>小红书标题</span><button class="xhs-copy-button" type="button" data-copy-xhs="title"><i data-lucide="copy"></i>复制标题</button></div>
               <p><strong>${postTitle}</strong></p>
             </article>
             <article class="xhs-copy-block">
-              <div class="xhs-copy-block-head"><span>置顶评论</span><button class="xhs-copy-button" type="button" data-copy-xhs="comment"><i data-lucide="copy"></i>复制评论</button></div>
-              <p>${pinnedComment.replaceAll("\n", "<br />")}</p>
+              <div class="xhs-copy-block-head"><span>正文/置顶评论</span><button class="xhs-copy-button" type="button" data-copy-xhs="comment"><i data-lucide="copy"></i>复制文案</button></div>
+              <p data-xhs-share-comment>${pinnedComment.replaceAll("\n", "<br />")}</p>
             </article>
           </div>
           <div class="xhs-share-images">
@@ -142,6 +148,7 @@
   const form = modal.querySelector("[data-xhs-reward-form]");
   const status = modal.querySelector("[data-xhs-reward-status]");
   const copyStatus = modal.querySelector("[data-xhs-copy-status]");
+  const shareComment = modal.querySelector("[data-xhs-share-comment]");
   const accountLabel = modal.querySelector("[data-xhs-current-account]");
   const accountWrap = modal.querySelector("[data-xhs-account-wrap]");
   const loginButton = modal.querySelector("[data-xhs-login]");
@@ -154,6 +161,30 @@
   let proofDataUrl = "";
   let trigger = null;
   let serverReviews = null;
+
+  async function loadInviteCode() {
+    const state = getAccountState();
+    if (!state?.token) {
+      inviteCode = "";
+      pinnedComment = buildPinnedComment();
+      if (shareComment) shareComment.innerHTML = pinnedComment.replaceAll("\n", "<br />");
+      return;
+    }
+    try {
+      const response = await fetch("https://api.quizmate.vip/study-auth-api", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "getReferralOverview", accountToken: state.token })
+      });
+      const result = await response.json().catch(() => ({}));
+      if (!response.ok || result.ok !== true) throw new Error(result.error || "邀请码读取失败");
+      inviteCode = String(result.data?.inviteCode || "").trim().toUpperCase();
+    } catch {
+      inviteCode = "";
+    }
+    pinnedComment = buildPinnedComment();
+    if (shareComment) shareComment.innerHTML = pinnedComment.replaceAll("\n", "<br />");
+  }
 
   function getAccountState() {
     try { return JSON.parse(localStorage.getItem(ACCOUNT_STORAGE_KEY) || "null"); }
@@ -238,6 +269,7 @@
     accountLabel.textContent = account?.email || "尚未登录";
     accountWrap.classList.toggle("is-logged-in", Boolean(account));
     loginButton.hidden = Boolean(account);
+    void loadInviteCode();
     renderHistory();
     void loadReviews();
   }
@@ -410,7 +442,7 @@
     const type = button.dataset.copyXhs;
     try {
       await copyText(type === "title" ? postTitle : pinnedComment);
-      setCopyStatus(type === "title" ? "小红书文案已复制。" : "置顶评论已复制。", "success");
+      setCopyStatus(type === "title" ? "小红书标题已复制。" : "分享文案已复制。", "success");
     } catch { setCopyStatus("浏览器未能自动复制，请手动选择文案。", "error"); }
   }));
   loginButton.addEventListener("click", () => requestLogin());

@@ -4,6 +4,7 @@ import {
   getDefaultShortcutBindings,
   isConfigurable,
   migrateMacLegacyShortcut,
+  normalizeWindowsAccelerator,
   normalizeMacAccelerator,
   ShortcutConflict,
   ShortcutAction,
@@ -42,7 +43,7 @@ export class ShortcutsHelper {
       if (!stored[action]) continue
       const accelerator = process.platform === 'darwin'
         ? migrateMacLegacyShortcut(action, stored[action])
-        : stored[action]
+        : normalizeWindowsAccelerator(stored[action])
       this.bindings[action] = accelerator
       if (accelerator !== stored[action]) {
         migrated[action] = accelerator
@@ -100,7 +101,9 @@ export class ShortcutsHelper {
 
   public setBinding(action: ShortcutAction, accelerator: string): boolean {
     if (!this.isConfigurable(action)) return false
-    const storedAccelerator = process.platform === 'darwin' ? normalizeMacAccelerator(accelerator) : accelerator
+    const storedAccelerator = process.platform === 'darwin'
+      ? normalizeMacAccelerator(accelerator)
+      : normalizeWindowsAccelerator(accelerator)
     if (this.checkConflict(storedAccelerator, action)) return false
     this.bindings[action] = storedAccelerator
     this.configHelper.setShortcutBindings?.(this.bindings)
@@ -189,6 +192,11 @@ export class ShortcutsHelper {
       if (!accelerator) continue
       if (!this.shouldRegister(action as ShortcutAction, mode)) continue
       this.registerAction(action as ShortcutAction, accelerator, mode)
+    }
+    if (mode === 'voice' && this.bindings.search) {
+      // Keep the exam search shortcut available as a voice-mode fallback so
+      // the user's configured exam hotkey does not disappear after mode flips.
+      this.registerAction('search', this.bindings.search, mode)
     }
   }
 

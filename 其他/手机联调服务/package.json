@@ -1,0 +1,8 @@
+{
+  "name": "quizmate-private-companion-service",
+  "version": "2026.9.8-2",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test *.test.mjs" },
+  "dependencies": { "ws": "8.18.3" }
+}

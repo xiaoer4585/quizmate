@@ -13,10 +13,15 @@ import {
 } from '../reliability';
 import {
   ASR_FINAL_COMMIT_MS,
+  ASR_FRAGMENT_SETTLE_MS,
   ASR_SILENCE_COMMIT_MS,
   INTERVIEW_CONTEXT_LIMITS,
   limitContextPreservingEnds,
   limitInterviewRequestContext,
+  limitInterviewQuestion,
+  isLikelyIncompleteInterviewFragment,
+  isLikelyInterviewQuestion,
+  mergeFinalTranscript,
 } from '../../interviewTranscript';
 
 describe('voice reliability state', () => {
@@ -43,8 +48,36 @@ describe('voice reliability state', () => {
   });
 
   it('dispatches finalized interview questions within the client latency budget', () => {
-    expect(ASR_FINAL_COMMIT_MS).toBeLessThanOrEqual(300);
+    expect(ASR_FINAL_COMMIT_MS).toBeLessThanOrEqual(1_000);
     expect(ASR_SILENCE_COMMIT_MS).toBeGreaterThan(ASR_FINAL_COMMIT_MS);
+  });
+
+  it('identifies unfinished ASR fragments without delaying complete questions', () => {
+    expect(isLikelyIncompleteInterviewFragment('我现在出一个问题，你来回答一下，如果')).toBe(true);
+    expect(isLikelyIncompleteInterviewFragment('我出一个题目')).toBe(true);
+    expect(isLikelyIncompleteInterviewFragment('我出一个题目，你看怎么做')).toBe(true);
+    expect(isLikelyIncompleteInterviewFragment('就是说昆山有100家理发店，请你猜测下')).toBe(true);
+    expect(isLikelyIncompleteInterviewFragment('昆山有100家理发店')).toBe(true);
+    expect(isLikelyIncompleteInterviewFragment('昆山有100家理发店，请你猜测下昆山有多少人')).toBe(false);
+    expect(isLikelyIncompleteInterviewFragment('请介绍一下你的项目经历')).toBe(false);
+    expect(isLikelyIncompleteInterviewFragment('请你介绍一下')).toBe(true);
+    expect(isLikelyIncompleteInterviewFragment('请你介绍一下你的项目经历')).toBe(false);
+    expect(isLikelyIncompleteInterviewFragment('请介绍一下你的项目经历？')).toBe(false);
+    expect(ASR_FRAGMENT_SETTLE_MS).toBeGreaterThan(ASR_SILENCE_COMMIT_MS);
+  });
+
+  it('reassembles the long estimation question as one transcript', () => {
+    const parts = ['我出一个题目', '你看怎么做', '就是说昆山有100家理发店', '请你猜测下昆山有多少人'];
+    const merged = parts.reduce((current, part) => mergeFinalTranscript(current, part), '');
+    expect(merged).toBe('我出一个题目你看怎么做就是说昆山有100家理发店请你猜测下昆山有多少人');
+  });
+
+  it('keeps an overlong ASR question within the API limit while preserving its ask', () => {
+    const value = `我出一个题目，${'背景信息'.repeat(600)}，请你猜测下昆山有多少人？`;
+    const limited = limitInterviewQuestion(value);
+    expect(limited.length).toBeLessThanOrEqual(1800);
+    expect(limited.startsWith('我出一个题目')).toBe(true);
+    expect(limited.endsWith('请你猜测下昆山有多少人？')).toBe(true);
   });
 
   it('keeps short interview context unchanged', () => {
@@ -57,6 +90,10 @@ describe('voice reliability state', () => {
       resumeText: '三年微服务经验',
       recentConversation: '请介绍一下最近的项目',
     });
+  });
+
+  it('does not discard a long interviewer question just because it begins with first-person wording', () => {
+    expect(isLikelyInterviewQuestion('我认为这个问题可以从成本和收益分析，你怎么看？', 'formal')).toBe(true);
   });
 
   it('limits repeated interview context while preserving both ends', () => {
@@ -72,7 +109,7 @@ describe('voice reliability state', () => {
     const limited = limitInterviewRequestContext({
       jobDescription: 'J'.repeat(8000),
       resumeText: 'R'.repeat(20000),
-      recentConversation: 'C'.repeat(4000),
+      recentConversation: 'C'.repeat(10000),
     });
     expect(limited.jobDescription).toHaveLength(INTERVIEW_CONTEXT_LIMITS.jobDescription);
     expect(limited.resumeText).toHaveLength(INTERVIEW_CONTEXT_LIMITS.resumeText);

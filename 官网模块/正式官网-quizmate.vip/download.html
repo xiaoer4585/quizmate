@@ -3,21 +3,21 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="description" content="下载 QuizMate Windows、macOS、免费求职浏览器插件和安卓客户端。Mac 客户端提供 Intel 与 Apple 芯片版本。" />
+    <meta name="description" content="下载 QuizMate Windows、macOS、Android 客户端和 AI 网申自动化插件。支持中文/英文简历识别、岗位模板和 Chrome/Edge 网申自动填写。" />
     <meta name="theme-color" content="#ffffff" />
     <meta name="robots" content="index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1" />
-    <meta name="keywords" content="QuizMate下载,Windows客户端下载,Mac客户端下载,Intel Mac,Apple Silicon,求职浏览器插件,安卓客户端下载" />
+    <meta name="keywords" content="AI网申自动化插件,AI网申自动填写,网申简历助手,Chrome网申插件,外企英文网申,QuizMate下载,Windows客户端下载,Mac客户端下载" />
     <link rel="canonical" href="https://quizmate.cn/download.html" />
     <meta property="og:type" content="website" />
     <meta property="og:url" content="https://quizmate.cn/download.html" />
     <meta property="og:title" content="版本下载 - QuizMate" />
-    <meta property="og:description" content="下载 QuizMate Windows、macOS、免费求职浏览器插件和安卓客户端。Mac 客户端提供 Intel 与 Apple 芯片版本。" />
+    <meta property="og:description" content="下载 QuizMate Windows、macOS、Android 客户端和 AI 网申自动化插件，支持中文/英文简历与复杂网申字段。" />
     <meta property="og:image" content="https://quizmate.cn/assets/hero-product.jpg" />
     <meta property="og:locale" content="zh_CN" />
     <meta property="og:site_name" content="QuizMate" />
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:title" content="版本下载 - QuizMate" />
-    <meta name="twitter:description" content="下载 QuizMate Windows、macOS、免费求职浏览器插件和安卓客户端。Mac 客户端提供 Intel 与 Apple 芯片版本。" />
+    <meta name="twitter:description" content="下载 QuizMate Windows、macOS、Android 客户端和 AI 网申自动化插件，支持中文/英文简历与复杂网申字段。" />
     <meta name="twitter:image" content="https://quizmate.cn/assets/hero-product.jpg" />
     <title>下载 - AI笔试助手_AI面试助手 - QuizMate</title>
     <link rel="icon" type="image/svg+xml" href="assets/quizmate-favicon.svg" />
@@ -25,6 +25,34 @@
     <style>
       .platform-notes {
         margin: 22px 0 28px;
+      }
+
+      .download-page-hero {
+        padding: calc(var(--header-height) + 22px) 0 22px;
+      }
+
+      .download-page-hero h1 {
+        margin-bottom: 8px;
+        font-size: clamp(30px, 4vw, 44px);
+      }
+
+      .download-page-hero p:last-child {
+        font-size: 15px;
+      }
+
+      .download-page-campaign {
+        padding-top: 24px;
+      }
+
+      @media (max-width: 560px) {
+        .download-page-hero {
+          padding-top: calc(var(--header-height) + 18px);
+          padding-bottom: 18px;
+        }
+
+        .download-page-hero h1 {
+          font-size: clamp(30px, 9vw, 38px);
+        }
       }
 
       .platform-notes-grid {
@@ -114,6 +142,7 @@
     <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script defer src="app.js?v=20260731-macmerge"></script>
     <script defer src="credits.js?v=20260801-pkgs"></script>
+    <script defer src="xiaohongshu-reward.js?v=20260912-download1"></script>
   </head>
   <body data-page="download">
     <a class="skip-link" href="#main">跳到主要内容</a>
@@ -137,7 +166,7 @@
     </header>
 
     <main id="main">
-      <section class="page-hero" aria-labelledby="page-title">
+      <section class="page-hero download-page-hero" aria-labelledby="page-title">
         <div class="section-inner">
           <p class="section-kicker">版本下载</p>
           <h1 id="page-title">为你的设备选择版本</h1>
@@ -147,6 +176,33 @@
 
       <section class="section downloads">
         <div class="section-inner">
+          <aside class="xhs-reward-banner download-page-campaign" aria-labelledby="xhs-reward-title">
+            <div class="xhs-reward-lead">
+              <span class="xhs-reward-eyebrow"><i data-lucide="heart"></i>9月限时小红书集赞福利</span>
+              <div>
+                <h2 id="xhs-reward-title">分享网申插件体验，免费领备考包</h2>
+                <p>发布网申插件体验笔记，点赞或收藏达标后提交笔记链接和个人中心截图，审核通过自动发放备考包积分。</p>
+              </div>
+              <button class="xhs-reward-button" type="button" data-open-xhs-reward>
+                <i data-lucide="gift"></i>
+                <span>查看活动详情</span>
+                <i data-lucide="arrow-right"></i>
+              </button>
+            </div>
+            <div class="xhs-reward-tiers" aria-label="点赞或收藏奖励档位">
+              <div class="xhs-reward-tier">
+                <span><strong>20</strong> 赞/收藏</span>
+                <p>赠送</p>
+                <b>网申 Offer 实战包</b>
+              </div>
+              <div class="xhs-reward-tier xhs-reward-tier-plus">
+                <span><strong>70</strong> 赞/收藏</span>
+                <p>赠送</p>
+                <b>网申 Offer 上岸包</b>
+              </div>
+            </div>
+          </aside>
+
           <div class="download-grid">
             <article class="download-card" data-platform-card="windows">
               <div class="download-card-top">
@@ -158,11 +214,11 @@
               <ul class="file-meta">
                 <li><span>系统</span><strong>Windows 11</strong></li>
                 <li><span>文件</span><strong>EXE 安装程序</strong></li>
-                <li><span>版本</span><strong>2026.09.05.1</strong></li>
+                <li><span>版本</span><strong>2026.09.10</strong></li>
                 <li><span>大小</span><strong>约 83 MB</strong></li>
               </ul>
               <div class="download-actions">
-                <a class="button button-card" href="downloads/QuizMate-Windows-2026.09.05.1.exe" download data-download="windows-client">
+                <a class="button button-card" href="downloads/QuizMate-Windows-2026.09.10.exe" download data-download="windows-client">
                   <i data-lucide="download"></i>下载 Windows 客户端
                 </a>
                 <a class="button button-card button-card-outline" href="downloads/QuizMate-Windows-Manual.pdf" download data-download="manual-windows">
@@ -171,22 +227,25 @@
               </div>
             </article>
 
-            <article class="download-card featured" data-platform-card="extension">
+            <article class="download-card featured" data-platform-card="resume-extension" id="ai-career-tools">
               <div class="download-card-top">
-                <span class="platform-icon platform-icon-blue"><i data-lucide="chrome"></i></span>
-                <span class="version-badge version-badge-green">免费</span>
+                <span class="platform-icon platform-icon-green"><i data-lucide="file-user"></i></span>
+                <span class="version-badge version-badge-green">新增</span>
               </div>
-              <h2>QuizMate 求职插件</h2>
-              <p>AI 网申 · 投递管理 · 职位监控，安装在 Chrome 或 Edge 中即可使用。</p>
+              <h2>AI 网申简历助手</h2>
+              <p>自动化网申永久免费。内置完整虚构测试简历，未登录也能扫描页面并体验本地通用规则试填；登录后可使用 AI 简历解析与后台站点规则。</p>
               <ul class="file-meta">
                 <li><span>浏览器</span><strong>Chrome / Edge</strong></li>
                 <li><span>文件</span><strong>ZIP 扩展包</strong></li>
-                <li><span>版本</span><strong>2.2.0</strong></li>
-                <li><span>费用</span><strong>永久免费</strong></li>
+                <li><span>版本</span><strong>2026.9.9</strong></li>
+                <li><span>账号</span><strong>与 QuizMate 通用</strong></li>
               </ul>
               <div class="download-actions">
-                <a class="button button-card button-card-green" href="downloads/QuizMate-Career-Extension-2.2.0.zip" download data-download="browser-extension">
-                  <i data-lucide="download"></i>下载求职插件
+                <a class="button button-card button-card-green" href="downloads/QuizMate-%E7%BD%91%E7%94%B3%E5%8A%A9%E6%89%8B-2026.9.9.zip" download data-download="resume-extension">
+                  <i data-lucide="download"></i>下载 AI 网申助手
+                </a>
+                <a class="button button-card button-card-outline button-card-outline-green" href="downloads/QuizMate-AI网申插件操作手册.html" target="_blank" rel="noopener" data-download="manual-resume-extension">
+                  <i data-lucide="file-text"></i>在线操作手册
                 </a>
               </div>
             </article>
@@ -201,12 +260,13 @@
               <ul class="file-meta">
                 <li><span>系统</span><strong>macOS 11.0 Big Sur+</strong></li>
                 <li><span>架构</span><strong>Apple Silicon / Intel</strong></li>
-                <li><span>版本</span><strong>2026.08.29</strong></li>
+                <li><span>版本</span><strong>2026.09.12</strong></li>
                 <li><span>文件</span><strong>DMG 安装包</strong></li>
               </ul>
               <div class="download-actions mac-download-actions">
-                <a class="button button-card button-card-dark" href="downloads/QuizMate-Mac-Apple-Silicon-2026.08.29.dmg" download data-download="mac-apple-silicon"><i data-lucide="download"></i>Apple 芯片版</a>
-                <a class="button button-card button-card-outline" href="downloads/QuizMate-Mac-Intel-2026.08.29.dmg" download data-download="mac-intel"><i data-lucide="download"></i>Intel 芯片版</a>
+                <a class="button button-card button-card-dark" href="downloads/QuizMate-Mac-Apple-Silicon-2026.09.12.dmg" download data-download="mac-apple-silicon"><i data-lucide="download"></i>Apple 芯片版</a>
+                <a class="button button-card button-card-outline" href="downloads/QuizMate-Mac-Intel-2026.09.12.dmg" download data-download="mac-intel"><i data-lucide="download"></i>Intel 芯片版</a>
+                <a class="button button-card button-card-outline button-card-outline-green" href="downloads/QuizMate-客户端使用操作手册.pdf" download data-download="manual-mac"><i data-lucide="file-down"></i>Mac 操作手册</a>
               </div>
             </article>
 
@@ -247,16 +307,16 @@
               <article class="platform-note platform-note-extension" data-platform-note="extension">
                 <div class="platform-note-heading">
                   <span class="platform-note-icon"><i data-lucide="chrome" aria-hidden="true"></i></span>
-                  <strong>QuizMate 求职插件</strong>
+                  <strong>AI 网申简历助手</strong>
                 </div>
-                <p>正在加急研发中，预备终身免费开放</p>
+                <p>自动化网申永久免费，使用 QuizMate 统一账号；新安装自带测试简历，支持中文、英文简历和多种网申控件。</p>
               </article>
               <article class="platform-note platform-note-macos" data-platform-note="macos">
                 <div class="platform-note-heading">
                   <span class="platform-note-icon"><i data-lucide="apple" aria-hidden="true"></i></span>
                   <strong>Mac 客户端</strong>
                 </div>
-                <p>适配多芯片版本，建议升级到 2025 以后系统版本</p>
+                <p>适配 Intel 与 Apple 芯片，支持双机协作笔试/面试；建议升级到 macOS 11.0 及以上系统，并按手册开启屏幕录制、麦克风和电脑声音权限。</p>
               </article>
               <article class="platform-note platform-note-android" data-platform-note="android">
                 <div class="platform-note-heading">
@@ -270,7 +330,7 @@
 
           <div class="download-help">
             <i data-lucide="circle-help"></i>
-            <p>每个平台的安装、使用和充值说明都在对应卡片的独立 PDF 中；也可以前往 <a href="docs.html">操作文档</a> 查看演示。</p>
+            <p>每个平台的安装、使用和充值说明都在对应卡片的操作手册或 PDF 中；也可以前往 <a href="docs.html">操作文档</a> 查看演示。</p>
           </div>
         </div>
       </section>

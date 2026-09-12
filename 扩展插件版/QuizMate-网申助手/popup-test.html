@@ -1,9 +1,0 @@
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><link rel="stylesheet" href="popup/popup.css"></head><body>
-<header><div class="brand-mark">Q</div><div><strong>QuizMate 网申助手</strong><small>档案驱动的自动填写</small></div></header>
-<nav><button class="tab active" data-view="fill">填表</button><button class="tab" data-view="profiles">档案</button><button class="tab" data-view="progress">进度</button><button class="tab" data-view="jobs">职位</button><button class="tab" data-view="more">更多</button></nav>
-<main id="app"></main><div id="toast"></div>
-<script>
-const mockStore={token:'test-token',user:{email:'test@example.com'},profiles:[{id:'p1',name:'校招档案',fields:{姓名:'张三',手机号:'13800138000',毕业院校:'测试大学'}}],selectedProfileId:'p1',autoFillEnabled:true,applications:[{id:'a1',company:'示例科技',position:'前端工程师',status:'interview',createdAt:new Date().toISOString()}],monitorEnabled:true,monitorInterval:360,cachedJobs:[{id:'j1',company:'未来科技',position:'软件工程师',city:'上海'}]};
-window.fetch=async()=>({ok:true,status:200,json:async()=>({ok:true,data:{account:{email:'test@example.com'}}})});
-window.chrome={storage:{local:{get:async keys=>{if(typeof keys==='string')return{[keys]:mockStore[keys]};const list=Array.isArray(keys)?keys:Object.keys(keys||{});return Object.fromEntries(list.map(key=>[key,mockStore[key]]));},set:async value=>Object.assign(mockStore,value),remove:async keys=>{for(const key of(Array.isArray(keys)?keys:[keys]))delete mockStore[key];}},onChanged:{addListener(){}}},runtime:{sendMessage:async message=>message.action==='listApplications'?{success:true,applications:mockStore.applications}:message.action==='fetchJobs'?{success:true,jobs:mockStore.cachedJobs}:{success:true,detected:12,matched:8,filled:8},getURL:path=>'http://127.0.0.1:8767/'+path},tabs:{query:async()=>[{url:'https://jobs.example.com/apply'}],create:async()=>{}}};
-</script><script src="lib/mammoth.browser.min.js"></script><script type="module" src="popup/popup.js"></script></body></html>

@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>简历维护 · AI 网申助手</title>
+    <link rel="stylesheet" href="ui.css?v=2026.9.9.1">
+  </head>
+  <body class="resume-page">
+    <main class="resume-app">
+      <header class="resume-topbar">
+        <div class="resume-brand">
+          <div class="eyebrow">QUIZMATE · RESUME WORKSPACE</div>
+          <h1>QuizMate 简历维护</h1>
+        </div>
+        <div class="top-actions">
+          <span id="accountStatus" class="status-pill">未登录</span>
+          <button id="authButton" class="button secondary small" type="button">登录 / 注册</button>
+          <span id="saveStatus" class="status-pill">本机保存</span>
+          <button id="importJson" class="button secondary small">导入 JSON</button>
+          <button id="parseFile" class="button secondary small">AI 解析文件</button>
+          <button id="exportJson" class="button secondary small">导出备份</button>
+          <input id="jsonFile" class="file-input" type="file" accept="application/json,.json">
+          <input id="resumeFile" class="file-input" type="file" accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx,text/plain,.txt,.md,image/png,image/jpeg,image/webp">
+        </div>
+      </header>
+
+      <div class="resume-layout">
+        <aside class="resume-sidebar">
+          <section class="side-card">
+            <h3>我的简历</h3>
+            <div id="profileList" class="profile-list"></div>
+            <button id="addProfile" class="button secondary wide small" style="margin-top:10px">＋ 新建简历</button>
+          </section>
+
+          <section class="side-card website-promo">
+            <div class="eyebrow">ALL CAREER TOOLS</div>
+            <h3>一键直达官网<br>Offer 离你更进一步</h3>
+            <p>自动化网申永久免费；继续体验笔试、面试与双机位手机协作。</p>
+            <a class="button primary wide" href="https://www.quizmate.cn/" target="_blank" rel="noopener">访问 QuizMate 官网</a>
+          </section>
+        </aside>
+
+        <section id="editor" class="resume-content"></section>
+      </div>
+      <footer class="hint" style="padding:14px 0">自动化网申永久免费 · <a href="https://www.quizmate.cn/" target="_blank" rel="noopener">QuizMate 笔试面试全场景助手</a></footer>
+      <div id="toast" class="toast hidden"></div>
+    </main>
+    <div id="authModal" class="auth-modal hidden" role="dialog" aria-modal="true" aria-labelledby="authTitle">
+      <div class="auth-backdrop" data-close-auth></div>
+      <section class="auth-dialog">
+        <button class="auth-close" type="button" data-close-auth aria-label="关闭">×</button>
+        <p class="eyebrow">QUIZMATE ACCOUNT</p><h2 id="authTitle">登录账户</h2>
+        <p class="auth-promise">网申永久免费，注册成功赠送 50 积分，体验笔面试辅助快人一步</p>
+        <form data-auth-form="login"><label>邮箱<input name="email" type="email" autocomplete="email" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button class="button primary wide" type="submit">登录</button><p class="auth-switch">没有账号？<button type="button" data-auth-tab="register">立即注册</button> · <button type="button" data-auth-tab="reset">忘记密码</button></p></form>
+        <form data-auth-form="register" hidden><div class="auth-bonus">网申永久免费 · 注册成功立即赠送 50 积分</div><label>邮箱<input name="email" type="email" autocomplete="email" required></label><div class="code-row"><label>验证码<input name="code" inputmode="numeric" maxlength="6" required></label><button class="button secondary" type="button" data-send-code="register">获取验证码</button></div><label>邀请码（选填）<input name="inviteCode" autocomplete="off"></label><label>密码<input name="password" type="password" minlength="8" autocomplete="new-password" required></label><button class="button primary wide" type="submit">注册并登录</button><p class="auth-switch">已有账号？<button type="button" data-auth-tab="login">返回登录</button></p></form>
+        <form data-auth-form="reset" hidden><label>邮箱<input name="email" type="email" autocomplete="email" required></label><div class="code-row"><label>验证码<input name="code" inputmode="numeric" maxlength="6" required></label><button class="button secondary" type="button" data-send-code="reset">获取验证码</button></div><label>新密码<input name="password" type="password" minlength="8" autocomplete="new-password" required></label><button class="button primary wide" type="submit">重置密码</button><p class="auth-switch"><button type="button" data-auth-tab="login">返回登录</button></p></form>
+        <p id="authStatus" class="auth-status" aria-live="polite"></p>
+      </section>
+    </div>
+    <script type="module" src="auth.js"></script>
+    <script src="preview-shim.js"></script>
+    <script type="module" src="resume.js"></script>
+  </body>
+</html>

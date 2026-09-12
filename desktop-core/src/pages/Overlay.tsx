@@ -60,8 +60,9 @@ export default function Overlay() {
         }
         const existingTasks = await api.interview.getTasks();
         if (Array.isArray(existingTasks) && existingTasks.length > 0) {
-          setTasks(existingTasks);
-          tasksRef.current = existingTasks;
+          const visibleTasks = existingTasks.filter((task: InterviewTask) => task.status !== 'skipped');
+          setTasks(visibleTasks);
+          tasksRef.current = visibleTasks;
         }
         setShortcutBindings(await electronAPI.config.getShortcutBindings());
       } catch (e) {
@@ -75,15 +76,12 @@ export default function Overlay() {
     const unsubs: Array<(() => void) | undefined> = [];
 
     unsubs.push(electronAPI?.on('overlay:renderTasks', (data: any) => {
-      const nextTasks = Array.isArray(data) ? data : [];
+      const nextTasks = (Array.isArray(data) ? data : []).filter((task: InterviewTask) => task.status !== 'skipped');
       const currentId = tasksRef.current[selectedIndexRef.current]?.id;
       let nextIndex = 0;
       if (userNavigatedRef.current && currentId) {
         const preserved = nextTasks.findIndex((task: InterviewTask) => task.id === currentId);
         if (preserved >= 0) nextIndex = preserved;
-      } else if (nextTasks[0]?.status === 'skipped') {
-        const latestValid = nextTasks.findIndex((task: InterviewTask) => task.status !== 'skipped');
-        nextIndex = latestValid >= 0 ? latestValid : 0;
       }
       tasksRef.current = nextTasks;
       selectedIndexRef.current = nextIndex;
@@ -192,7 +190,6 @@ export default function Overlay() {
             <span className="px-1.5 py-0.5 rounded" style={{ background: panelColor }}>完成 {doneCount}</span>
           </div>
         </header>
-
         <main className="flex-1 grid grid-cols-[minmax(130px,36%)_1fr] min-h-0">
           <section className="min-w-0 overflow-y-auto p-2.5 border-r" style={{ borderColor }}>
             <div className="flex items-center justify-between mb-2 px-0.5">

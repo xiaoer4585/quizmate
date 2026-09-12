@@ -10,10 +10,10 @@ const BACKEND = path.join(ROOT, '注册登陆模块/阿里云后端-quizmate-api
 const ADMIN = path.join(ROOT, '官网模块/正式官网-quizmate.vip/admin-web');
 const INSTANCE_ID = 'i-2zedgehm045w1gsarawx';
 const REGION = 'cn-beijing';
-const CHANGE_ID = 'CHG-20260902-01';
+const CHANGE_ID = 'CHG-20260905-10';
 const PACKAGE_FILE = path.join(ROOT, 'tmp', `quizmate-api-${CHANGE_ID}.tar.gz`);
 const PACKAGE_OBJECT = `deploy/quizmate-api-${CHANGE_ID}.tar.gz`;
-const BACKEND_FILES = ['dist/src/actions/admin.js', 'dist/src/actions/activities.js', 'dist/src/actions/index.js', 'migrations/014_model_call_failures.sql', 'migrations/015_xiaohongshu_rewards.sql'];
+const BACKEND_FILES = ['dist/src/actions/admin.js', 'dist/src/actions/activities.js', 'dist/src/actions/index.js', 'dist/src/actions/site-engine.js', 'migrations/014_model_call_failures.sql', 'migrations/015_xiaohongshu_rewards.sql', 'migrations/022_model_failure_whitelist.sql'];
 
 function sha256(value) { return crypto.createHash('sha256').update(value).digest('hex'); }
 function credentials() {
@@ -58,7 +58,7 @@ function checkLocal() {
     process.stdout.write(`LOCAL_SHA256 ${file} ${sha256(fs.readFileSync(full))}\n`);
   }
   const html = fs.readFileSync(path.join(ADMIN, 'index.html'), 'utf8');
-  for (const marker of ['data-view-tab="xiaohongshuReviews"', 'data-view-tab="aiFailures"', 'adminListModelCallFailures']) if (!html.includes(marker)) throw new Error(`admin page missing ${marker}`);
+  for (const marker of ['data-view-tab="xiaohongshuReviews"', 'data-view-tab="aiFailures"', 'adminListModelCallFailures', 'adminGetModelFailureWhitelist', 'deleteSelectedAiFailuresBtn', 'data-model-failure-select-all']) if (!html.includes(marker)) throw new Error(`admin page missing ${marker}`);
   if (!fs.readFileSync(path.join(ADMIN, 'xiaohongshu-review.js'), 'utf8').includes('adminListXiaohongshuRewards')) throw new Error('xiaohongshu review asset missing action marker');
   const script = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].pop()?.[1] || '';
   new (require('vm').Script)(script, { filename: 'admin-web-inline.js' });
@@ -75,22 +75,30 @@ TS=\$(date +%Y%m%d-%H%M%S)
 APP=/opt/quizmate-api-shadow
 BACKUP=\$APP.rollback-admin-menu-actions-\$TS
 mkdir -p "\$BACKUP"
-for f in admin.js activities.js index.js; do cp -a "\$APP/dist/src/actions/\$f" "\$BACKUP/\$f"; done
-rollback() { code=\$?; for f in admin.js activities.js index.js; do [ -f "\$BACKUP/\$f" ] && cp -a "\$BACKUP/\$f" "\$APP/dist/src/actions/\$f"; done; systemctl restart quizmate-api-shadow.service || true; echo AUTO_ROLLBACK_DONE; exit \$code; }
+for f in admin.js activities.js index.js site-engine.js; do [ -f "\$APP/dist/src/actions/\$f" ] && cp -a "\$APP/dist/src/actions/\$f" "\$BACKUP/\$f"; done
+rollback() { code=\$?; for f in admin.js activities.js index.js site-engine.js; do [ -f "\$BACKUP/\$f" ] && cp -a "\$BACKUP/\$f" "\$APP/dist/src/actions/\$f"; done; systemctl restart quizmate-api-shadow.service || true; echo AUTO_ROLLBACK_DONE; exit \$code; }
 trap rollback ERR
 curl -fsSL -o /tmp/${CHANGE_ID}.tar.gz '${url}'
 tar -xzf /tmp/${CHANGE_ID}.tar.gz -C "\$APP"
 grep -q adminListXiaohongshuRewards "\$APP/dist/src/actions/activities.js"
 grep -q adminListModelCallFailures "\$APP/dist/src/actions/admin.js"
+grep -q adminDeleteModelCallFailures "\$APP/dist/src/actions/admin.js"
 grep -q createActivityActions "\$APP/dist/src/actions/index.js"
 cd "\$APP"; set -a; . /etc/quizmate-api-shadow.env; set +a
 node_modules/.bin/tsx scripts/migrate.ts 2>&1 | tail -20
 systemctl restart quizmate-api-shadow.service
-sleep 3
+for i in 1 2 3 4 5 6 7 8 9 10; do
+  status=$(systemctl is-active quizmate-api-shadow.service || true)
+  [ "$status" = "active" ] && break
+  sleep 2
+done
 systemctl is-active quizmate-api-shadow.service
-curl -fsS http://127.0.0.1:8200/health
+for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  curl -fsS http://127.0.0.1:8200/health && break
+  sleep 2
+done
 echo
-for action in adminListXiaohongshuRewards adminListModelCallFailures; do curl -s -o /tmp/admin-action.json -w 'action_http=%{http_code}\\n' -X POST http://127.0.0.1:8200/study-auth-api -H 'Content-Type: application/json' -d "{\\"action\\":\\"\$action\\"}"; if grep -q UNKNOWN_ACTION /tmp/admin-action.json; then exit 1; fi; done
+for action in adminListXiaohongshuRewards adminListModelCallFailures adminGetModelFailureWhitelist adminDeleteModelCallFailures; do curl -s -o /tmp/admin-action.json -w 'action_http=%{http_code}\\n' -X POST http://127.0.0.1:8200/study-auth-api -H 'Content-Type: application/json' -d "{\\"action\\":\\"\$action\\"}"; if grep -q UNKNOWN_ACTION /tmp/admin-action.json; then exit 1; fi; done
 echo BACKUP=\$BACKUP
 echo DEPLOY_ADMIN_MENU_ACTIONS_OK`);
   if (!output.includes('DEPLOY_ADMIN_MENU_ACTIONS_OK')) throw new Error('backend deployment marker missing');

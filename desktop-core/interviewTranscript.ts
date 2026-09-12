@@ -1,14 +1,22 @@
-// A finalized utterance should dispatch to the interview model within 300ms.
-// Interim text still uses a longer silence window to avoid splitting a question.
-export const ASR_SILENCE_COMMIT_MS = 900;
-export const ASR_FINAL_COMMIT_MS = 180;
+// Keep the original responsive dispatch timing. Long ASR fragments are
+// disambiguated by the recent conversation context sent to the model.
+// ASR final packets are phrase boundaries, not guaranteed turn boundaries.
+// Give the next packet enough time to arrive before handing text to the
+// turn-level assembler in InterviewHelper.
+export const ASR_SILENCE_COMMIT_MS = 1_200;
+export const ASR_FINAL_COMMIT_MS = 900;
+/** Only unfinished question fragments get this longer coalescing window. */
+// 长问题的 final 片段可能间隔数秒；保留足够窗口，避免前半句先触发一次 AI。
+export const ASR_FRAGMENT_SETTLE_MS = 6_000;
+/** Keep a small margin below the API's 2,000 character question limit. */
+export const MAX_INTERVIEW_QUESTION_CHARS = 1_800;
 
 export const INTERVIEW_CONTEXT_LIMITS = {
   // Keep the client request at or below the deployed service limits so the
   // backend can forward it without a second compaction pass.
   jobDescription: 4000,
   resumeText: 8000,
-  recentConversation: 2000,
+  recentConversation: 8000,
 } as const;
 
 const CONTEXT_OMISSION_MARKER = '\n…[中间内容已省略以加快响应]…\n';
@@ -50,6 +58,16 @@ export function normalizeTranscript(text: string): string {
   return text.replace(/::__id__\d+$/, '').replace(/\s+/g, ' ').trim();
 }
 
+export function limitInterviewQuestion(text: string, maxChars = MAX_INTERVIEW_QUESTION_CHARS): string {
+  const normalized = normalizeTranscript(text);
+  if (normalized.length <= maxChars) return normalized;
+  const marker = '…[中间语音已省略]…';
+  if (maxChars <= marker.length) return normalized.slice(0, maxChars);
+  const available = maxChars - marker.length;
+  const head = Math.ceil(available * 0.58);
+  return `${normalized.slice(0, head)}${marker}${normalized.slice(-(available - head))}`;
+}
+
 export function mergeIncrementalTranscript(current: string, incoming: string): string {
   const next = normalizeTranscript(incoming);
   if (!next) return current;
@@ -71,7 +89,7 @@ export function mergeFinalTranscript(current: string, incoming: string): string 
   if (base.startsWith(next)) return base;
   const compact = (value: string) => value.replace(/[。！？.!?\s]/g, '');
   if (compact(base) === compact(next)) return next.length >= base.length ? next : base;
-  const joiner = /[\u4e00-\u9fff]$/.test(base) && /^[\u4e00-\u9fff]/.test(next) ? '' : ' ';
+  const joiner = /[\u4e00-\u9fff。！？；：]$/.test(base) && /^[\u4e00-\u9fff]/.test(next) ? '' : ' ';
   return normalizeTranscript(`${base}${joiner}${next}`);
 }
 
@@ -96,11 +114,12 @@ export function isLikelyInterviewQuestion(text: string, audioMode: 'demo' | 'for
   if (fillers.some((pattern) => pattern.test(value))) return false;
   const interviewerRequest = /^(?:(?:我|我们|我这边|我们这边).{0,12}(?:想问|想了解|想请你|希望你|请你)|i\s+(?:want|would like)\s+to\s+(?:ask|know|understand)|we\s+(?:want|would like)\s+to\s+(?:ask|know|understand))/i;
   if (interviewerRequest.test(value)) return true;
-  const candidateAnswer = /^(我|我的|本人|我们|我曾经|我负责|在我看来|我认为|首先|其次|然后|最后|当时|具体来说|例如|比如|i\b|i'm\b|i've\b|my\b|we\b|in my experience\b|i think\b|i believe\b|first(?:ly)?\b|second(?:ly)?\b|for example\b|for instance\b)/i.test(value)
-    || (/^(?:这个|该)(?:项目|经历|问题|场景)/.test(value) && /(?:是|中|里|上)/.test(value));
-  if (candidateAnswer) return false;
+  const interviewerLeadIn = /^(?:我出(?:一个|个)?(?:题目|问题)|给你出(?:一个|个)?(?:题目|问题)|就是说|也就是说)/.test(value);
   const directQuestion = /[?？]|请问|怎么|如何|为什么|什么|哪些|哪个|哪种|是否|能否|可不可以|可以吗|有没有|有.*吗|是什么|区别(?:是|在)?哪|你(?:会|能|有|对|觉得|认为|怎么看)|\b(?:how|what|why|when|where|which|who)\b|\b(?:can|could|would|will|do|did|have|has|are|were)\s+you\b|\btell\s+me\b|\bwalk\s+me\s+through\b|\bgive\s+me\s+an?\s+example\b/i;
+  const candidateAnswer = !interviewerLeadIn && (/^(我|我的|本人|我们|我曾经|我负责|在我看来|我认为|首先|其次|然后|最后|当时|具体来说|例如|比如|i\b|i'm\b|i've\b|my\b|we\b|in my experience\b|i think\b|i believe\b|first(?:ly)?\b|second(?:ly)?\b|for example\b|for instance\b)/i.test(value)
+    || (/^(?:这个|该)(?:项目|经历|问题|场景)/.test(value) && /(?:是|中|里|上)/.test(value)));
   if (directQuestion.test(value)) return true;
+  if (candidateAnswer) return false;
   const interviewPrompt = /^(请|麻烦|能否|可以|介绍|讲|说|聊|谈|分享|举例|列举|描述|解释|分析|对比|总结|实现|编写|设计|假设|如果|遇到|谈谈|讲讲|说说|tell\b|describe\b|explain\b|discuss\b|share\b|compare\b|design\b|implement\b|write\b)/i;
   if (interviewPrompt.test(value)) return true;
   const commonShortQuestion = /^(自我介绍|职业规划|离职原因|期望薪资|薪资期望|项目经历|实习经历|失败经历|最大的优点|最大的缺点|为什么选你|为什么离职)[。！？!?.…]*$/;
@@ -109,5 +128,33 @@ export function isLikelyInterviewQuestion(text: string, audioMode: 'demo' | 'for
   if (interviewTopic.test(value.replace(/[，。！？、,.!?；;：:\s]/g, ''))) return true;
   if (audioMode === 'demo') return value.length >= 4;
   return value.replace(/[，。！？、,.!?；;：:\s]/g, '').length >= 8;
+}
+
+/**
+ * ASR final events are often phrase fragments rather than complete questions.
+ * Hold only these clearly unfinished fragments briefly; complete short questions
+ * keep the fast submission path.
+ */
+export function isLikelyIncompleteInterviewFragment(text: string): boolean {
+  const normalized = normalizeTranscript(text);
+  const value = normalized.replace(/[，,。！？!?；;：:]+$/g, '').trim();
+  if (!value || /[。！？!?]$/.test(normalized)) return false;
+  // ASR 的 final 往往只是一个短语，并不代表面试官已经说完。
+  // 除了连接词，还要覆盖“我出一个题目，你看怎么做”这类带引导语的长问题，
+  // 否则 180ms 的 final 提交会把后面的事实条件和真正问题拆成两个任务。
+  if (/[，,、；;：:]$/.test(normalized)) return true;
+  if (/^(?:我出(?:一个|个)?(?:题目|问题)|给你出(?:一个|个)?(?:题目|问题)|就是说|也就是说)/.test(value)
+    && !/[?？]/.test(normalized)
+    && !/(?:多少|几|什么|如何|怎么|为什么|能否|是否|请你猜测下|请你估算下)/.test(value)) return true;
+  // A streaming ASR final such as “请你介绍一下” is a phrase boundary,
+  // not a complete question. Hold short request lead-ins so the following
+  // final packet can be merged into the same AI request.
+  if (value.length < 16 && /^(?:请你|请问|能否|能不能|你能|可以|介绍一下|谈谈|说说)/.test(value)
+    && !/(?:项目经历|职业规划|自我介绍|工作经历|实习经历)/.test(value)
+    && !/[?？]/.test(normalized)) return true;
+  // 数量/事实前提通常还没到真正的提问部分，例如“昆山有100家理发店”。
+  if (/(?:有\s*[0-9一二三四五六七八九十百千万亿]+\s*(?:家|个|名|位|人|台|辆|间|所|条|本|种)(?:[^?？]{0,12})?)$/.test(value)
+    && !/(?:多少|几|什么|如何|怎么|为什么|能否|是否|请你猜测下|请你估算下)/.test(value)) return true;
+  return /(?:如果|因为|所以|然后|并且|以及|但是|还有|另外|关于|对于|当|当时|在|从|到|和|与|或|请你|你来|能不能|能否|是否|我出(?:一个|个)?(?:题目|问题)|给你出(?:一个|个)?(?:题目|问题)|你看怎么做|就是说|也就是说|题目是|猜测下|估算下|推测下)$/.test(value);
 }
 

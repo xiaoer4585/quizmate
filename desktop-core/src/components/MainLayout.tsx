@@ -2,9 +2,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
-  LayoutDashboard, PenLine, Mic,
+  LayoutDashboard, PenLine, Mic, Smartphone,
   User, Wallet, Menu, X,
-  Download, Loader2, CheckCircle2, AlertCircle, BookOpen, Chrome, HelpCircle, Sparkles
+  Download, Loader2, CheckCircle2, AlertCircle, BookOpen, Chrome, HelpCircle, Sparkles, AlertTriangle, ArrowRight
 } from 'lucide-react';
 import { api, useProfile, useUpdateStatus, useMainWindowVisible } from '../lib/ipc';
 import { isMacPlatform } from '../../shared/shortcuts';
@@ -16,9 +16,10 @@ interface NavItem { to: string; label: string; icon: ReactNode; badge?: string; 
 
 const NAV: NavItem[] = [
   { to: '/', label: '工作台', icon: <LayoutDashboard size={18} /> },
-  { to: '/exam', label: '笔试助手', icon: <PenLine size={18} />, badge: '积分' },
-  { to: '/interview', label: '面试助手', icon: <Mic size={18} />, badge: '积分' },
-  { to: '/extension', label: '网申插件', icon: <Chrome size={18} />, badge: 'AI' },
+  { to: '/exam', label: isMacPlatform() ? '笔试助手' : 'PC笔试助手', icon: <PenLine size={18} /> },
+  { to: '/interview', label: isMacPlatform() ? '面试助手' : 'PC面试助手', icon: <Mic size={18} /> },
+  { to: '/companion', label: '双机协作笔面试', icon: <Smartphone size={18} /> },
+  { to: '/extension', label: '网申插件', icon: <Chrome size={18} /> },
 ];
 
 export default function MainLayout({ children }: { children: ReactNode }) {
@@ -26,6 +27,22 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const { data: profile } = useProfile();
   const [collapsed, setCollapsed] = useState(false);
+  const [entryError, setEntryError] = useState('');
+  const [approvedPath, setApprovedPath] = useState('');
+  useEffect(() => {
+    let alive = true;
+    const path = location.pathname;
+    if (!['/exam', '/interview', '/companion'].includes(path)) { setApprovedPath(path); return; }
+    const target = path === '/companion' ? 'mobile' : 'pc';
+    // Route changes own workspace lifecycle. Entering the companion page
+    // enables it immediately (pairing can happen afterwards); entering either
+    // PC page exits companion and restores the original PC helpers.
+    api.companion.workspace(target).then(() => {
+      if (!alive) return;
+      setApprovedPath(path);
+    }).catch((error: unknown) => { if (alive) setEntryError(error instanceof Error ? error.message : '无法切换助手工作区'); });
+    return () => { alive = false; };
+  }, [location.pathname, navigate]);
   const [version, setVersion] = useState('');
   const updateStatus = useUpdateStatus();
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
@@ -84,7 +101,48 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   };
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100">
+    <div className="flex h-screen bg-slate-950 text-slate-100" onClickCapture={event => {
+      const anchor = (event.target as HTMLElement).closest('a,[data-assistant-route]');
+      const path = anchor?.getAttribute('data-assistant-route') || anchor?.getAttribute('href')?.replace(/^#/, '');
+      if (!path || !['/exam', '/interview', '/companion'].includes(path)) return;
+      event.preventDefault(); event.stopPropagation();
+      const target = path === '/companion' ? 'mobile' : 'pc';
+      api.companion.workspace(target).then(() => { setEntryError(''); navigate(path); })
+        .catch((error: unknown) => setEntryError(error instanceof Error ? error.message : '无法切换助手工作区'));
+    }}>
+      {entryError && <div
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="entry-error-title"
+        aria-describedby="entry-error-message"
+        tabIndex={-1}
+        onKeyDown={(event) => { if (event.key === 'Escape') setEntryError(''); }}
+        onMouseDown={(event) => { if (event.target === event.currentTarget) setEntryError(''); }}
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/75 px-4 backdrop-blur-sm"
+      >
+        <div className="w-full max-w-md overflow-hidden rounded-2xl border border-amber-400/25 bg-gradient-to-br from-slate-900 via-slate-900 to-slate-950 shadow-[0_24px_80px_rgba(0,0,0,.55)]">
+          <div className="h-1 bg-gradient-to-r from-amber-400 via-orange-400 to-rose-500" />
+          <div className="p-6 sm:p-7">
+            <div className="mb-5 flex items-start gap-3">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-300 ring-1 ring-inset ring-amber-300/25">
+                <AlertTriangle size={21} aria-hidden="true" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-300/80">工作区冲突提示</p>
+                <h2 id="entry-error-title" className="mt-1 text-lg font-semibold text-slate-100">暂时无法进入此助手</h2>
+              </div>
+            </div>
+            <p id="entry-error-message" className="rounded-xl border border-slate-700/80 bg-slate-800/50 px-4 py-3 text-sm leading-6 text-slate-200">{entryError}</p>
+            <div className="mt-5 flex items-center justify-between gap-3 text-xs text-slate-500">
+              <span>请先停止当前运行中的工作区</span>
+              <ArrowRight size={14} aria-hidden="true" />
+            </div>
+            <button autoFocus className="mt-5 flex w-full items-center justify-center gap-2 rounded-xl bg-amber-400 px-4 py-2.5 text-sm font-semibold text-slate-950 shadow-lg shadow-amber-900/20 transition hover:bg-amber-300 focus:outline-none focus:ring-2 focus:ring-amber-300/70" onClick={() => setEntryError('')}>
+              知道了
+            </button>
+          </div>
+        </div>
+      </div>}
       {/* 侧边栏 */}
       <aside className={`${collapsed ? 'w-16' : 'w-56'} flex-shrink-0 bg-slate-900/80 border-r border-slate-800 flex flex-col transition-all`}>
         <div className="h-14 flex items-center gap-2 px-4 border-b border-slate-800">
@@ -237,7 +295,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
           </div>
         </header>
         {/* 内容区 */}
-        <main className="flex-1 overflow-auto p-5">{children}</main>
+        <main className="flex-1 overflow-auto p-5">{approvedPath === location.pathname ? children : <p className="text-slate-400">正在确认助手状态…</p>}</main>
       </div>
       <FeedbackButton />
       {/* 充值弹窗 */}

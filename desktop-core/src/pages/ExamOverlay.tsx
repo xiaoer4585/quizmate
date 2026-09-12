@@ -112,8 +112,10 @@ export default function OverlayPage() {
       if (!eventBelongsToCurrentOperation(data)) return
       setScreenshots((prev) => {
         const newShot: Screenshot = { path: data.path, base64: data.base64, isExtra: data.isExtra }
-        const filtered = data.isExtra ? prev.filter(s => s.path !== data.path) : prev.filter(s => s.isExtra)
-        return [...filtered, newShot]
+        const mainShots = prev.filter(s => !s.isExtra && s.path !== data.path)
+        const extraShots = prev.filter(s => s.isExtra && s.path !== data.path)
+        if (data.isExtra) return [...mainShots, ...extraShots, newShot]
+        return [...mainShots.slice(-2), newShot, ...extraShots]
       })
       // 每次截图代表新一轮开始；捕获完成后立即结束“正在截取”状态。
       setView('queue')
@@ -395,7 +397,7 @@ export default function OverlayPage() {
         </main>
 
         <footer className="h-7 flex items-center justify-between px-3 border-t border-white/10 text-[9px] opacity-60 shrink-0">
-          <span>题目截图 {mainShots.length} · 补充截图 {extraShots.length}</span>
+          <span>题目截图 {mainShots.length}/3 · 补充截图 {extraShots.length}</span>
           <span>{status === 'processing' ? `生成进度 ${Math.round(progress)}%` : status === 'completed' ? '本次解题已完成' : status === 'error' ? '截图已保留，可直接重试；诊断信息见错误详情' : '快捷键全局可用'}</span>
         </footer>
       </div>

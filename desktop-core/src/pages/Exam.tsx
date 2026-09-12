@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback } from 'react';
 import {
   Play, Square, ExternalLink, Info, Eye, EyeOff,
   Volume2, Loader2,
-  AlertCircle, Copy, FolderOpen,
+  AlertCircle, Copy, FolderOpen, ShieldCheck,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { defaultShortcutBindings, examOverlayShortcutActions, examVoiceShortcutActions, formatAccelerator, isMacPlatform } from '../../shared/shortcuts';
 import ShortcutSettings from '../components/ShortcutSettings';
 import FeatureGuide, { type FeatureGuideStep } from '../components/FeatureGuide';
+import type { PermissionOnboardingState } from '../../shared/reliability';
 
 type ProcessingMode = 'overlay' | 'voice';
 interface ExamDiagnosticError {
@@ -45,6 +46,8 @@ export default function Exam() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [diagnosticError, setDiagnosticError] = useState<ExamDiagnosticError | null>(null);
   const [announcement, setAnnouncement] = useState('');
+  const [permissionState, setPermissionState] = useState<PermissionOnboardingState | null>(null);
+  const [permissionBusy, setPermissionBusy] = useState(false);
 
   // 加载初始配置数据
   const loadData = useCallback(async () => {
@@ -64,6 +67,10 @@ export default function Exam() {
       }
       const mode = await api.config.getProcessingMode();
       setProcessingMode(mode);
+      if (isMacPlatform()) {
+        const permissions = await api.permissions.getState().catch(() => null) as PermissionOnboardingState | null;
+        setPermissionState(permissions);
+      }
       // 同步悬浮框启动状态（由侧边栏菜单控制）
       const isActive = await api.app.isExamClientActive();
       setOverlayActive(!!isActive);
@@ -100,6 +107,13 @@ export default function Exam() {
     };
   }, [api, loadData]);
 
+  useEffect(() => {
+    if (!isMacPlatform()) return;
+    const refresh = () => api.permissions.getState().then((value: PermissionOnboardingState) => setPermissionState(value)).catch(() => {});
+    const timer = window.setInterval(refresh, 1500);
+    return () => window.clearInterval(timer);
+  }, [api]);
+
   const guideAccount = userInfo?.email || userInfo?.username || 'current';
   const guideStorageKey = `quizmate.feature-guide.exam.${guideAccount}`;
   useEffect(() => {
@@ -124,15 +138,41 @@ export default function Exam() {
 
   // 启动笔试悬浮窗
   const handleStartExam = async () => {
-    // 语音播报模式无需悬浮框，直接标记为已启动
-    if (processingMode === 'voice') {
+    try {
+      // 语音播报模式没有文字悬浮框，不能伪装成已启动。
+      if (processingMode === 'voice') {
+        setOverlayActive(false);
+        setOverlayVisible(false);
+        setDiagnosticError({ error: '当前为语音播报模式，无法启动笔试助手悬浮框，请切换为悬浮框文字模式后再使用。' });
+        return;
+      }
+      if (isMacPlatform()) {
+        setPermissionBusy(true);
+        try {
+          const checked = await api.permissions.authorizeAll() as PermissionOnboardingState;
+          setPermissionState(checked);
+          if (!checked?.completed) {
+            setDiagnosticError({ error: '笔试助手需要屏幕录制权限。请在系统设置中允许 QuizMate 后，再点击开始使用。', code: checked?.errorCode || 'EXAM_PERMISSION_REQUIRED', stage: 'capture-permission' });
+            return;
+          }
+        } finally {
+          setPermissionBusy(false);
+        }
+      }
+      const result = await api.app.launchExamClient();
+      if (result?.success === false) {
+        setDiagnosticError({ error: result.error || '无法启动笔试助手悬浮框' });
+        return;
+      }
+      setDiagnosticError(null);
       setOverlayActive(true);
-      setOverlayVisible(false);
-      return;
+      setOverlayVisible(true);
+    } catch (error) {
+      // IPC/权限异常以前会让按钮看起来“无反应”；将错误显式反馈给用户。
+      setDiagnosticError({ error: error instanceof Error ? error.message : '无法启动笔试助手悬浮框，请检查系统权限后重试。', code: 'EXAM_LAUNCH_FAILED', stage: 'launch' });
+    } finally {
+      setPermissionBusy(false);
     }
-    await api.app.launchExamClient();
-    setOverlayActive(true);
-    setOverlayVisible(true);
   };
 
   // 关闭笔试悬浮窗
@@ -187,6 +227,26 @@ export default function Exam() {
   return (
     <div className="max-w-5xl mx-auto space-y-4">
       {announcement && <div className="card border-cyan-500/30 bg-cyan-500/5 text-sm text-cyan-200">📢 {announcement}</div>}
+      {isMacPlatform() && permissionState && (
+        <div className={`card ${permissionState.completed ? 'border-emerald-500/30 bg-emerald-500/5' : 'border-amber-500/30 bg-amber-500/5'}`} data-guide-target="exam-permissions">
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <div className="text-sm font-semibold">笔试助手权限状态</div>
+              <div className="mt-1 text-xs text-slate-300">
+                屏幕录制：<span className={permissionState.screen === 'verified' ? 'text-emerald-300' : 'text-amber-300'}>{permissionState.screen}</span>
+                {' · '}麦克风：<span className="text-slate-300">{permissionState.microphone}</span>
+                {' · '}系统音频：<span className="text-slate-300">{permissionState.systemAudio}</span>
+              </div>
+              {!permissionState.completed && <div className="mt-1 text-xs text-amber-200">开始使用前必须完成授权；新安装包或签名变化后需要重新勾选 QuizMate。</div>}
+            </div>
+            {!permissionState.completed && (
+              <button className="btn-outline text-xs shrink-0" disabled={permissionBusy} onClick={() => api.permissions.authorizeAll().then((value: PermissionOnboardingState) => setPermissionState(value)).catch(() => {})}>
+                {permissionBusy ? <Loader2 size={12} className="animate-spin" /> : <ShieldCheck size={12} />}重新授权
+              </button>
+            )}
+          </div>
+        </div>
+      )}
       {/* 头部：用户信息 + 积分 + 操作按钮 */}
       <div className="card">
         <div className="flex items-center justify-between gap-3 flex-wrap">
@@ -255,7 +315,7 @@ export default function Exam() {
               )}
             </div>
             <p className="text-xs text-slate-400">
-              先按全屏截图快捷键，再按搜题快捷键；答案显示在悬浮框
+              先按全屏截图快捷键，再按搜题快捷键；长题可分次截图，最多 3 张后一次一起发给 AI，答案显示在悬浮框
             </p>
           </button>
           {/* 语音播报 */}
@@ -397,14 +457,23 @@ export default function Exam() {
           <Info size={16} /> 操作提示
         </h3>
         <ul className="text-sm text-slate-300 space-y-2">
-          <li>· 点击「开始使用」启动笔试悬浮框，或按 {formatAccelerator(shortcutBindings.toggle_visibility || defaultShortcutBindings.toggle_visibility)} 快捷键启动/切换</li>
-          <li>· 拖动悬浮框顶部提示栏可移动位置</li>
-          <li>· 拖动悬浮框四边或四角可调整大小</li>
-          <li>· 使用「悬浮框显示」开关或 {formatAccelerator(shortcutBindings.toggle_visibility || defaultShortcutBindings.toggle_visibility)} 快捷键可显示/隐藏悬浮框</li>
-          <li>· 透明度可通过上方进度条实时调节</li>
-          {processingMode === 'voice' && (
-            <li>· 语音播报模式下，按 {formatAccelerator(shortcutBindings.voice_search || defaultShortcutBindings.voice_search)} 即可完成截图+分析+播报全流程</li>
-          )}
+            {processingMode === 'overlay' ? (
+              <>
+                <li>· 点击「开始使用」启动笔试悬浮框，或按 {formatAccelerator(shortcutBindings.toggle_visibility || defaultShortcutBindings.toggle_visibility)} 快捷键启动/切换</li>
+                <li>· 拖动悬浮框顶部提示栏可移动位置</li>
+                <li>· 拖动悬浮框四边或四角可调整大小</li>
+                <li>· 使用「悬浮框显示」开关或 {formatAccelerator(shortcutBindings.toggle_visibility || defaultShortcutBindings.toggle_visibility)} 快捷键可显示/隐藏悬浮框</li>
+              </>
+            ) : (
+              <li className="text-red-400">· 语音播报模式无法启动笔试助手悬浮框；如需截图和查看文字答案，请先切换为悬浮框文字模式</li>
+            )}
+            <li>· 透明度可通过上方进度条实时调节</li>
+            {processingMode === 'overlay' && (
+              <li>· 题目太长时可分次截图，最多 3 张后按 {formatAccelerator(shortcutBindings.search || defaultShortcutBindings.search)} 一次搜题，AI 会一起分析当前截图队列</li>
+            )}
+            {processingMode === 'voice' && (
+              <li>· 语音播报模式下，按 {formatAccelerator(shortcutBindings.voice_search || defaultShortcutBindings.voice_search)} 即可完成截图+分析+播报全流程</li>
+            )}
           {processingMode === 'voice' && (
             <li>· 按 {formatAccelerator(shortcutBindings.replay || defaultShortcutBindings.replay)} 可重听上次答案</li>
           )}
@@ -422,8 +491,8 @@ export default function Exam() {
         ] : [
           { title: '选择工作模式并设置常用快捷键', description: '选择“悬浮框文字呈现”。下方常用快捷键可以逐项修改，重点确认全屏截图、搜题和显示/隐藏悬浮框。', target: '[data-guide-target="exam-mode"]' },
           { title: '开始使用', description: '点击“开始使用”打开笔试悬浮框。之后主要通过快捷键操作，不需要切回客户端。', target: '[data-guide-target="exam-start"]' },
-          { title: '先全屏截图', description: `题目完整显示后，先按 ${formatAccelerator(shortcutBindings.screenshot || '全屏截图快捷键')} 保存当前题目截图。`, target: '[data-guide-target="shortcut-screenshot"]' },
-          { title: '再启动搜题', description: `截图完成后，再按 ${formatAccelerator(shortcutBindings.search || '搜题快捷键')}。AI 答案会显示在悬浮框中。`, target: '[data-guide-target="shortcut-search"]' },
+          { title: '先全屏截图', description: `题目完整显示后，先按 ${formatAccelerator(shortcutBindings.screenshot || '全屏截图快捷键')} 保存当前题目截图；长题可分次截图，最多 3 张。`, target: '[data-guide-target="shortcut-screenshot"]' },
+          { title: '再启动搜题', description: `截图完成后，再按 ${formatAccelerator(shortcutBindings.search || '搜题快捷键')}。AI 会一次分析当前截图队列，答案显示在悬浮框中。`, target: '[data-guide-target="shortcut-search"]' },
           { title: '按需设置悬浮框', description: '可在这里显示或隐藏悬浮框，并调整透明度；下方还能切换深色或浅色主题。', target: '[data-guide-target="exam-overlay-settings"]' },
         ]) as FeatureGuideStep[]}
         onClose={finishGuide}

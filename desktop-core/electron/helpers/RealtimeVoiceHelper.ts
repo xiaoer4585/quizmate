@@ -27,7 +27,7 @@ export interface AsrConfig {
 }
 
 export class RealtimeVoiceHelper {
-  constructor(private configHelper: ConfigHelper) {}
+  constructor(private configHelper: ConfigHelper, private partition = 'realtime-voice') {}
   private audioWindow: BrowserWindow | null = null;
   private onTextCallback: ((text: string, isFinal: boolean) => void) | null = null;
   private onErrorCallback: ((error: string) => void) | null = null;
@@ -89,7 +89,7 @@ export class RealtimeVoiceHelper {
     }
 
     // 创建独立 session，用于注入 ASR API 鉴权头 + 麦克风权限
-    const ses = session.fromPartition('realtime-voice');
+    const ses = session.fromPartition(this.partition);
 
     // 允许麦克风权限
     ses.setPermissionRequestHandler((_wc, permission, cb) => {
@@ -145,7 +145,7 @@ export class RealtimeVoiceHelper {
     // data: URL 不是安全上下文，navigator.mediaDevices 为 undefined 会导致麦克风采集失败
     const configScript = `window.__ASR_CONFIG__ = ${JSON.stringify({ wsUrl: this.asrConfig.wsUrl, model: this.asrConfig.model })};`;
     const htmlContent = '<script>' + configScript + '</script>' + VOICE_HTML;
-    const htmlPath = path.join(os.tmpdir(), 'quizmate-asr-audio.html');
+    const htmlPath = path.join(os.tmpdir(), `${this.partition}-quizmate-asr-audio.html`);
     fs.writeFileSync(htmlPath, htmlContent, 'utf-8');
     await this.audioWindow.loadURL('file://' + htmlPath);
   }
@@ -154,9 +154,10 @@ export class RealtimeVoiceHelper {
   async start(
     onText: (text: string, isFinal: boolean) => void,
     onError?: (error: string) => void,
-    options: { audioMode?: 'demo' | 'formal'; onState?: (snapshot: VoiceHealthSnapshot) => void; recovery?: boolean } = {}
+    options: { audioMode?: 'demo' | 'formal'; onState?: (snapshot: VoiceHealthSnapshot) => void; recovery?: boolean; signal?: AbortSignal } = {}
   ): Promise<void> {
     await this.init();
+    options.signal?.throwIfAborted();
     if (!this.audioWindow || this.audioWindow.isDestroyed()) {
       throw new Error('实时语音识别窗口未准备完成');
     }
@@ -198,6 +199,7 @@ export class RealtimeVoiceHelper {
 
     const deadline = Date.now() + 15000;
     while (Date.now() < deadline) {
+      if (options.signal?.aborted) { this.stop(false); options.signal.throwIfAborted(); }
       const startup = await this.audioWindow.webContents.executeJavaScript('getStartupState()', true) as {
         state: string;
         stage: string;
@@ -232,6 +234,7 @@ export class RealtimeVoiceHelper {
     }
 
     // 轮询获取识别结果
+    if (options.signal?.aborted) { this.stop(false); options.signal.throwIfAborted(); }
     this.pollTimer = setInterval(() => {
       if (!this.desiredRunning || !this.audioWindow || this.audioWindow.isDestroyed()) return;
       this.audioWindow.webContents

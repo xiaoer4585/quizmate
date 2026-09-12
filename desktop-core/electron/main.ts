@@ -6,7 +6,7 @@
 //   - 防捕获保护（WDA_EXCLUDEFROMCAPTURE + WS_EX_TOOLWINDOW + 空标题）
 //   - 托盘忙碌图标 + voice 模式进度通知
 // Windows 客户端保留笔试助手与面试助手；网申流程由共享账号体系下的浏览器插件提供。
-import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, Menu, session, Notification } from 'electron';
+import { app, BrowserWindow, screen, shell, globalShortcut, ipcMain, nativeImage, Menu, session, Notification, clipboard } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
@@ -31,10 +31,47 @@ import { UpdateChecker } from './UpdateChecker';
 import { ShortcutAction, ProcessingMode } from '../shared/shortcuts';
 import { selectActiveOverlay, selectFreshScreenshot, shouldEnsureExamOverlay } from '../shared/overlay-state';
 import { toBusinessVersion } from './version';
+import { CompanionController } from './helpers/CompanionController';
+import { workspaceEntryError, routeWorkspaceShortcut, supportsCompanionDesktopPlatform, type AssistantWorkspace } from '../shared/workspace-routing';
+
+let assistantWorkspace: AssistantWorkspace = 'pc';
+let workspaceTransitioning = false;
+let companion: CompanionController | undefined;
+let mobileInterview: InterviewHelper | undefined;
+let pcSearchCount = 0;
+let pcInterviewStarting = false;
+
+function assistantEntryError(route: string): string {
+  return workspaceEntryError(route, assistantWorkspace, !!state.overlayLocked || pcSearchCount > 0 || screenshotInFlight, !!state.interviewOverlayActive || pcInterviewStarting || interviewHelper?.isListening());
+}
+
+async function changeAssistantWorkspace(target: AssistantWorkspace) {
+  if (!SUPPORTS_COMPANION || !companion) throw new Error('当前桌面平台暂不支持双机协作');
+  if (workspaceTransitioning) throw new Error('正在切换工作区，请稍候');
+  if (target === assistantWorkspace) return companion.state();
+  workspaceTransitioning = true;
+  try {
+    if (target === 'mobile') {
+      // Entering the mobile page is itself the enable action. Pairing is
+      // independent and screenshot/interview operations still require a live
+      // phone connection. Stop every PC surface and in-flight PC pipeline.
+      processingHelper.cancelStreaming();
+      ttsHelper.stop();
+      byteDanceTtsHelper.stop();
+      closeExamClient();
+      interviewHelper?.stopForWorkspace();
+      closeInterviewOverlay();
+      mobileInterview?.setContext({ ...interviewHelper.getContext(), audioMode: configHelper.getInterviewContext().audioMode || 'demo', resumeText: interviewHelper.getActiveResume()?.text });
+      await companion.activate();
+    } else companion.deactivate();
+    assistantWorkspace = target;
+    return companion.state();
+  } finally { workspaceTransitioning = false; }
+}
 
 // ===== 平台常量（唯一的平台差异入口） =====
 const IS_MAC = process.platform === 'darwin';
-const IS_WIN = process.platform === 'win32';
+const SUPPORTS_COMPANION = supportsCompanionDesktopPlatform(process.platform);
 /** 客户端平台标识, 与后端账号体系/官网注入头保持一致 */
 const CLIENT_PLATFORM = IS_MAC ? 'darwin-desktop' : 'win32-desktop';
 
@@ -366,6 +403,7 @@ function activateRemainingOverlay(closedOrHidden: OverlayKind): void {
 }
 
 function createOverlayWindow() {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     showOverlay();
     return;
@@ -500,6 +538,7 @@ function createOverlayWindow() {
 }
 
 function showOverlay(markActive = true) {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     state.overlayWindow.showInactive();
     state.overlayWindow.setOpacity(1.0);
@@ -612,6 +651,10 @@ function closeWindow(which: 'main' | 'overlay') {
 
 // ===== 启动/关闭考试客户端（悬浮框生命周期管理，完全沿用原考试插件） =====
 async function launchExamClient(): Promise<{ success: boolean; error?: string }> {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return { success: false, error: '请先关闭双机协作笔面试' };
+  if (configHelper.getProcessingMode() === 'voice') {
+    return { success: false, error: '当前为语音播报模式，无法启动笔试助手悬浮框。' };
+  }
   if (state.overlayLocked) {
     // 悬浮框已存在, 只需显示它
     if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
@@ -650,6 +693,28 @@ function cancelShortcutTest() {
 // ===== 快捷键处理 =====
 // 笔试/面试生命周期独立；窗口调节类动作只路由到最近启动或显示的悬浮窗。
 async function handleShortcutAction(action: ShortcutAction): Promise<void> {
+  const destination = routeWorkspaceShortcut(assistantWorkspace, workspaceTransitioning, action);
+  if (destination === 'ignore') return;
+  if (destination === 'mobile-exam') {
+    try {
+      if (action === 'copy_content') {
+        const answer = companion?.copyLatestAnswer();
+        if (!answer) throw new Error('手机还没有可复制的答案');
+        clipboard.writeText(answer);
+        companion?.state();
+      }
+      else if (action === 'screenshot') await companion?.screenshot();
+      else if (action === 'search') await companion?.searchLatestScreenshots();
+    } catch (error) {
+      state.mainWindow?.webContents.send('companion:error', error instanceof Error ? error.message : '双机操作失败');
+    }
+    return;
+  }
+  if (destination === 'mobile-interview') {
+    try { await companion?.toggleInterview(); }
+    catch (error) { state.mainWindow?.webContents.send('companion:error', error instanceof Error ? error.message : '面试启动失败'); }
+    return;
+  }
   const activeOverlay = getActiveOverlayKind();
   switch (action) {
     case 'screenshot': {
@@ -664,11 +729,13 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
     }
     case 'search': {
       const mode = configHelper.getProcessingMode();
-      // 悬浮框搜题与语音搜题是两个独立动作；模式切换竞态下也不允许串用。
-      if (mode !== 'overlay') break;
+      // If the exam overlay is already visible, honor the exam search key even
+      // when the persisted presentation mode is still voice. This also makes
+      // the screenshot/search pair usable after Alt+B without a mode detour.
+      if (mode !== 'overlay' && !isOverlayVisible('exam')) break;
       if (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible) await launchExamClient();
       else activateOverlay('exam');
-      await handleSearchAction('overlay');
+      await handleSearchAction(mode === 'overlay' ? 'overlay' : 'voice');
       break;
     }
     case 'voice_search': {
@@ -696,7 +763,10 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
       }
       break;
     case 'toggle_visibility':
-      // Alt+B 永远只控制笔试悬浮框，不受面试状态影响。
+      // 语音播报模式没有文字悬浮框，所有启动入口统一阻断。
+      if (configHelper.getProcessingMode() === 'voice') {
+        break;
+      }
       if (!state.overlayWindow || state.overlayWindow.isDestroyed()) {
         await launchExamClient();
       } else {
@@ -767,6 +837,7 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
 
 // ===== 截图→分析编排（完全沿用原考试插件流程） =====
 async function handleScreenshot(isExtra: boolean): Promise<void> {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   const operation: AnalysisOperationState = {
     operationId: crypto.randomUUID(),
     requestId: `desktop-${crypto.randomUUID()}`,
@@ -775,6 +846,19 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
   const captureStartedAt = Date.now();
   const previousAnalysisOperation = pendingAnalysisOperation;
   let capturedForOperation = false;
+  if (!isExtra && screenshotHelper.getQueue(false).length >= 3) {
+    const payload = {
+      error: '最多只能保留 3 张题图，请先按搜题快捷键一次发送给 AI。',
+      code: 'SCREENSHOT_LIMIT_REACHED',
+      stage: 'capture',
+      action: 'retry',
+      ...operation,
+    };
+    BrowserWindow.getAllWindows().forEach((win) => {
+      if (!win.isDestroyed()) win.webContents.send('screenshot-error', payload);
+    });
+    return;
+  }
   if (screenshotInFlight) {
     BrowserWindow.getAllWindows().forEach((win) => {
       if (!win.isDestroyed()) win.webContents.send('screenshot-error', { error: '截图正在处理中，请稍候', code: 'CAPTURE_IN_FLIGHT', stage: 'capture' });
@@ -833,7 +917,6 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     }
 
     if (result.success && result.filePath) {
-      if (!isExtra) screenshotHelper.clearQueue(false);
       const saved = await screenshotHelper.saveToQueue(result.filePath, isExtra);
       if (!saved) {
         throw new Error('截图已采集，但保存失败');
@@ -893,14 +976,29 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
 }
 
 async function handleSearchAction(mode: ProcessingMode): Promise<void> {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
+  pcSearchCount++;
+  try {
   const procMode = configHelper.getProcessingMode();
+  // A visible exam overlay is an explicit request for the overlay workflow,
+  // even if the persisted mode is still voice. In that case search the queued
+  // screenshots instead of taking a replacement screenshot.
+  const voiceSearch = procMode === 'voice' && !isOverlayVisible('exam');
   let queue = screenshotHelper.getQueue(false);
 
   // 语音模式的每次搜题都是新一轮：隐藏笔试悬浮框并重新截取当前屏幕。
   // 截图失败时不得退回分析队列中的旧图。
-  if (procMode === 'voice') {
+  if (voiceSearch) {
     if (isOverlayVisible('exam')) hideOverlay();
     const previousLatestShot = queue[queue.length - 1];
+    if (queue.length >= 3) {
+      const errMsg = '最多只能保留 3 张题图，请先按搜题快捷键一次发送给 AI。';
+      ttsHelper?.cancel();
+      ttsHelper?.speak(errMsg).catch(() => {});
+      notifyVoiceProgress(null);
+      setTrayBusy(false);
+      return;
+    }
     notifyVoiceProgress('正在截图...');
     setTrayBusy(true);
     await handleScreenshot(false);
@@ -917,7 +1015,7 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
 
   if (queue.length === 0) {
     const errMsg = '请先截图';
-    if (procMode === 'voice') {
+    if (voiceSearch) {
       ttsHelper?.cancel();
       ttsHelper?.speak(errMsg).catch(() => {});
     } else {
@@ -927,18 +1025,19 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
     return;
   }
 
-  // 只取最新一张截图发给 AI
-  const latestShot = queue[queue.length - 1];
+  const analysisQueue = queue.slice(-3);
   const operation = pendingAnalysisOperation ?? {
     operationId: crypto.randomUUID(),
     requestId: `desktop-${crypto.randomUUID()}`,
     attempt: 1,
   };
   const compressStartedAt = Date.now();
-  const compressed = await screenshotHelper.getCompressedScreenshot(latestShot);
+  const compressed = await screenshotHelper.getCombinedCompressedScreenshot(analysisQueue);
   const b64 = compressed.dataUrl;
   processingHelper.recordDiagnosticEvent(b64 ? 'compress.success' : 'compress.error', {
     ...operation,
+    imageCount: analysisQueue.length,
+    combined: analysisQueue.length > 1,
     totalMs: Date.now() - compressStartedAt,
     compressionMs: compressed.compressionMs,
     waitMs: compressed.waitMs,
@@ -953,7 +1052,7 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   });
   if (!b64) {
     const errMsg = '截图读取失败';
-    if (procMode === 'voice') {
+    if (voiceSearch) {
       ttsHelper?.cancel();
       ttsHelper?.speak(errMsg).catch(() => {});
     } else {
@@ -968,7 +1067,7 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   setTrayBusy(true);
 
   // 直接调用 analyze 获取完整结果
-  const result = await processingHelper.analyze({ images: [b64], mode, ...operation });
+  const result = await processingHelper.analyze({ images: [b64], mode: voiceSearch ? 'voice' : 'overlay', ...operation });
   if (result.success) {
     // 只有当前轮次可以清空队列；上一轮迟到结果不得删除用户刚截的新图。
     if (pendingAnalysisOperation?.operationId === operation.operationId) {
@@ -1015,6 +1114,7 @@ async function handleSearchAction(mode: ProcessingMode): Promise<void> {
   }
   // overlay 模式：analyze() 已通过 sendEvent 将结果发送给悬浮框
   setTrayBusy(false);
+  } finally { pcSearchCount--; }
 }
 
 /** voice 模式进度通知：向主窗口发送进度状态（null 表示清除） */
@@ -1071,7 +1171,7 @@ async function switchProcessingMode(mode: 'overlay' | 'voice'): Promise<void> {
     shortcutsHelper?.registerGlobalShortcutsForMode('overlay');
   }
   // 向所有渲染进程发送模式切换事件
-  [state.mainWindow, state.overlayWindow].forEach((win) => {
+  [state.mainWindow, state.overlayWindow, state.interviewOverlayWindow].forEach((win) => {
     if (win && !win.isDestroyed()) {
       win.webContents.send('processing-mode-changed', { mode });
     }
@@ -1264,9 +1364,12 @@ function closeInterviewOverlay() {
 }
 
 async function startInterviewSession(context?: unknown): Promise<{ running: boolean }> {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) throw new Error('请先关闭双机协作笔面试');
+  if (pcInterviewStarting) throw new Error('面试正在启动，请稍候');
   const createdForStart = !state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed();
   if (createdForStart) createInterviewOverlayWindow();
   else showInterviewOverlay();
+  pcInterviewStarting = true;
   try {
     await interviewHelper.start(context as any);
     if (!interviewHelper.isListening()) throw new Error('请先登录后再开始面试');
@@ -1277,7 +1380,7 @@ async function startInterviewSession(context?: unknown): Promise<{ running: bool
   } catch (error) {
     if (createdForStart) closeInterviewOverlay();
     throw error;
-  }
+  } finally { pcInterviewStarting = false; }
 }
 
 async function stopInterviewSession(): Promise<{ running: boolean }> {
@@ -1442,6 +1545,28 @@ async function initializeApp(): Promise<void> {
   interviewHelper = new InterviewHelper(configHelper, authManager, overlayAdapter as unknown as OverlayManager, ttsHelper, byteDanceTtsHelper, realtimeVoiceHelper);
   ctx.interview = interviewHelper;
 
+  if (SUPPORTS_COMPANION) {
+    const silentOverlay = { render() {}, renderTaskList() {}, show() {}, hide() {}, clear() {} };
+    mobileInterview = new InterviewHelper(configHelper, authManager, silentOverlay as unknown as OverlayManager,
+      ttsHelper, undefined, new RealtimeVoiceHelper(configHelper, 'mobile-realtime-voice'),
+      { onEvent: (channel, payload) => companion?.onInterviewEvent(channel, payload) });
+    companion = new CompanionController(configHelper, mobileInterview, (snapshot) => {
+      state.mainWindow?.webContents.send('companion:state', snapshot);
+    });
+    ipcMain.handle('companion:state', () => companion!.state());
+    ipcMain.handle('companion:entry', (_event, route: string) => assistantEntryError(route));
+    ipcMain.handle('companion:audioMode', (_event, value: unknown) => companion!.setAudioMode(value));
+    ipcMain.handle('companion:service', (_event, value: unknown) => companion!.setServiceUrl(value));
+    ipcMain.handle('companion:pair', () => companion!.pair());
+    ipcMain.handle('companion:workspace', (_event, target: unknown) => {
+      if (target !== 'pc' && target !== 'mobile') throw new Error('无效工作区');
+      return changeAssistantWorkspace(target);
+    });
+    ipcMain.handle('companion:disconnect', async () => { await changeAssistantWorkspace('pc'); await companion!.disconnect(); });
+    ipcMain.handle('companion:interview', () => companion!.toggleInterview());
+    ipcMain.handle('companion:screenshot', () => companion!.screenshot());
+  }
+
   updateChecker = new UpdateChecker();
   ctx.updateChecker = updateChecker;
 
@@ -1452,6 +1577,15 @@ async function initializeApp(): Promise<void> {
 
   // 注册 IPC
   registerIpcHandlers(ctx, () => state.mainWindow, () => state.overlayWindow, {
+    assertPcWorkspace: () => {
+      if (assistantWorkspace !== 'pc' || workspaceTransitioning) throw new Error('请先关闭双机协作笔面试');
+    },
+    onAccountExit: async () => {
+      processingHelper.cancelStreaming();
+      interviewHelper.stopForWorkspace();
+      await companion?.disconnect();
+      assistantWorkspace = 'pc';
+    },
     createOverlayWindow,
     showOverlay,
     hideOverlay,
@@ -1554,6 +1688,7 @@ if (!gotLock) {
   });
 
   app.on('before-quit', () => {
+    companion?.deactivate();
     state.quitting = true;
     shortcutsHelper?.unregisterAll();
     processingHelper?.cancelStreaming();

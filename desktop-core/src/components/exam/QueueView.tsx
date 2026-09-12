@@ -17,6 +17,8 @@ export default function QueueView({
 }: QueueViewProps) {
   const mainShots = screenshots.filter(s => !s.isExtra)
   const extraCount = screenshots.length - mainShots.length
+  const shotLimit = 3
+  const atLimit = mainShots.length >= shotLimit
 
   return (
     <div
@@ -38,12 +40,15 @@ export default function QueueView({
               <Camera size={19} />
             </div>
             <div className="text-[11px] font-medium">等待题目截图</div>
-            <div className="flex items-center justify-center gap-1.5 text-[9px] mt-2 opacity-50">
-              <span>{formatAccelerator(screenshotShortcut || defaultShortcutBindings.screenshot)}</span>
-              <span>截图</span>
-              <span>·</span>
-              <span>{formatAccelerator(searchShortcut || defaultShortcutBindings.search)}</span>
-              <span>搜题</span>
+            <div className="mt-2 space-y-1 text-[9px] opacity-50">
+              <div className="flex items-center justify-center gap-1.5">
+                <span>{formatAccelerator(screenshotShortcut || defaultShortcutBindings.screenshot)}</span>
+                <span>截图</span>
+                <span>·</span>
+                <span>{formatAccelerator(searchShortcut || defaultShortcutBindings.search)}</span>
+                <span>搜题</span>
+              </div>
+              <div>题目太长可分多次截图，最多 3 张后按搜题，一次一起发给 AI。</div>
             </div>
           </div>
         </div>
@@ -67,7 +72,13 @@ export default function QueueView({
       {mainShots.length > 0 && searchShortcut && (
         <div className="mt-3 h-8 px-2.5 rounded-md flex items-center justify-between bg-cyan-500/10 border border-cyan-400/15 text-[9px]">
           <span className="flex items-center gap-1.5 text-cyan-300"><Search size={11} />截图已就绪</span>
-          <span className="opacity-60">{formatAccelerator(searchShortcut)} 生成答案</span>
+          <span className="opacity-60">{formatAccelerator(searchShortcut)} 生成答案 · 最多 3 张</span>
+        </div>
+      )}
+
+      {atLimit && (
+        <div className="mt-2 text-[9px] leading-snug text-amber-300/90 bg-amber-500/10 border border-amber-500/15 rounded-md px-2.5 py-1.5">
+          已达到 3 张上限，先搜题或删除最新截图，再继续截图。
         </div>
       )}
     </div>

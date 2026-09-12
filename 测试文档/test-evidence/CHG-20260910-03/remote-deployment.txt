@@ -1,0 +1,96 @@
+/tmp/quizmate-companion-CHG-20260910-03.tar.gz: OK
+
+added 1 package in 1s
+TAP version 13
+# Subtest: incremental speech, duplicate delivery and context decisions happen server-side
+ok 1 - incremental speech, duplicate delivery and context decisions happen server-side
+  ---
+  duration_ms: 32.575439
+  ...
+# Subtest: long estimation question remains one task when ASR emits final fragments
+ok 2 - long estimation question remains one task when ASR emits final fragments
+  ---
+  duration_ms: 7.880758
+  ...
+# Subtest: short request lead-ins wait for the next final fragment
+ok 3 - short request lead-ins wait for the next final fragment
+  ---
+  duration_ms: 5.337198
+  ...
+# Subtest: punctuated ASR fragment does not close an existing long turn
+ok 4 - punctuated ASR fragment does not close an existing long turn
+  ---
+  duration_ms: 5.217668
+  ...
+# Subtest: request context is bounded before the answer call
+ok 5 - request context is bounded before the answer call
+  ---
+  duration_ms: 3.878337
+  ...
+# Subtest: long pauses between final fragments still flush one bounded question
+ok 6 - long pauses between final fragments still flush one bounded question
+  ---
+  duration_ms: 6.477716
+  ...
+# Subtest: foreign tokens, out of order messages, stop and expiry cannot dispatch answers
+ok 7 - foreign tokens, out of order messages, stop and expiry cannot dispatch answers
+  ---
+  duration_ms: 6.80463
+  ...
+# Subtest: uncertain upstream result is attempted once, completed tasks remain pollable
+ok 8 - uncertain upstream result is attempted once, completed tasks remain pollable
+  ---
+  duration_ms: 5.854603
+  ...
+# Subtest: pairing is same-account, one-use, with independent device sessions
+ok 9 - pairing is same-account, one-use, with independent device sessions
+  ---
+  duration_ms: 9.884691
+  ...
+# Subtest: pairing expires and old sessions are revoked by replacement
+ok 10 - pairing expires and old sessions are revoked by replacement
+  ---
+  duration_ms: 2.455892
+  ...
+# Subtest: result replay never creates duplicates or downgrades completed cards; readers cannot publish
+ok 11 - result replay never creates duplicates or downgrades completed cards; readers cannot publish
+  ---
+  duration_ms: 5.543822
+  ...
+# Subtest: saved state can be restored and contains only hashed tokens
+ok 12 - saved state can be restored and contains only hashed tokens
+  ---
+  duration_ms: 2.04795
+  ...
+# Subtest: HTTP phone reads encrypted results and restart requires fresh reader login without AI or credit actions
+ok 13 - HTTP phone reads encrypted results and restart requires fresh reader login without AI or credit actions
+  ---
+  duration_ms: 447.922271
+  ...
+# Subtest: ASR proxy keeps provider key server-side, forwards binary frames, consumes tickets and rejects expired tickets
+ok 14 - ASR proxy keeps provider key server-side, forwards binary frames, consumes tickets and rejects expired tickets
+  ---
+  duration_ms: 113.324003
+  ...
+1..14
+# tests 14
+# suites 0
+# pass 14
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 1258.493304
+nginx: the configuration file /etc/nginx/nginx.conf syntax is ok
+nginx: configuration file /etc/nginx/nginx.conf test is successful
+ok
+{"status":"ok","database":"ok","version":"0.1.0","time":"2026-09-09T19:35:36.393Z","latencyMs":1}
+ok rollback-old-service-ok
+ok protected-service-restored
+active
+active
+active
+a448c6ffc05d5ca2000f3d2f081d0f483b3c81576313412ea1cd045fe690b2ae  /opt/quizmate-companion-test/interview-engine.mjs
+d3ec34d11ef04422fabc0a3d1ffdcbfb35a46fdbe9f0471beeab815827c923b9  /opt/quizmate-companion-test/interview-policy.mjs
+14df35f4ac2aae51e80ac647859cfb061a6dc657648bb8582fca487d0fb7ce94  /opt/quizmate-companion-test/server.mjs
+BACKUP=/opt/quizmate-companion-test-backup-CHG-20260910-03

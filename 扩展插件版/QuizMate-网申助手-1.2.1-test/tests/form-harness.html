@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head><meta charset="UTF-8"><title>AI 网申助手表单引擎测试</title></head>
+  <body>
+    <h1>应聘信息</h1>
+    <form id="application">
+      <p><label for="name">姓名 *</label><input id="name" name="candidateName" required></p>
+      <p><label for="gender">性别 *</label><select id="gender" required><option value="">请选择</option><option value="male">男</option><option value="female">女</option></select></p>
+      <p><label for="birthday">出生日期</label><input id="birthday" name="birthday" placeholder="YYYY-MM-DD"></p>
+      <p><label for="school">毕业院校</label><input id="school" name="school"></p>
+      <p><label for="summary">自我评价</label><textarea id="summary" name="summary"></textarea></p>
+      <fieldset><legend>是否接受调剂</legend><label><input type="radio" name="adjust" value="yes">是</label><label><input type="radio" name="adjust" value="no">否</label></fieldset>
+    </form>
+    <button id="scan">扫描</button><button id="fill">填写</button>
+    <pre id="output"></pre>
+    <script src="../preview-shim.js"></script>
+    <script src="../adapter-registry.js"></script>
+    <script src="../extraction-rules.js"></script>
+    <script src="../form-adapters.js"></script>
+    <script src="../form-runtime.js"></script>
+    <script src="../form-control-drivers.js"></script>
+    <script src="../content.js"></script>
+    <script>
+      const dispatchRuntime = (message) => new Promise((resolve, reject) => {
+        let handled = false;
+        for (const listener of globalThis.__qmaiPreviewRuntimeListeners || []) {
+          const result = listener(message, {}, resolve);
+          if (result === true) { handled = true; break; }
+        }
+        if (!handled) reject(new Error('message not handled'));
+      });
+      let lastScan;
+      document.getElementById('scan').addEventListener('click', async () => {
+        lastScan = await dispatchRuntime({ type: 'OFFERFLOW_SCAN_APPLICATION_FORM_V2' });
+        document.getElementById('output').textContent = JSON.stringify(lastScan, null, 2);
+      });
+      document.getElementById('fill').addEventListener('click', async () => {
+        lastScan ||= await dispatchRuntime({ type: 'OFFERFLOW_SCAN_APPLICATION_FORM_V2' });
+        const result = await dispatchRuntime({
+          type: 'OFFERFLOW_FILL_APPLICATION_FORM_V2',
+          fields: lastScan.fields,
+          values: {
+            fullName: '张三', gender: '男', birthDate: '2000-01-02', school: '示例大学',
+            selfIntroduction: '认真负责，具备良好的沟通能力。', acceptAdjustment: '是'
+          },
+          maxRounds: 2,
+          fillDynamicFields: true,
+          delayMs: 0
+        });
+        document.getElementById('output').textContent = JSON.stringify(result, null, 2);
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,792 @@
+(() => {
+  // Versioned, site-aware mapping library. Keep this file data-first so a new
+  // ATS label can be added without changing the scanner or the AI prompt.
+  const VERSION = "2026.08.25.registry-v5";
+  const registry = globalThis.OfferFlowAdapterRegistry;
+  const LEGACY_STORAGE_KEY = "offerflow.formMappingOverrides";
+  const STORAGE_KEY = registry?.storageKey || LEGACY_STORAGE_KEY;
+
+  const clean = (value) => String(value || "").replace(/\s+/g, " ").trim();
+  const normalize = (value) =>
+    clean(value)
+      .replace(/[＊*]/g, "")
+      .replace(/请输入|请选择|点击选择|选择日期/gi, "")
+      .replace(/[：:]/g, "")
+      .replace(/\s+/g, "")
+      .toLowerCase();
+
+  const commonMappings = [
+    ["fullName", "姓名|真实姓名|应聘者姓名|候选人姓名|申请人姓名|full.?name|applicant.?name"],
+    ["nationality", "民族|国籍|nation|nationality"],
+    ["phone", "手机号|手机号码|联系电话|电话号码|移动电话|电话|mobile|phone|telephone"],
+    ["email", "邮箱|电子邮箱|电子邮件|邮件地址|e-?mail|email.?address"],
+    ["idType", "证件类型|身份证类型|证件类别|id.?type|identity.?type"],
+    ["idNumber", "证件号码|身份证号|身份证号码|证件编号|id.?number|identity.?number"],
+    ["gender", "性别|gender|sex"],
+    ["birthDate", "出生日期|出生年月|生日|出生年月日|birth.?date|date.?of.?birth"],
+    ["wechat", "微信号|微信|wechat|weixin"],
+    ["qq", "QQ号?|qq.?number"],
+    ["politicalStatus", "政治面貌|政治身份|political.?status"],
+    ["maritalStatus", "婚姻状况|婚姻|marital.?status"],
+    ["graduationDate", "毕业时间|毕业日期|毕业年份|预计毕业|毕业年月|graduation|graduate.?date|graduate.?year"],
+    ["currentCity", "现居城市|当前城市|所在城市|所在地点|所在地|居住地|现居地|current.?city|current.?location"],
+    ["nativePlace", "籍贯|户籍|户口|户口所在地|家乡|生源地|native.?place|hometown"],
+    ["height", "身高|身高（厘米）|身高\\(厘米\\)|height"],
+    ["weight", "体重|体重（公斤）|体重\\(公斤\\)|weight"],
+    ["recruitmentType", "是否统招|统招|统一招生|全日制统招|recruitment.?type|full.?time.?education"],
+    ["graduateStatus", "应届.?往届|应届生|往届生|毕业身份|是否应届|graduate.?status|fresh.?graduate"],
+    ["healthStatus", "健康状况|健康情况|身体状况|health.?status"],
+    ["specialty", "特长|专长|specialty"],
+    ["workYears", "工作年限|工作经验年限|工作经验|从业年限|work.?years?"],
+    ["emergencyContactName", "紧急联系人姓名|紧急联系人名称|emergency.?contact.?name"],
+    ["emergencyContactPhone", "紧急联系人电话|紧急联系人手机|emergency.?contact.?phone"],
+    ["countryRegion", "国家/地区|国家或地区|国家地区|所在国家|country|region"],
+    ["address", "详细地址|联系地址|通信地址|通讯地址|居住地址|现居住地|address|mailing.?address"],
+    ["targetRole", "意向岗位|意向职位|期望职位|目标岗位|应聘职位|申请职位|职位名称|职位|工作职位|意向职位|target.?role|target.?position|desired.?position"],
+    ["targetCities", "意向城市|期望城市|工作地点偏好|期望工作地点|期望工作城市|工作城市|preferred.?city|preferred.?location"],
+    ["earliestStartDate", "预计入职时间|到岗时间|可入职时间|最早到岗|入职时间|available.?date"],
+    ["expectedSalary", "期望薪资|期望工资|期望月薪|薪资要求|expected.?salary"],
+    ["referralCode", "推荐码|邀请码|内推码|referral.?code"],
+    ["portfolioUrl", "作品集|个人作品|作品链接|portfolio"],
+    ["githubUrl", "github|代码仓库|开源地址|git.?hub"],
+    ["school", "毕业院校|学校名称|就读学校|所在学校|学校|院校|毕业学校|university|college|school"],
+    ["major", "专业名称|所学专业|主修专业|专业|major|field.?of.?study"],
+    ["educationForm", "学历类型|学习形式|培养方式|教育形式|招生类型|入学类型|study.?form|education.?type"],
+    ["degree", "学历|学位|最高学历|教育程度|degree|education.?level"],
+    ["gpa", "绩点|平均成绩|平均分|gpa|grade.?point"],
+    ["selfIntroduction", "自我介绍|自我描述|个人简介|个人总结|自我评价|about.?you|self.?intro|profile"],
+    ["strengths", "个人优势|核心优势|优势与不足|优点|strength|advantage"],
+    ["careerPlan", "职业规划|未来规划|发展规划|职业目标|career.?plan|career.?goal"],
+    ["hobbies", "兴趣爱好|兴趣|爱好|hobbies?"],
+    ["politicalStatus", "政治面貌|政治身份|政治面貌（必填）|政治状况|党派"],
+    ["maritalStatus", "婚姻状况|婚姻|已婚|未婚|离异|婚姻状况（必填）"],
+    ["healthStatus", "健康状况|健康情况|身体状况|身体健康|健康（必填）"],
+    ["idType", "证件类型|身份证类型|证件类别|id.?type|identity.?type|证件种类"],
+    ["idNumber", "证件号码|身份证号|身份证号码|证件编号|id.?number|identity.?number|证件号"],
+    ["nativePlace", "籍贯|户籍|户口|户口所在地|生源地|家乡|原籍|_native_place"],
+    ["currentCity", "现居城市|当前城市|所在城市|所在地点|所在地|居住地|现居地|居住城市|现住址"],
+    ["phone", "手机号|手机号码|联系电话|电话号码|移动电话|电话|mobile|phone|telephone|联系手机"],
+    ["email", "邮箱|电子邮箱|电子邮件|邮件地址|e-?mail|email.?address|联系邮箱"],
+    ["birthDate", "出生日期|出生年月|生日|出生年月日|birth.?date|date.?of.?birth|出生时间"],
+    ["gender", "性别|gender|sex|男|女"],
+    ["nationality", "民族|国籍|nation|nationality|族群"],
+    ["wechat", "微信号|微信|wechat|weixin|微信账号"],
+    ["qq", "QQ号?|qq.?number|QQ|腾讯QQ"],
+    ["height", "身高|身高（厘米）|身高\\(厘米\\)|height| stature"],
+    ["weight", "体重|体重（公斤）|体重\\(公斤\\)|weight|体重（kg）"],
+    ["graduationDate", "毕业时间|毕业日期|毕业年份|预计毕业|毕业年月|graduation|graduate.?date|graduate.?year|离校时间"],
+    ["recruitmentType", "是否统招|统招|统一招生|全日制统招|recruitment.?type|full.?time.?education|招生类型"],
+    ["graduateStatus", "应届.?往届|应届生|往届生|毕业身份|是否应届|graduate.?status|fresh.?graduate|毕业生身份"],
+    ["workYears", "工作年限|工作经验年限|工作经验|从业年限|work.?years?|工龄"],
+    ["expectedSalary", "期望薪资|期望工资|期望月薪|薪资要求|expected.?salary|年薪要求|税前"],
+    ["targetRole", "意向岗位|意向职位|期望职位|目标岗位|应聘职位|申请职位|职位名称|职位|工作职位|意向职位|target.?role|target.?position|desired.?position|求职意向"],
+    ["targetCities", "意向城市|期望城市|工作地点偏好|期望工作地点|期望工作城市|工作城市|preferred.?city|preferred.?location|期望工作地区"],
+    ["earliestStartDate", "预计入职时间|到岗时间|可入职时间|最早到岗|入职时间|available.?date|报到时间"],
+    ["referralCode", "推荐码|邀请码|内推码|referral.?code|内推编号"],
+    ["portfolioUrl", "作品集|个人作品|作品链接|portfolio|作品网址"],
+    ["githubUrl", "github|代码仓库|开源地址|git.?hub|代码地址"],
+    ["school", "毕业院校|学校名称|就读学校|所在学校|学校|院校|毕业学校|university|college|school|学校全称"],
+    ["major", "专业名称|所学专业|主修专业|专业|major|field.?of.?study|专业方向"],
+    ["degree", "学历|学位|最高学历|教育程度|degree|education.?level|最高学位"],
+    ["address", "详细地址|联系地址|通信地址|通讯地址|居住地址|现居住地|address|mailing.?address|家庭地址"],
+    ["emergencyContactName", "紧急联系人姓名|紧急联系人名称|emergency.?contact.?name|紧急联系人"],
+    ["emergencyContactPhone", "紧急联系人电话|紧急联系人手机|emergency.?contact.?phone|紧急联系人手机"],
+    ["countryRegion", "国家/地区|国家或地区|国家地区|所在国家|country|region|国籍地区"],
+    ["specialty", "特长|专长|specialty|专业技能"],
+    ["hobbies", "兴趣爱好|兴趣|爱好|hobbies?|个人爱好"]
+  ];
+
+  const adapters = [
+    {
+      id: "hotjob",
+      name: "Hotjob / Wecruit",
+      hosts: [/(^|\.)hotjob\.cn$/i],
+      markers: [
+        ".resume-content-wrap .form-cell > .tit-wrap",
+        ".form-cell-right > .form-cell-inner",
+        ".add-more > .add-more-btn"
+      ],
+      mappings: [
+        ["fullName", "姓名|真实姓名|候选人姓名|申请人姓名"],
+        ["countryRegion", "国籍/地区|国家/地区"],
+        ["phone", "移动电话|手机号码|手机号|联系电话"],
+        ["email", "电子邮箱|邮箱|电子邮件"],
+        ["emergencyContactName", "紧急联系人"],
+        ["emergencyContactPhone", "紧急联系电话|紧急联系人电话"],
+        ["targetCities", "期望工作地点|期望工作城市"],
+        ["expectedSalary", "期望年薪|期望薪资"],
+        ["school", "毕业院校|学校"],
+        ["major", "专业名称|专业"],
+        ["educationDegree", "学位"],
+        ["degree", "学历"],
+        ["educationForm", "培养方式|学习形式"],
+        ["educationRank", "班级排名|专业排名"],
+        ["experienceOrganization", "企业名称|公司名称|工作单位"],
+        ["experienceTitle", "职位名称|岗位名称"],
+        ["experienceDescription", "工作描述|工作内容"],
+        ["projectName", "项目名称"],
+        ["projectDescription", "项目描述|项目职责"],
+        ["languageCertificate", "英语证书名称|证书名称"],
+        ["languageScore", "成绩|分数"]
+      ]
+    },
+    {
+      id: "beisen",
+      name: "北森 Beisen",
+      hosts: [/\.zhiye\.com$/i, /(^|\.)beisen\.com$/i, /beisen/i],
+      markers: ["[data-nc-label]", "[data-nc-cls]", ".phoenix-radio-group", ".phoenix-select"],
+      mappings: [
+        ["fullName", "姓名|真实姓名|候选人姓名|申请人姓名|应聘者姓名|full.?name|applicant.?name|姓名（必填）"],
+        ["phone", "手机号码|手机号|联系电话|联系电话（必填）|联系手机"],
+        ["email", "邮箱|电子邮箱|电子邮件|联系邮箱"],
+        ["gender", "性别|男|女"],
+        ["birthDate", "出生日期|出生年月|出生时间"],
+        ["idType", "证件类型|身份证类型"],
+        ["idNumber", "证件号码|身份证号|证件编号"],
+        ["nationality", "民族"],
+        ["politicalStatus", "政治面貌"],
+        ["maritalStatus", "婚姻状况"],
+        ["healthStatus", "健康状况"],
+        ["school", "学校名称|毕业院校|学校全称"],
+        ["major", "专业名称|所学专业|专业方向"],
+        ["degree", "学历|学位|最高学历|最高学位"],
+        ["graduationDate", "毕业时间|毕业日期|离校时间"],
+        ["recruitmentType", "是否统招|统招|招生类型"],
+        ["graduateStatus", "应届.?往届|应届生|往届生|毕业生身份"],
+        ["nativePlace", "籍贯|户籍|原籍"],
+        ["currentCity", "现居城市|居住地|居住城市"],
+        ["height", "身高"],
+        ["weight", "体重"],
+        ["wechat", "微信号|微信"],
+        ["qq", "QQ号?|QQ"],
+        ["workYears", "工作经验|工作年限"],
+        ["expectedSalary", "期望薪资|期望月薪"],
+        ["targetRole", "应聘职位|申请职位|意向职位|求职意向"],
+        ["targetCities", "期望工作地点|期望工作城市|期望工作地区"],
+        ["earliestStartDate", "预计入职时间|到岗时间|报到时间"],
+        ["experienceOrganization", "单位名称|公司名称|工作单位|实习单位|任职单位"],
+        ["experienceTitle", "职位名称|岗位名称|实习岗位|工作岗位"],
+        ["experienceDescription", "实习内容|实习职责|工作职责|工作内容|经历描述"],
+        ["selfIntroduction", "自我介绍|个人简介|自我评价"],
+        ["address", "详细地址|家庭地址"],
+        ["emergencyContactName", "紧急联系人姓名|紧急联系人"],
+        ["emergencyContactPhone", "紧急联系人电话|紧急联系人手机"],
+        ["countryRegion", "国家/地区|所在国家"],
+        ["specialty", "特长|专业技能"],
+        ["hobbies", "兴趣爱好|个人爱好"]
+      ]
+    },
+    {
+      id: "moka",
+      name: "Moka",
+      hosts: [/\.mokahr\.com$/i, /(^|\.)moka\.com$/i, /moka/i],
+      markers: ["[data-nav-id]", "[class*='sd-Select-container-']", "[class*='apply-field-']", "[data-field]", "[data-question]"],
+      mappings: [
+        ["fullName", "姓名|真实姓名|申请人"],
+        ["phone", "手机号|手机号码|联系电话"],
+        ["email", "邮箱|电子邮箱|email"],
+        ["gender", "性别"],
+        ["birthDate", "出生日期|出生年月"],
+        ["idType", "证件类型"],
+        ["idNumber", "证件号码"],
+        ["workYears", "工作经验|工作年限"],
+        ["currentCity", "所在地|现居城市|当前城市"],
+        ["expectedSalary", "期望薪资"],
+        ["targetRole", "应聘职位|申请职位|意向职位"],
+        ["targetCities", "期望工作地点|工作地点|意向城市"],
+        ["school", "学校|毕业院校|教育经历"],
+        ["major", "专业|主修专业"],
+        ["degree", "学历|最高学历"],
+        ["selfIntroduction", "自我介绍|自我描述|个人简介|自我评价"]
+      ]
+    },
+    {
+      id: "nowcoder",
+      name: "牛客",
+      hosts: [/\.nowcoder\.com$/i, /nowcoder/i],
+      markers: ["[class*='resume']", "[class*='apply']", "[class*='job']"],
+      mappings: [
+        ["fullName", "姓名|真实姓名|候选人姓名"],
+        ["phone", "手机号|手机号码|联系电话"],
+        ["email", "邮箱|电子邮箱|邮件"],
+        ["nationality", "民族|国籍"],
+        ["idType", "证件类型|身份证类型"],
+        ["idNumber", "证件号码|身份证号|证件编号"],
+        ["gender", "性别"],
+        ["birthDate", "出生日期|出生年月"],
+        ["wechat", "微信号|微信"],
+        ["qq", "QQ号?|QQ"],
+        ["politicalStatus", "政治面貌"],
+        ["maritalStatus", "婚姻状况"],
+        ["healthStatus", "健康状况"],
+        ["specialty", "特长"],
+        ["workYears", "工作年限"],
+        ["emergencyContactName", "紧急联系人姓名"],
+        ["emergencyContactPhone", "紧急联系人电话"],
+        ["countryRegion", "国家/地区|国家或地区"],
+        ["address", "通信地址|通讯地址|详细地址"],
+        ["school", "学校|毕业院校|教育背景"],
+        ["major", "专业|所学专业"],
+        ["degree", "学历|最高学历"],
+        ["graduationDate", "毕业时间|毕业年份"],
+        ["targetRole", "应聘职位|意向岗位"],
+        ["targetCities", "期望城市|工作地点"],
+        ["earliestStartDate", "预计入职时间|到岗时间"],
+        ["expectedSalary", "期望薪资|期望月薪"],
+        ["selfIntroduction", "自我介绍|个人优势"]
+      ]
+    },
+    {
+      id: "tencent",
+      name: "腾讯招聘",
+      hosts: [/join\.qq\.com$/i, /(^|\.)tencent\.com$/i, /(^|\.)qq\.com$/i, /tencent/i],
+      markers: ["[class*='resume']", "[class*='apply']", "[class*='candidate']"],
+      mappings: [
+        ["fullName", "姓名|真实姓名"],
+        ["phone", "手机|手机号码|联系电话"],
+        ["email", "邮箱|电子邮件"],
+        ["gender", "性别"],
+        ["birthDate", "出生日期|出生年月"],
+        ["school", "毕业院校|学校名称|学校"],
+        ["major", "专业名称|所学专业|专业"],
+        ["degree", "学历|学位|最高学历"],
+        ["graduationDate", "毕业时间|毕业年份"],
+        ["targetRole", "应聘职位|申请职位|意向岗位"],
+        ["targetCities", "期望工作城市|工作地点|意向城市"],
+        ["selfIntroduction", "自我介绍|个人简介"]
+      ]
+    },
+    {
+      id: "xiaomi",
+      name: "小米招聘",
+      hosts: [/\.mioffice\.cn$/i],
+      markers: ["[class*='resume']", "[class*='apply']", "[class*='experience']"],
+      mappings: []
+    },
+    {
+      id: "pupumall",
+      name: "朴朴招聘",
+      hosts: [/^jobs\.pupumall\.net$/i],
+      markers: ["[class*='ApplyFormBox']", "[class*='FormItem__']", "[class*='NewFormBtn__']"],
+      mappings: [
+        ["fullName", "^姓名$|(?:^|[^a-z])name(?:$|[^a-z])"],
+        ["phone", "联系电话|(?:^|[^a-z])phone(?:$|[^a-z])"],
+        ["email", "电子邮箱|(?:^|[^a-z])email(?:$|[^a-z])"],
+        ["gender", "性别|gender"],
+        ["idNumber", "身份证号|idNumber"],
+        ["birthDate", "出生日期|birthday"],
+        ["nationality", "民族|nation"],
+        ["height", "身高|height"],
+        ["weight", "体重|weight"],
+        ["nativePlace", "户籍所在地|permanentResidenceCode"],
+        ["currentCity", "现居住地|currentResidentialCode"],
+        ["selfIntroduction", "自我评价|selfEvaluation"],
+        ["school", "毕业院校|schoolName"],
+        ["degree", "^学历$|qualification"],
+        ["educationDegree", "^学位$|(?:^|[^a-z])degree(?:$|[^a-z])"],
+        ["educationForm", "学习形式|studyModeCode"],
+        ["major", "^专业$|(?:^|[^a-z])major(?:$|[^a-z])"],
+        ["educationStartDate", "enrollmentTime"],
+        ["educationEndDate", "graduationTime"],
+        ["educationRank", "专业.*成绩排名|professionScoreRank"],
+        ["experienceOrganization", "企业名称|companyName"],
+        ["experienceStartDate", "timeStart"],
+        ["experienceEndDate", "timeEnd"],
+        ["experienceTitle", "职位名称|jobTitle"],
+        ["experienceDescription", "工作描述|jobDescription"],
+        ["targetCities", "第一志愿城市|firstChoiceCity"],
+        ["emergencyContactName", "紧急联系人|emergencyContact"],
+        ["emergencyContactPhone", "紧急.*联系电话|emergencyContactNumber"]
+      ]
+    },
+    {
+      id: "midea",
+      name: "美的招聘",
+      hosts: [/^careers\.midea\.com$/i],
+      markers: [
+        ".ihr_recruit_resume_form_block",
+        ".md-form-item__label",
+        ".ihr_dict_picker",
+        ".ihr_base_picker"
+      ],
+      mappings: [
+        ["fullName", "candidateName|姓名"],
+        ["firstName", "firstName|姓拼音"],
+        ["lastName", "lastName|名拼音"],
+        ["gender", "gender|性别"],
+        ["idNumber", "idNumber|证件号码"],
+        ["birthDate", "birthDate|出生日期"],
+        ["phone", "phone|手机号码"],
+        ["email", "email|邮箱"],
+        ["nationality", "areaCitizenship|国籍/地区"],
+        ["nativePlace", "nativePlace|籍贯"],
+        ["languageCertificate", "englishLevel|外语类型"],
+        ["languageScore", "englishScore|外语等级"],
+        ["specialty", "specialty|特长爱好"],
+        ["remark", "remark|备注"],
+        ["school", "schoolName|学校名称"],
+        ["major", "majorName|专业"],
+        ["degree", "education|学历"],
+        ["educationStartDate", "startDate|eduTime|学习时间"],
+        ["faculty", "faculty|院系"],
+        ["mentor", "mentor|导师"],
+        ["secondMajor", "secondMajorName|第二专业"],
+        ["educationForm", "learningType|学习方式"],
+        ["countryRegion", "country|所属国家/地区"],
+        ["currentCity", "city|所属城市"],
+        ["experienceOrganization", "companyName|公司名称"],
+        ["experienceTitle", "position|岗位名称"],
+        ["experienceDescription", "description|工作描述"],
+        ["projectName", "projectName|项目名称"],
+        ["projectDescription", "projectResponsibilities|项目职责"],
+        ["projectPerformance", "projectPerformance|项目成果"],
+        ["awardDate", "rewardDate|获奖时间"],
+        ["awardName", "competitionName|奖项名称"],
+        ["awardLevel", "rewardLevel|奖项级别"],
+        ["awardType", "rewardType|奖项类型"],
+        ["languageName", "languageName|语言名称"],
+        ["languageLevel", "languageLevel|熟练程度"],
+        ["patentName", "patentName|专利名称"],
+        ["patentNumber", "patentNumber|专利编号"],
+        ["patentDescription", "patentDetail|专利详情"],
+        ["paperName", "paperName|论文名称"],
+        ["paperDescription", "paperDetail|论文详情"]
+      ]
+    },
+    {
+      id: "feishu-career",
+      name: "飞书招聘 ATSX",
+      // ATSX uses a tenant-owned career domain. Keep known tenants here so
+      // their Formily/Universe controls never depend on generic detection.
+      hosts: [/^campus\.duxiaoman\.com$/i, /^campus\.dewu\.com$/i, /\.jobs\.feishu\.cn$/i],
+      markers: [
+        ".ud-formily-item", ".ud__select", ".throne-biz-date-range-picker-wrapper",
+        ".createFormSection-repeatable", ".createFormSection-formList", ".atsx-form-item"
+      ],
+      mappings: [
+        ["fullName", "姓名|name"],
+        ["email", "邮箱|email"],
+        ["gender", "性别|gender"],
+        ["targetCities", "期望工作地点|preferred.?city"],
+        ["nationality", "国籍（地区）|国籍|nationality"],
+        ["currentCity", "所在地点|现居地点|current.?city"],
+        ["school", "学校名称|school"],
+        ["educationForm", "学历类型|学习形式|培养方式|教育形式|招生类型|入学类型|study.?form|education.?type"],
+        ["degree", "学历|degree"],
+        ["major", "专业|field.?of.?study"]
+      ]
+    },
+    {
+      id: "citicbank",
+      name: "中信银行招聘",
+      hosts: [/^job\.citicbank\.com$/i],
+      markers: [
+        ".form1Class",
+        "[way-repeat]",
+        "#jbxxform",
+        ".resume_table1"
+      ],
+      mappings: [
+        ["fullName", "姓名|真实姓名|candidateName|a0101"],
+        ["countryRegion", "国籍/地区|国籍|所在国家|nationality|BM_AD"],
+        ["height", "身高|a0213"],
+        ["weight", "体重|weight"],
+        ["phone", "移动电话|手机号码|手机号|联系电话|a0118"],
+        ["gender", "性别|a0102|BM_ZXXB"],
+        ["birthDate", "出生日期|出生年月|a0107|birthday"],
+        ["email", "电子邮箱|邮箱|电子邮件|email"],
+        ["idNumber", "证件号码|身份证号|身份证号码|a0177"],
+        ["idType", "证件类型|身份证类型|yxsfzjlx|a0171|BM_MHZJLX"],
+        ["politicalStatus", "政治面貌|a0141|BM_BG"],
+        ["maritalStatus", "婚姻状况|a0124|BM_AT"],
+        ["nationality", "民族|nation|a0117|BM_AE"],
+        ["healthStatus", "健康状况|健康情况|healthStatus|BM_JKZK"],
+        ["nativePlace", "生源地|籍贯|户籍|origin|a0111"],
+        ["currentCity", "现居住地|通讯地址|常住地|现居城市|a0202"],
+        ["selfIntroduction", "自我评价|自我介绍|个人简介|a0209"],
+        ["educationForm", "学习形式|培养方式|教育形式|xxxs|BM_XXXS|learnMode|BM_XXMODE"],
+        ["degree", "学历|最高学历|xl|BM_XL"],
+        ["school", "毕业院校|学校名称|学校|byyx|byyxqt|BM_XXDX"],
+        ["educationStartDate", "入学时间|起止时间|学习时间|rxsj"],
+        ["educationEndDate", "毕业时间|bysj"],
+        ["graduationDate", "毕业时间|bysj"],
+        ["faculty", "院系|所属院系|department"],
+        ["major", "专业名称|所学专业|专业|sxzy"],
+        ["educationDegree", "学位|最高学位|xw|BM_ZXXW"],
+        ["experienceStartDate", "入职时间|开始时间|rzsj"],
+        ["experienceEndDate", "离职时间|结束时间|lzsj"],
+        ["experienceOrganization", "单位名称|工作单位|企业名称|公司名称|gzdw"],
+        ["experienceTitle", "岗位名称|职位名称|岗位|职务|rzgw|zw"],
+        ["experienceDescription", "工作描述|职责|工作职责|实习内容|gzms"],
+        ["projectStartDate", "开始时间|startDate"],
+        ["projectEndDate", "结束时间|endDate"],
+        ["projectName", "项目名称|projName"],
+        ["projectDescription", "项目内容|项目描述|contents"],
+        ["projectRole", "项目职责|resp"],
+        ["projectPerformance", "项目成果|projectResult"],
+        ["languageName", "外语语种|语种|languages|BM_YY"],
+        ["languageScore", "外语成绩|成绩|分数|results"],
+        ["languageCertificate", "考试类型|等级|test_type"],
+        ["familyRelation", "称谓|与本人关系|家庭关系|BM_YBRGX|ybrgx"],
+        ["familyName", "姓名|成员姓名|cyxm"],
+        ["familyPhone", "联系电话|电话|phoneNumber"],
+        ["familyOrganization", "工作单位|单位|gzdw"],
+        ["familyTitle", "职务|岗位|gzzw"]
+      ]
+    },
+    {
+      id: "cmbchina",
+      name: "招商银行招聘",
+      hosts: [/(^|\.)career\.cmbchina\.com$/i],
+      markers: [
+        ".ant-form",
+        "[id^='basicInfo_']",
+        ".time-cell",
+        ".ant-select-selector",
+        ".ant-picker"
+      ],
+      mappings: [
+        // 基本信息 (Basic Info)
+        ["fullName", "姓名|真实姓名|应聘者姓名|候选人姓名|basicinfo_name|basicInfo_name|NACHN"],
+        ["idType", "证件类型|身份证类型|证件类别|basicinfo_idcardtype|basicInfo_idCardType|ICTYP"],
+        ["idNumber", "证件号码|身份证号|身份证号码|basicinfo_idcardnumber|basicInfo_idCardNumber|ICNUM"],
+        ["gender", "性别|gender|sex|basicinfo_gender|basicInfo_gender|GESCH"],
+        ["birthDate", "出生日期|出生年月|生日|出生年月日|basicinfo_birthday|basicInfo_birthday|GBDAT"],
+        ["phone", "手机号|手机号码|联系电话|电话号码|移动电话|电话|basicinfo_phone|basicInfo_phone|mobile|TELNR"],
+        ["email", "邮箱|电子邮箱|电子邮件|邮件地址|basicinfo_email|basicInfo_email|email"],
+        ["nationality", "民族|国籍|basicinfo_nation|basicInfo_nation|nation|nationality"],
+        ["politicalStatus", "政治面貌|政治身份|basicinfo_politicalaffinity|basicInfo_politicalAffinity"],
+        ["weight", "体重|体重（公斤）|体重\\(公斤\\)|weight|basicinfo_weight|basicInfo_weight"],
+        ["height", "身高|身高（厘米）|身高\\(厘米\\)|height|basicinfo_height|basicInfo_height"],
+        ["currentSalary", "现税前年薪|当前年薪|税前年薪|basicinfo_currentsalary|basicInfo_currentSalary"],
+        ["expectedSalary", "期望税前年薪|期望年薪|期望薪资|basicinfo_expectedsalary|basicInfo_expectedSalary"],
+        ["currentCity", "现居住地|当前住址|居住城市|现居城市|所在地|basicinfo_currentresidence|basicInfo_currentResidence|LOCAT|STRAS"],
+        ["targetCities", "期望面试城市|面试城市|意向城市|期望工作城市|basicinfo_expectedinterviewcity|basicInfo_expectedInterviewCity"],
+        ["workYears", "工作年限|工作经验|从业年限|basicinfo_workyears|basicInfo_workYears"],
+        ["maritalStatus", "婚姻状况|婚姻|basicinfo_maritalstatus|basicInfo_maritalStatus"],
+        ["channel", "招聘信息来源|信息来源|basicinfo_channel|basicInfo_channel|otherChannel"],
+        ["selfIntroduction", "自我评价|自我介绍|个人简介|basicinfo_selfassessment|basicInfo_selfAssessment"],
+
+        // 教育经历 (Education)
+        ["school", "学校名称|毕业院校|就读学校|学校|collegeCode|schoolName|INSTI"],
+        ["degree", "学历|最高学历|教育程度|educationLevelCode|SLART"],
+        ["educationCollege", "院系|所属院系|学院|faculty"],
+        ["educationRank", "专业排名|排名|majorRanking"],
+        ["major", "专业名称|所学专业|主修专业|专业(?!排名)|majorCode|majorName|MAJNM"],
+        ["recruitmentType", "是否统招|全日制|全日制统招|fullEducation|AUSBI"],
+        ["educationStartDate", "起始时间|入学时间|学习时间|startDate"],
+        ["educationEndDate", "毕业时间|预计毕业|离校时间|endDate"],
+        ["educationDescription", "毕业设计|毕业论文|graduationDesign"],
+
+        // 工作 / 实习经历 (Work & Internship Experience)
+        ["experienceOrganization", "单位名称|公司或组织|企业名称|工作单位|公司名称|companyName|company|ARBGB"],
+        ["experienceCity", "所在城市|工作城市|city"],
+        ["experienceTitle", "职位|职务|岗位名称|岗位|jobRequirements|position|POSNM"],
+        ["experienceDepartment", "所在部门|部门|jobDepartment"],
+        ["experienceDescription", "工作描述|职责|工作职责|实习内容|工作内容|jobResponsibilities|workDescription"],
+        ["referenceContact", "HR联系人|证明人|联系人|hrContact"],
+        ["referencePhone", "HR联系电话|证明人电话|联系电话|hrPhone"],
+
+        // 项目经验 (Projects)
+        ["projectName", "项目名称|projName|name"],
+        ["projectRole", "项目职务|项目职责|职责|职务|position|responsibility"],
+        ["projectDescription", "项目描述|项目内容|description"],
+
+        // 技能 / 荣誉 / 家庭 (Skills, Awards, Relatives)
+        ["languageCertificate", "最高英语水平|外语等级|英语等级|englishLevel"],
+        ["languageScore", "英语成绩|分数|englishScore"],
+        ["awardName", "奖项名称|荣誉名称|awardName"],
+        ["awardLevel", "奖项级别|级别|awardLevel"],
+        ["awardDate", "获奖时间|awardDate"],
+        ["familyRelation", "家庭关系|与本人关系|亲属关系|称谓|relationship|relativeType"],
+        ["familyName", "亲属姓名|姓名|成员姓名|name|FANAM"],
+        ["familyPhone", "亲属电话|联系电话|phone|TELNR"],
+        ["workInMerchantsGroup", "是否有亲属在招商局集团任职|亲属在招商局任职|亲属在招行任职|workInMerchantsGroup"],
+
+        // SAP HR 规范字段代码 (SAP Onboarding Codes)
+        ["nativePlace", "籍贯|户籍|ZZJGS|ZHUKO"],
+        ["address", "详细地址|家庭住址|通信地址|STRAS"]
+      ]
+    },
+    {
+      id: "generic",
+      name: "通用表单",
+      hosts: [],
+      markers: [],
+      mappings: []
+    }
+  ];
+
+  registry?.registerGeneric({
+    name: "通用表单",
+    formAdapterId: "generic",
+    mappings: commonMappings
+  });
+  for (const adapter of adapters) {
+    if (["generic", "xiaomi", "tencent", "pupumall", "midea", "citicbank", "cmbchina"].includes(adapter.id)) continue;
+    registry?.registerPlatform({
+      id: adapter.id,
+      name: adapter.name,
+      formAdapterId: adapter.id,
+      hosts: adapter.id === "feishu-career" ? [/\.jobs\.feishu\.cn$/i] : adapter.hosts,
+      // Generic words such as "job" and "apply" occur on almost every
+      // careers site. Nowcoder is therefore host-routed until we have a
+      // platform-unique DOM signature; otherwise unknown sites would be
+      // incorrectly promoted out of the generic layer.
+      markers: adapter.id === "nowcoder" ? [] : adapter.markers,
+      minMarkerMatches: ["moka", "feishu-career"].includes(adapter.id) ? 2 : 1,
+      mappings: adapter.mappings,
+      priority: adapter.id === "feishu-career" ? 40 : 20
+    });
+  }
+  registry?.registerCompany({
+    id: "xiaomi",
+    name: "小米招聘",
+    hosts: [/\.mioffice\.cn$/i],
+    basePlatformId: "generic",
+    formAdapterId: "xiaomi",
+    mappings: adapters.find((adapter) => adapter.id === "xiaomi")?.mappings || [],
+    priority: 80
+  });
+  registry?.registerCompany({
+    id: "tencent",
+    name: "腾讯招聘",
+    hosts: [/join\.qq\.com$/i, /(^|\.)tencent\.com$/i],
+    detect: ({ document: documentLike }) => /腾讯招聘|Tencent Careers/i.test(
+      `${documentLike?.title || ""} ${clean(documentLike?.body?.innerText || "").slice(0, 1600)}`
+    ),
+    basePlatformId: "generic",
+    formAdapterId: "tencent",
+    mappings: adapters.find((adapter) => adapter.id === "tencent")?.mappings || [],
+    priority: 70
+  });
+  registry?.registerCompany({
+    id: "pupumall",
+    name: "朴朴招聘",
+    hosts: [/^jobs\.pupumall\.net$/i],
+    paths: [/\/recruit-webapp\/candidate\/(?:school|social)\/delivery(?:School)?Resume/i],
+    basePlatformId: "generic",
+    formAdapterId: "pupumall",
+    mappings: adapters.find((adapter) => adapter.id === "pupumall")?.mappings || [],
+    priority: 95
+  });
+  registry?.registerCompany({
+    id: "midea",
+    name: "美的招聘",
+    hosts: [/^careers\.midea\.com$/i],
+    basePlatformId: "generic",
+    formAdapterId: "midea",
+    mappings: adapters.find((adapter) => adapter.id === "midea")?.mappings || [],
+    priority: 90
+  });
+  registry?.registerCompany({
+    id: "citicbank",
+    name: "中信银行招聘",
+    hosts: [/^job\.citicbank\.com$/i],
+    basePlatformId: "generic",
+    formAdapterId: "citicbank",
+    mappings: adapters.find((adapter) => adapter.id === "citicbank")?.mappings || [],
+    priority: 95
+  });
+  registry?.registerCompany({
+    id: "cmbchina",
+    name: "招商银行招聘",
+    hosts: [/(^|\.)career\.cmbchina\.com$/i],
+    basePlatformId: "generic",
+    formAdapterId: "cmbchina",
+    mappings: adapters.find((adapter) => adapter.id === "cmbchina")?.mappings || [],
+    priority: 95
+  });
+  registry?.registerCompany({
+    id: "duxiaoman",
+    name: "度小满校园招聘",
+    hosts: [/^campus\.duxiaoman\.com$/i],
+    basePlatformId: "feishu",
+    formAdapterId: "feishu-career",
+    priority: 90
+  });
+  registry?.registerCompany({
+    id: "dewu",
+    name: "得物校园招聘",
+    hosts: [/^campus\.dewu\.com$/i],
+    basePlatformId: "feishu",
+    formAdapterId: "feishu-career",
+    priority: 90
+  });
+
+  const compiled = (mapping) => mapping.map(([key, pattern]) => ({
+    key,
+    pattern: new RegExp(pattern, "i")
+  }));
+
+  adapters.forEach((adapter) => {
+    adapter.compiled = (
+      compiled(adapter.mappings || [])
+        .map((m) => ({ ...m, isAdapterRule: true }))
+        .concat(compiled(commonMappings))
+    );
+  });
+
+  const overrides = new Map();
+  const applyOverrides = (payload) => {
+    if (!payload || typeof payload !== "object") return;
+    registry?.applyOverrides(payload);
+    Object.entries(payload).forEach(([adapterId, entries]) => {
+      if (!Array.isArray(entries)) return;
+      const adapter = adapters.find((item) => item.id === adapterId);
+      if (!adapter) return;
+      const valid = entries.filter((entry) => entry && entry.key && entry.pattern);
+      if (!valid.length) return;
+      const extra = valid.map((entry) => ({ key: String(entry.key), pattern: new RegExp(String(entry.pattern), "i") }));
+      overrides.set(adapterId, extra);
+    });
+  };
+
+  const loadStoredOverrides = async () => {
+    try {
+      if (registry?.ready) await registry.ready;
+      if (typeof chrome !== "undefined" && chrome.storage?.local) {
+        const result = await chrome.storage.local.get([STORAGE_KEY, LEGACY_STORAGE_KEY]);
+        applyOverrides(result?.[STORAGE_KEY]);
+        if (LEGACY_STORAGE_KEY !== STORAGE_KEY) applyOverrides(result?.[LEGACY_STORAGE_KEY]);
+      }
+    } catch {
+      // Built-in mappings remain available if storage is unavailable.
+    }
+  };
+
+  const resolveLegacy = (locationLike = window.location) => {
+    const host = String(locationLike.hostname || "").toLowerCase();
+    const pathname = String(locationLike.pathname || "");
+    const found = adapters.find((adapter) =>
+      adapter.hosts.some((pattern) => pattern.test(host))
+    );
+    if (found) return found;
+    // Some Tencent pages are hosted by a CDN/custom domain. DOM markers are a
+    // safe secondary signal when the page title or body explicitly says腾讯.
+    const bodyText = clean(document.body?.innerText || "").slice(0, 1600);
+    if (/腾讯招聘|Tencent Careers/i.test(`${document.title} ${bodyText}`)) {
+      return adapters.find((adapter) => adapter.id === "tencent");
+    }
+    if (
+      document.querySelector("[data-nav-id='block-basicInfo'],[data-nav-id='block-educationInfo']") &&
+      document.querySelector("[class*='sd-Select-container-'],[class*='apply-field-']")
+    ) {
+      return adapters.find((adapter) => adapter.id === "moka");
+    }
+    if (
+      document.querySelector(".ud-formily-item [data-form-field-id],.ud-formily-item [data-form-field-name]") &&
+      document.querySelector(".ud__select,.throne-biz-date-range-picker-wrapper")
+    ) {
+      return adapters.find((adapter) => adapter.id === "feishu-career");
+    }
+    if (
+      document.querySelector(".createFormSection-repeatable,.createFormSection-formList") &&
+      document.querySelector(".atsx-form-item,[data-cy^='education['],[data-cy^='career[']")
+    ) {
+      return adapters.find((adapter) => adapter.id === "feishu-career");
+    }
+    return adapters.find((adapter) => adapter.id === "generic") || { id: "generic", name: "通用表单", markers: [], compiled: [] };
+  };
+
+  const resolve = (locationLike = window.location) => {
+    const route = registry?.resolve({ location: locationLike, document });
+    if (!route) return resolveLegacy(locationLike);
+    const adapter = adapters.find((candidate) => candidate.id === route.formAdapterId) ||
+      adapters.find((candidate) => candidate.id === "generic");
+    return adapter ? { ...adapter, route } : resolveLegacy(locationLike);
+  };
+
+  const match = (element, label, adapter = resolve()) => {
+    const routeLayers = adapter.route?.mappingLayers || [];
+    if (routeLayers.length) {
+      const attributes = element
+        ? [
+            "name", "id", "placeholder", "aria-label", "data-nc-label", "data-field", "data-question",
+            "data-form-field-id", "data-form-field-name", "data-form-field-i18n-name",
+            "way-data", "tablename", "tableName"
+          ]
+            .map((name) => element.getAttribute?.(name) || "")
+            .filter(Boolean)
+        : [];
+      const formItemLabelFor = element?.closest?.(".ant-form-item,.el-form-item")?.querySelector?.("label[for]")?.getAttribute?.("for") || "";
+      if (formItemLabelFor) attributes.push(formItemLabelFor);
+      const tokenized = attributes.flatMap((attr) => attr.split(/[_\-\[\]\.]+/).filter((t) => t.length >= 2));
+      const text = normalize([label, ...attributes, ...tokenized].join(" "));
+      for (const layer of routeLayers) {
+        for (const entry of layer.mappings || []) {
+          let pattern;
+          try {
+            pattern = new RegExp(String(entry.pattern), "i");
+          } catch {
+            continue;
+          }
+          if (!pattern.test(text)) continue;
+          return {
+            key: entry.key,
+            confidence: layer.confidence,
+            source: "rules",
+            evidence: [`${layer.layer} 规则：${layer.id}`, `匹配标签：${clean(label).slice(0, 60)}`]
+          };
+        }
+      }
+    }
+    // First check adapter-specific mappings (higher priority)
+    const adapterCandidates = [
+      ...(overrides.get(adapter.id) || []).map((candidate) => ({ ...candidate, isAdapterRule: true })),
+      ...(adapter.compiled?.filter((c) => c.isAdapterRule) || [])
+    ];
+    const commonCandidates = adapter.compiled?.filter((c) => !c.isAdapterRule);
+
+    const attributes = element
+      ? [
+          "name", "id", "placeholder", "aria-label", "data-nc-label", "data-field", "data-question",
+          "data-form-field-id", "data-form-field-name", "data-form-field-i18n-name",
+          "way-data", "tablename", "tableName"
+        ]
+          .map((name) => element.getAttribute?.(name) || "")
+          .filter(Boolean)
+      : [];
+    const formItemLabelFor = element?.closest?.(".ant-form-item,.el-form-item")?.querySelector?.("label[for]")?.getAttribute?.("for") || "";
+    if (formItemLabelFor) attributes.push(formItemLabelFor);
+    const tokenized = attributes.flatMap((attr) => attr.split(/[_\-\[\]\.]+/).filter((t) => t.length >= 2));
+    const text = normalize([label, ...attributes, ...tokenized].join(" "));
+
+    // Check adapter rules first (confidence 0.96)
+    for (const rule of adapterCandidates || []) {
+      if (rule.pattern.test(text)) {
+        return {
+          key: rule.key,
+          confidence: 0.96,
+          source: "rules",
+          evidence: [`${adapter.name} 字段映射库`, `匹配标签：${clean(label).slice(0, 60)}`]
+        };
+      }
+    }
+
+    // Fall back to common rules (confidence 0.86)
+    for (const rule of commonCandidates || []) {
+      if (rule.pattern.test(text)) {
+        return {
+          key: rule.key,
+          confidence: 0.86,
+          source: "rules",
+          evidence: [`${adapter.name} 字段映射库`, `匹配标签：${clean(label).slice(0, 60)}`]
+        };
+      }
+    }
+
+    return undefined;
+  };
+
+  window.OfferFlowFormAdapters = {
+    version: VERSION,
+    storageKey: STORAGE_KEY,
+    adapters,
+    ready: loadStoredOverrides(),
+    resolve,
+    match,
+    applyOverrides,
+    loadStoredOverrides
+  };
+})();

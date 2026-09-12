@@ -1,0 +1,29 @@
+[
+  {
+    "path": "desktop-core/interviewTranscript.ts",
+    "sha256_before_this_change": "C1FA3BB66D5A8E99C8422250EF3AF158B550FF10D152143E2AA314C572C2AECA",
+    "rollback_note": "restore the CHG-20260910-01 source snapshot"
+  },
+  {
+    "path": "其他/手机联调服务/interview-policy.mjs",
+    "sha256_before_this_change": "63CDA47F4B5E5244C01CD87E0F536D04CD7C6A5CC2C9C909937F6847D5B6BC16",
+    "rollback_note": "restore the CHG-20260910-01 source snapshot"
+  },
+  {
+    "path": "其他/手机联调服务/interview-engine.mjs",
+    "rollback_note": "restore the CHG-20260910-01 source snapshot"
+  },
+  {
+    "path": "其他/手机联调服务/interview-engine.test.mjs",
+    "rollback_note": "restore the CHG-20260910-01 source snapshot"
+  },
+  {
+    "path": "windows客户端/QuizMate-Windows/package.json",
+    "rollback_note": "restore version 2026.9.8008"
+  },
+  {
+    "path": "_build/windows-companion-20260909-4/QuizMate-Windows-2026.9.8006.exe",
+    "sha256": "E9DC2DD471042009E78C62C3CA169C18793C362B0D1B5C29F66E19FD8C0A1951",
+    "rollback_note": "reinstall this local package; it is not a production update"
+  }
+]

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>QuizMate 网申助手</title>
+    <link rel="stylesheet" href="ui.css?v=2026.9.9.1">
+  </head>
+  <body class="panel-page">
+    <main class="panel-shell">
+      <header class="panel-header">
+        <div>
+          <div class="eyebrow">QUIZMATE · ALL CAREER TOOLS</div>
+          <h1>QuizMate 网申助手</h1>
+          <p>识别、规划、填写；最终提交始终由你确认。</p>
+        </div>
+        <button id="closePanel" class="icon-button" aria-label="关闭">×</button>
+      </header>
+
+      <section class="card resume-card">
+        <div class="section-heading">
+          <div><span class="step">1</span><strong>选择简历</strong></div>
+          <button id="openResume" class="text-button">维护简历</button>
+        </div>
+        <select id="profileSelect" class="control"></select>
+        <div id="profileHint" class="hint"></div>
+      </section>
+
+      <section class="card">
+        <div class="section-heading"><div><span class="step">2</span><strong>识别当前页</strong></div></div>
+        <button id="scanButton" class="button secondary wide">扫描表单</button>
+        <div id="scanSummary" class="scan-summary muted">尚未扫描</div>
+        <div id="fieldPreview" class="field-preview"></div>
+      </section>
+
+      <section class="card action-card">
+        <div class="section-heading"><div><span class="step">3</span><strong>AI 自动填写</strong></div></div>
+        <label class="switch-row">
+          <span><strong>只填空白项</strong><small>保留你已手动填写的内容</small></span>
+          <input id="fillOnlyEmpty" type="checkbox" checked>
+        </label>
+        <button id="fillButton" class="button primary wide">开始 AI 填写</button>
+        <div id="progress" class="progress-box hidden">
+          <div class="progress-line"><span id="progressText">准备中…</span><span id="progressCount"></span></div>
+          <div class="progress-track"><i id="progressBar"></i></div>
+        </div>
+      </section>
+
+      <section id="resultCard" class="card result-card hidden">
+        <div class="result-number" id="resultNumber">0</div>
+        <div><strong>项已填写并回读</strong><p id="resultDetail"></p></div>
+      </section>
+
+      <div id="toast" class="toast hidden"></div>
+      <footer class="career-guide">
+        <p>从自动化网申-笔试面试全流程多场景辅助，访问官网：<a href="https://www.quizmate.cn/" target="_blank" rel="noopener">QuizMate 官网</a></p>
+        <p>自动化网申承诺永久免费，笔试面试助手覆盖悬浮框模式、语音播报模式、双机位手机协作模式</p>
+      </footer>
+    </main>
+    <script src="preview-shim.js"></script>
+    <script type="module" src="sidepanel.js"></script>
+  </body>
+</html>

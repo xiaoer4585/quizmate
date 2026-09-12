@@ -10,6 +10,7 @@
     "resolveJsonModule": true,
     "baseUrl": "../../desktop-core",
     "paths": {
+      "qrcode": ["../mac客户端/QuizMate-Mac/node_modules/@types/qrcode"],
       "@shared/*": ["shared/*"],
       "*": ["node_modules/*", "../mac客户端/QuizMate-Mac/node_modules/*"]
     }

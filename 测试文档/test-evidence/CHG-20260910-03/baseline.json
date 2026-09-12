@@ -1,0 +1,27 @@
+{
+  "changeId": "CHG-20260910-03",
+  "capturedAt": "2026-09-10T00:00:00+08:00",
+  "branch": "codex/mac-release-20260906",
+  "remoteMainBefore": "b7acf9a18355a7d38b93ca3233780fcc02797937",
+  "releaseScope": [
+    "Windows client 2026.09.10",
+    "independent interview service",
+    "quizmate.cn public website and Windows manual"
+  ],
+  "files": [
+    {"path":"windows客户端/QuizMate-Windows/package.json","sha256":"021DC2AB144349099668F9707C6FB44E43CF2BAC963B58DD3DF899F9C573634F"},
+    {"path":"windows客户端/QuizMate-Windows/package-lock.json","sha256":"F4A883146C78600E0EA8198F5083FAAA47E1631C2283FF41219BF098CE4AE6F7"},
+    {"path":"windows客户端/QuizMate-Windows/resources/config.json","sha256":"F2CDFFAE421FAB0F9024A8B188354878DC7B50A39A188E128C80C4EF6527DACD"},
+    {"path":"官网模块/正式官网-quizmate.vip/download.html","sha256":"2B0D2124AEE8D9AC83BF39E1BEF010554B89D60932DA6A09F85FFD89A6372BA9"},
+    {"path":"官网模块/正式官网-quizmate.vip/index.html","sha256":"72FE5DFFAC14863CA0B8E8046AEA21C9A8A315484863092247BB56730A61DA04"},
+    {"path":"官网模块/正式官网-quizmate.vip/docs.html","sha256":"5AD7090FCAD1FA8BB17646F26507814EB2B004D0A7E8E5F46A8471461A4EE51F"},
+    {"path":"运营管理/产品交付与宣传资料/学习悬浮助手操作手册.docx","sha256":"7BA032E48E08899214F3D392DFE0938ACB7AB64421FB51C644AF4A462BB373DF"},
+    {"path":"运营管理/产品交付与宣传资料/学习悬浮助手操作手册.pdf","sha256":"F7AA6BC0BE8E330F7F5CB0709E22EE83D25EDB8B8225409CE0B5ECFA1ECE399D"},
+    {"path":"其他/手机联调服务/interview-engine.mjs","sha256":"A448C6FFC05D5CA2000F3D2F081D0F483B3C81576313412EA1CD045FE690B2AE"},
+    {"path":"其他/手机联调服务/interview-policy.mjs","sha256":"D3EC34D11EF04422FABC0A3D1FFDCBFB35A46FDBE9F0471BEEAB815827C923B9"},
+    {"path":"其他/手机联调服务/interview-engine.test.mjs","sha256":"469AA7A81291448627298A0D89EDB554E593D88D0C599BD44C989A7C57B62BB0"},
+    {"path":"desktop-core/interviewTranscript.ts","sha256":"381C7B0F9A3E4A336DAEBE49795CE9CDAC0F9F902499708D1590F5D04772F58E"}
+  ],
+  "rollbackPackage": "_build/windows-companion-20260909-4/QuizMate-Windows-2026.9.8006.exe",
+  "rollbackObjects": "quizmate-cn/rollback/CHG-20260910-03/"
+}
