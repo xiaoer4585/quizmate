@@ -27,6 +27,34 @@
         margin: 22px 0 28px;
       }
 
+      .download-page-hero {
+        padding: calc(var(--header-height) + 22px) 0 22px;
+      }
+
+      .download-page-hero h1 {
+        margin-bottom: 8px;
+        font-size: clamp(30px, 4vw, 44px);
+      }
+
+      .download-page-hero p:last-child {
+        font-size: 15px;
+      }
+
+      .download-page-campaign {
+        padding-top: 24px;
+      }
+
+      @media (max-width: 560px) {
+        .download-page-hero {
+          padding-top: calc(var(--header-height) + 18px);
+          padding-bottom: 18px;
+        }
+
+        .download-page-hero h1 {
+          font-size: clamp(30px, 9vw, 38px);
+        }
+      }
+
       .platform-notes-grid {
         display: grid;
         grid-template-columns: repeat(4, minmax(0, 1fr));
@@ -114,6 +142,7 @@
     <script defer src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
     <script defer src="app.js?v=20260731-macmerge"></script>
     <script defer src="credits.js?v=20260801-pkgs"></script>
+    <script defer src="xiaohongshu-reward.js?v=20260912-download1"></script>
   </head>
   <body data-page="download">
     <a class="skip-link" href="#main">跳到主要内容</a>
@@ -137,7 +166,7 @@
     </header>
 
     <main id="main">
-      <section class="page-hero" aria-labelledby="page-title">
+      <section class="page-hero download-page-hero" aria-labelledby="page-title">
         <div class="section-inner">
           <p class="section-kicker">版本下载</p>
           <h1 id="page-title">为你的设备选择版本</h1>
@@ -147,6 +176,33 @@
 
       <section class="section downloads">
         <div class="section-inner">
+          <aside class="xhs-reward-banner download-page-campaign" aria-labelledby="xhs-reward-title">
+            <div class="xhs-reward-lead">
+              <span class="xhs-reward-eyebrow"><i data-lucide="heart"></i>9月限时小红书集赞福利</span>
+              <div>
+                <h2 id="xhs-reward-title">分享网申插件体验，免费领备考包</h2>
+                <p>发布网申插件体验笔记，点赞或收藏达标后提交笔记链接和个人中心截图，审核通过自动发放备考包积分。</p>
+              </div>
+              <button class="xhs-reward-button" type="button" data-open-xhs-reward>
+                <i data-lucide="gift"></i>
+                <span>查看活动详情</span>
+                <i data-lucide="arrow-right"></i>
+              </button>
+            </div>
+            <div class="xhs-reward-tiers" aria-label="点赞或收藏奖励档位">
+              <div class="xhs-reward-tier">
+                <span><strong>20</strong> 赞/收藏</span>
+                <p>赠送</p>
+                <b>网申 Offer 实战包</b>
+              </div>
+              <div class="xhs-reward-tier xhs-reward-tier-plus">
+                <span><strong>70</strong> 赞/收藏</span>
+                <p>赠送</p>
+                <b>网申 Offer 上岸包</b>
+              </div>
+            </div>
+          </aside>
+
           <div class="download-grid">
             <article class="download-card" data-platform-card="windows">
               <div class="download-card-top">
