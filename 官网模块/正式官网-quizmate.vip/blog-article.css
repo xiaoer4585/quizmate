@@ -1,0 +1,250 @@
+.blog-page {
+  min-height: 100vh;
+  padding-top: 72px;
+  background: #f7f8fa;
+}
+
+.blog-article {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 42px 32px 80px;
+}
+
+.article-breadcrumbs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 24px;
+  color: #646a73;
+  font-size: 13px;
+}
+
+.article-breadcrumbs a,
+.blog-article a {
+  color: #245bdb;
+  text-decoration: none;
+}
+
+.article-breadcrumbs a:hover,
+.blog-article a:hover {
+  text-decoration: underline;
+}
+
+.article-shell {
+  padding: 44px 52px;
+  border: 1px solid #e5e6eb;
+  border-radius: 18px;
+  background: #fff;
+  color: #1f2329;
+  box-shadow: 0 12px 36px rgba(31, 35, 41, 0.06);
+}
+
+.article-kicker {
+  margin: 0 0 10px;
+  color: #245bdb;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.article-shell h1 {
+  margin: 0;
+  font-size: clamp(28px, 4vw, 40px);
+  line-height: 1.3;
+  letter-spacing: -0.02em;
+}
+
+.article-meta {
+  margin: 16px 0 28px;
+  padding-bottom: 22px;
+  border-bottom: 1px solid #e5e6eb;
+  color: #646a73;
+  font-size: 13px;
+}
+
+.article-summary {
+  margin: 0 0 28px;
+  padding: 20px 22px;
+  border-left: 4px solid #3370ff;
+  border-radius: 8px;
+  background: #f0f5ff;
+  font-size: 16px;
+  line-height: 1.85;
+}
+
+.article-cover {
+  margin: 0 0 32px;
+}
+
+.article-cover img {
+  display: block;
+  width: 100%;
+  max-height: 520px;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.article-cover figcaption {
+  margin-top: 9px;
+  color: #8f959e;
+  font-size: 12px;
+  text-align: center;
+}
+
+.article-cover {
+  margin: 0 0 30px;
+}
+
+.article-cover img {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 460px;
+  border: 1px solid #e5e6eb;
+  border-radius: 12px;
+  object-fit: cover;
+}
+
+.article-cover figcaption {
+  margin-top: 8px;
+  color: #8f959e;
+  font-size: 12px;
+  text-align: center;
+}
+
+.article-shell h2 {
+  margin: 42px 0 16px;
+  font-size: 24px;
+  line-height: 1.45;
+}
+
+.article-shell h3 {
+  margin: 28px 0 10px;
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.article-shell p,
+.article-shell li {
+  font-size: 16px;
+  line-height: 1.9;
+}
+
+.article-shell p {
+  margin: 0 0 16px;
+}
+
+.article-shell ul,
+.article-shell ol {
+  margin: 0 0 18px;
+  padding-left: 24px;
+}
+
+.article-shell li {
+  margin-bottom: 8px;
+}
+
+.article-table-wrap {
+  margin: 20px 0 28px;
+  overflow-x: auto;
+}
+
+.article-shell table {
+  width: 100%;
+  min-width: 620px;
+  border-collapse: collapse;
+  font-size: 14px;
+}
+
+.article-shell th,
+.article-shell td {
+  padding: 13px 14px;
+  border: 1px solid #dfe3e8;
+  text-align: left;
+  vertical-align: top;
+  line-height: 1.65;
+}
+
+.article-shell th {
+  background: #f5f7fa;
+  font-weight: 700;
+}
+
+.article-note {
+  margin: 24px 0;
+  padding: 18px 20px;
+  border: 1px solid #ffd591;
+  border-radius: 10px;
+  background: #fffbe6;
+  line-height: 1.8;
+}
+
+.article-faq details {
+  padding: 16px 0;
+  border-bottom: 1px solid #e5e6eb;
+}
+
+.article-faq summary {
+  cursor: pointer;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.6;
+}
+
+.article-faq details p {
+  margin: 12px 0 0;
+  color: #4e5969;
+}
+
+.article-cta {
+  margin-top: 44px;
+  padding: 28px;
+  border-radius: 14px;
+  background: #f0f5ff;
+  text-align: center;
+}
+
+.article-cta h2 {
+  margin: 0 0 10px;
+}
+
+.article-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.article-actions a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 0 20px;
+  border: 1px solid #3370ff;
+  border-radius: 8px;
+  font-weight: 700;
+}
+
+.article-actions .primary {
+  background: #3370ff;
+  color: #fff;
+}
+
+.article-related {
+  margin-top: 36px;
+  padding-top: 26px;
+  border-top: 1px solid #e5e6eb;
+}
+
+.article-related h2 {
+  margin-top: 0;
+}
+
+@media (max-width: 768px) {
+  .blog-page { padding-top: 64px; }
+  .blog-article { padding: 24px 14px 56px; }
+  .article-shell { padding: 28px 20px; border-radius: 14px; }
+  .article-shell h2 { font-size: 21px; }
+  .article-shell p,
+  .article-shell li { font-size: 15px; }
+}
