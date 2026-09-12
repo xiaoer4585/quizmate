@@ -13,3 +13,13 @@
 - 控制台：浏览器 `error/warn` 日志为空。
 - 充值页回归：`recharge.html` 已移除福利脚本、入口和横幅，活动入口仅保留在下载页。
 - 预览截图：已通过浏览器展示桌面下载页首屏与活动弹窗；未执行任何生产发布操作。
+
+## 生产发布结果（2026-09-12）
+
+- 发布提交：`e537fd7`；补充证据提交见同分支后续文档提交；生产标签：`v20260912-6`（代码发布标签）。
+- GitHub/Gitee：两个远端 `main` 均已回读到 `e537fd7aa776042c1c099ff9d39be10e0d89da4d`，`v20260912-6` 两端均指向同一提交。
+- 阿里云目标：仅 `quizmate-cn`，未写入 `quizmate-vip`；备份目录：`quizmate-cn/rollback/CHG-20260912-03/`。原有三个对象完成备份；两张新图片原对象不存在，记录为 `BACKUP_SKIP_MISSING`。
+- 上传回读：`download.html` SHA-256 `1d627c943c0b4f0b02f0431f62c974e213e3b988c38b945bc2975fb4fa7920a0`；`recharge.html` SHA-256 `37817813378b84a37e1429f9f114d0846ceffb12b24c1cccc2037c79df388de6`；`xiaohongshu-reward.js` SHA-256 `8e3c07f89e0a34f0788fcffff087355551659b3969f4e4a21a083c6289742cc6`；两张 JPG 与本地文件 SHA-256 一致。
+- 公网验证：`https://www.quizmate.cn/download.html` 返回新活动标题、活动横幅位于页头与下载卡片之间、精确官网引流句与两张图片路径；图片 HEAD 均 HTTP 200、`Content-Type: image/jpeg`，大小分别为 161135 与 193041 字节。
+- 线上浏览器：活动弹窗可打开，标题/奖励档位/分享文案正确；线上控制台 `error/warn` 为空。
+- 当前状态：已上线；未发布其他官网文件、客户端安装包或更新清单。
