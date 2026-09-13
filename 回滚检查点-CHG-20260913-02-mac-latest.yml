@@ -1,0 +1,11 @@
+version: 2026.9.12000
+files:
+  - url: QuizMate-Mac-arm64-2026.09.12.zip
+    sha512: IFlOH2kjm/TuMH1WUswrqwHOsH3HQYez2tC/0cQab88bSl6CsMBmeHQPXmhftvtzYZ9+gOKtrsjgoJ4WDT5+IA==
+    size: 105328604
+  - url: QuizMate-Mac-x64-2026.09.12.zip
+    sha512: sm/af876BJqqIey++qT6//pxuXVYzYMCmXtxqxrJNrJfmuGkN/Atr94IcpstcBOfoOaDcDqCRSVLqlNLK05w3A==
+    size: 112324226
+path: QuizMate-Mac-arm64-2026.09.12.zip
+sha512: IFlOH2kjm/TuMH1WUswrqwHOsH3HQYez2tC/0cQab88bSl6CsMBmeHQPXmhftvtzYZ9+gOKtrsjgoJ4WDT5+IA==
+releaseDate: '2026-09-11T17:27:31.973Z'
