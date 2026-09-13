@@ -7,6 +7,7 @@ const mainProcessSource = readFileSync(new URL('../../electron/main.ts', import.
 const extensionSource = readFileSync(new URL('../../src/pages/Extension.tsx', import.meta.url), 'utf8');
 const ipcSource = readFileSync(new URL('../../electron/ipcHandlers.ts', import.meta.url), 'utf8');
 const preloadSource = readFileSync(new URL('../../electron/preload.ts', import.meta.url), 'utf8');
+const companionPageSource = readFileSync(new URL('../../src/pages/Companion.tsx', import.meta.url), 'utf8');
 
 describe('desktop entry points', () => {
   it('opens the same in-client recharge modal from the dashboard and header', () => {
@@ -31,5 +32,21 @@ describe('desktop entry points', () => {
     expect(mainProcessSource).toContain('if (SUPPORTS_COMPANION) {');
     expect(mainProcessSource).toContain("ipcMain.handle('companion:workspace'");
     expect(mainProcessSource).not.toContain('此功能目前仅用于 Windows 测试版');
+  });
+
+  it('keeps both overlays hidden until a screenshot capture is safe', () => {
+    expect(mainProcessSource).toContain('waitForScreenshotOverlaysHidden');
+    expect(mainProcessSource).toContain("snapshotScreenshotOverlay('exam', state.overlayWindow)");
+    expect(mainProcessSource).toContain("snapshotScreenshotOverlay('interview', state.interviewOverlayWindow)");
+    expect(mainProcessSource).toContain("code: 'OVERLAY_HIDE_TIMEOUT'");
+    expect(mainProcessSource).toContain('if (screenshotInFlight && !forceDuringScreenshot) return;');
+  });
+
+  it('disables PC overlays while the companion workspace is active', () => {
+    expect(mainProcessSource).toContain("if (target === 'mobile') {");
+    expect(mainProcessSource).toContain('closeExamClient();');
+    expect(mainProcessSource).toContain('closeInterviewOverlay();');
+    expect(mainProcessSource).toContain('if (assistantWorkspace !== \'pc\' || workspaceTransitioning) return;');
+    expect(companionPageSource).toContain('面试快捷键不会在双机模式下生效');
   });
 });

@@ -32,6 +32,7 @@ import { ShortcutAction, ProcessingMode } from '../shared/shortcuts';
 import { selectActiveOverlay, selectFreshScreenshot, shouldEnsureExamOverlay } from '../shared/overlay-state';
 import { toBusinessVersion } from './version';
 import { CompanionController } from './helpers/CompanionController';
+import { hideScreenshotOverlay, snapshotScreenshotOverlay, waitForScreenshotOverlaysHidden, type ScreenshotOverlaySnapshot } from './helpers/ScreenshotOverlayGuard';
 import { workspaceEntryError, routeWorkspaceShortcut, supportsCompanionDesktopPlatform, type AssistantWorkspace } from '../shared/workspace-routing';
 
 let assistantWorkspace: AssistantWorkspace = 'pc';
@@ -514,6 +515,10 @@ function createOverlayWindow() {
 
   // 等页面加载完成后再显示，避免黑屏（loadURL 是异步的）
   state.overlayWindow.once('ready-to-show', () => {
+    if (screenshotInFlight) {
+      hideOverlay();
+      return;
+    }
     state.overlayWindow?.show();
     state.overlayWindow?.showInactive();
     state.overlayWindow?.setIgnoreMouseEvents(true, { forward: true });
@@ -523,6 +528,7 @@ function createOverlayWindow() {
   });
   // 兜底：如果 ready-to-show 在 3 秒内没触发，强制显示
   setTimeout(() => {
+    if (screenshotInFlight) return;
     if (state.overlayWindow && !state.overlayWindow.isDestroyed() && !state.isOverlayVisible) {
       state.overlayWindow.show();
       state.overlayWindow.showInactive();
@@ -537,11 +543,15 @@ function createOverlayWindow() {
   processingHelper.setMainWindow(state.overlayWindow);
 }
 
-function showOverlay(markActive = true) {
+function showOverlay(markActive = true, forceDuringScreenshot = false, opacity = 1.0) {
   if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
+  // A renderer callback, timer, or shortcut can arrive while the native
+  // capture is already in progress. Do not let it put an overlay back on
+  // screen until handleScreenshot has restored the original state.
+  if (screenshotInFlight && !forceDuringScreenshot) return;
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     state.overlayWindow.showInactive();
-    state.overlayWindow.setOpacity(1.0);
+    state.overlayWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
     // 始终保持鼠标穿透，仅通过快捷键操作
     state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
     state.isOverlayVisible = true;
@@ -562,6 +572,13 @@ function hideOverlay() {
     state.isOverlayVisible = false;
     activateRemainingOverlay('exam');
   }
+}
+
+function restoreScreenshotOverlay(snapshot: ScreenshotOverlaySnapshot): void {
+  const win = snapshot.window as BrowserWindow | null;
+  if (!snapshot.wasVisible || !win || win.isDestroyed()) return;
+  if (snapshot.kind === 'exam') showOverlay(false, true, snapshot.opacity);
+  else showInterviewOverlay(false, true, snapshot.opacity);
 }
 
 function toggleOverlay() {
@@ -879,12 +896,12 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
 
     // 截图前隐藏悬浮窗(以窗口实际可见性为准, 不依赖模式与状态标志)，
     // 确保自身截图在任何情况下都不包含悬浮框--即使防捕获亲和性失效也兜底
-    const examOverlayWasVisible = !!(
-      state.overlayWindow && !state.overlayWindow.isDestroyed() && state.overlayWindow.isVisible()
-    );
-    const interviewOverlayWasVisible = !!(
-      state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed() && state.interviewOverlayWindow.isVisible()
-    );
+    const overlaySnapshots: ScreenshotOverlaySnapshot[] = [
+      snapshotScreenshotOverlay('exam', state.overlayWindow),
+      snapshotScreenshotOverlay('interview', state.interviewOverlayWindow),
+    ];
+    const examOverlayWasVisible = overlaySnapshots[0].wasVisible;
+    const interviewOverlayWasVisible = overlaySnapshots[1].wasVisible;
     const previouslyActiveOverlay = state.lastActiveOverlay;
     // A protected window should remain visible locally and be absent from normal
     // capture APIs. On Electron versions without readback, hide as a fallback.
@@ -894,24 +911,26 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
     const interviewOverlayProtectionState = state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()
       ? readContentProtection(state.interviewOverlayWindow)
       : null;
-    const needsTemporaryHide = examOverlayWasVisible || interviewOverlayWasVisible;
-    if (examOverlayWasVisible) hideOverlay();
-    if (interviewOverlayWasVisible) hideInterviewOverlay();
-    if (needsTemporaryHide) {
-      await new Promise((r) => setTimeout(r, Math.max(appConfig.screenshotHideDelayMs, 180)));
-    }
+    const needsTemporaryHide = overlaySnapshots.some((snapshot) => snapshot.wasVisible);
+    overlaySnapshots.filter((snapshot) => snapshot.wasVisible).forEach((snapshot) => {
+      hideScreenshotOverlay(snapshot);
+      if (snapshot.kind === 'exam') state.isOverlayVisible = false;
+      else state.interviewOverlayVisible = false;
+    });
+    const overlaysHidden = !needsTemporaryHide || await waitForScreenshotOverlaysHidden(overlaySnapshots);
 
     let result: ScreenshotResult;
     try {
-      result = await screenshotHelper.captureFullScreen();
+      result = overlaysHidden
+        ? await screenshotHelper.captureFullScreen()
+        : { success: false, error: '截图前无法确认悬浮框已隐藏，请重试', code: 'OVERLAY_HIDE_TIMEOUT', stage: 'capture' };
     } catch (error) {
       console.error('[Main] Screenshot capture threw:', error);
       result = { success: false, error: '截图失败，请检查屏幕录制权限后重试', code: 'CAPTURE_THROWN', stage: 'capture' };
     } finally {
       if (needsTemporaryHide) {
         await new Promise((r) => setTimeout(r, appConfig.screenshotRestoreDelayMs));
-        if (examOverlayWasVisible) showOverlay(false);
-        if (interviewOverlayWasVisible) showInterviewOverlay(false);
+        overlaySnapshots.forEach(restoreScreenshotOverlay);
         if (isOverlayVisible(previouslyActiveOverlay)) activateOverlay(previouslyActiveOverlay);
       }
     }
@@ -1281,6 +1300,10 @@ function createInterviewOverlayWindow() {
 
   // 等页面加载完成后再显示，避免黑屏
   state.interviewOverlayWindow.once('ready-to-show', () => {
+    if (screenshotInFlight || assistantWorkspace !== 'pc' || workspaceTransitioning) {
+      hideInterviewOverlay();
+      return;
+    }
     state.interviewOverlayWindow?.show();
     state.interviewOverlayWindow?.showInactive();
     state.interviewOverlayWindow?.setIgnoreMouseEvents(true, { forward: true });
@@ -1290,6 +1313,7 @@ function createInterviewOverlayWindow() {
   });
   // 兜底：3 秒内 ready-to-show 未触发则强制显示
   setTimeout(() => {
+    if (screenshotInFlight || assistantWorkspace !== 'pc' || workspaceTransitioning) return;
     if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed() && !state.interviewOverlayVisible) {
       state.interviewOverlayWindow.show();
       state.interviewOverlayWindow.showInactive();
@@ -1301,9 +1325,11 @@ function createInterviewOverlayWindow() {
   }, 3000);
 }
 
-function showInterviewOverlay(markActive = true) {
+function showInterviewOverlay(markActive = true, forceDuringScreenshot = false, opacity = 1.0) {
+  if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
+  if (screenshotInFlight && !forceDuringScreenshot) return;
   if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()) {
-    state.interviewOverlayWindow.setOpacity(1.0);
+    state.interviewOverlayWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
     state.interviewOverlayWindow.showInactive();
     state.interviewOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
     state.interviewOverlayVisible = true;

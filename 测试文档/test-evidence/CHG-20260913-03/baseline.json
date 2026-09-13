@@ -1,0 +1,17 @@
+{
+  "changeId": "CHG-20260913-03",
+  "baselineCommit": "98b49dd",
+  "publishedCodeCommit": "0cff1df",
+  "package": "QuizMate-Windows-2026.09.10.exe",
+  "files": [
+    "desktop-core/electron/main.ts",
+    "desktop-core/shared/__tests__/desktop-entrypoints.test.ts",
+    "windows客户端/QuizMate-Windows/package.json",
+    "windows客户端/QuizMate-Windows/package-lock.json",
+    "windows客户端/QuizMate-Windows/electron-builder.yml"
+  ],
+  "newFiles": [
+    "desktop-core/electron/helpers/ScreenshotOverlayGuard.ts",
+    "desktop-core/shared/__tests__/screenshot-overlay-guard.test.ts"
+  ]
+}
