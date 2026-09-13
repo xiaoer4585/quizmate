@@ -36,6 +36,27 @@ export interface ProfileResult {
   costPerSuccess?: number;
   creditBalance?: number;
 }
+export interface CreditLedgerResult {
+  success: boolean;
+  error?: string;
+  code?: string;
+  accountId?: string;
+  creditBalance?: number;
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  records?: Array<{
+    id: string;
+    operationType: string;
+    credits: number;
+    balanceAfter: number;
+    source: string;
+    serviceType: string;
+    orderNo: string;
+    reason: string;
+    createdAt: string;
+  }>;
+}
 
 export class DesktopAuthManager {
   private apiEndpoint = '';
@@ -173,6 +194,19 @@ export class DesktopAuthManager {
       } catch {}
     }
     this.configHelper.clearAuth();
+  }
+  async getCreditLedger(page = 1, pageSize = 50): Promise<CreditLedgerResult> {
+    const token = this.configHelper.getAuthToken();
+    if (!token) return { success: false, error: '未登录', code: 'AUTH_REQUIRED' };
+    try {
+      const data = await this.api.postAction<CreditLedgerResult>(this.apiEndpoint, 'getCreditLedger', {
+        accountToken: token, page, pageSize
+      }, { timeoutMs: 15000 });
+      return { ...data, success: true };
+    } catch (e) {
+      if (e instanceof ApiError) return { success: false, error: e.message, code: e.code };
+      return { success: false, error: `网络错误: ${(e as Error).message}`, code: 'NETWORK_ERROR' };
+    }
   }
   private writeSharedSession(token: string) {
     try {

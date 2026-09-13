@@ -89,7 +89,7 @@ export class InterviewHelper {
   private conversationTurns: Array<{ text: string; ts: number; accountScope: string }> = [];
   private conversationAccountScope = '';
   private transcriptCommitTimer: NodeJS.Timeout | null = null;
-  private voiceQuestionDraft: { text: string; accountScope: string } | null = null;
+  private voiceQuestionDraft: { text: string; accountScope: string; settleMs: number } | null = null;
   private voiceQuestionDraftTimer: NodeJS.Timeout | null = null;
   private store: Store<InterviewStoreSchema>;
   private contextAccountScope = '';
@@ -473,12 +473,12 @@ export class InterviewHelper {
       this.voiceQuestionDraftTimer = null;
       const draft = this.takeVoiceQuestionDraft();
       if (draft) void this.submitInterviewQuestion(draft, this.contextAccountScope);
-    }, this.voiceQuestionDraft?.text && /[?？。！!]$/.test(this.voiceQuestionDraft.text) ? ASR_SILENCE_COMMIT_MS : ASR_FRAGMENT_SETTLE_MS);
+    }, this.voiceQuestionDraft?.settleMs ?? (this.voiceQuestionDraft?.text && /[?？。！!]$/.test(this.voiceQuestionDraft.text) ? ASR_SILENCE_COMMIT_MS : ASR_FRAGMENT_SETTLE_MS));
   }
 
-  private mergeVoiceQuestionDraft(text: string, accountScope: string) {
+  private mergeVoiceQuestionDraft(text: string, accountScope: string, settleMs: number) {
     if (!this.voiceQuestionDraft || this.voiceQuestionDraft.accountScope !== accountScope) {
-      this.voiceQuestionDraft = { text, accountScope };
+      this.voiceQuestionDraft = { text, accountScope, settleMs };
     } else {
       this.voiceQuestionDraft.text = mergeFinalTranscript(this.voiceQuestionDraft.text, text);
     }
@@ -503,20 +503,11 @@ export class InterviewHelper {
         this.broadcast('interview:transcript', { text: raw, skipped: true, display: false });
         return;
       }
-      const hadDraft = Boolean(this.voiceQuestionDraft?.accountScope === accountScope);
-      const completeSingle = !hadDraft
-        && !isLikelyIncompleteInterviewFragment(raw)
-        && isLikelyInterviewQuestion(raw, this.context.audioMode || 'demo');
-      if (completeSingle) {
-        await this.submitInterviewQuestion(raw, accountScope);
-        return;
-      }
-      if (this.voiceQuestionDraft?.accountScope === accountScope && /[?？。！!]$/.test(this.voiceQuestionDraft.text)
-        && isLikelyInterviewQuestion(raw, this.context.audioMode || 'demo')) {
-        const draft = this.takeVoiceQuestionDraft();
-        void this.submitInterviewQuestion(draft, accountScope);
-      }
-      this.mergeVoiceQuestionDraft(raw, accountScope);
+      // 语音 final 只是 ASR 分片，不立即请求 AI；先合并成完整问题，再按
+      // 一道题提交一次，避免半句和后半句各自扣 20 积分。
+      const incomplete = isLikelyIncompleteInterviewFragment(raw);
+      const settleMs = incomplete ? ASR_FRAGMENT_SETTLE_MS : Math.max(2_000, ASR_SILENCE_COMMIT_MS);
+      this.mergeVoiceQuestionDraft(raw, accountScope, settleMs);
       return;
     }
 
@@ -545,8 +536,8 @@ export class InterviewHelper {
     this.appendConversationContext(question);
     this.broadcast('interview:transcript', { text: question });
     const task = this.addTask(question);
-    // 并行生成：每个问题立即调用 AI，不再串行等待上一题生成完成；
-    // 积分扣减由后端每请求独立事务保证，余额不足时该题按既有 402 逻辑提示。
+    // 每一道完整面试问题只创建一个 AI 请求；客户端先合并 ASR 分片，
+    // 后端在该请求成功后统一扣减 20 积分。未说完整的半句不会单独扣费。
     await this.enqueueAnswer(question, task.id, requestContext);
   }
 

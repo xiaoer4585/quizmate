@@ -7,12 +7,13 @@ import {
 import { useState } from 'react';
 import { api, useProfile, useUpdateStatus } from '../lib/ipc';
 import { isMacPlatform } from '../../shared/shortcuts';
+import CreditLedgerModal from '../components/CreditLedgerModal';
 
 const MODULES = [
   { to: '/exam', title: isMacPlatform() ? '笔试助手' : 'PC笔试助手', desc: '截图搜题 · AI智能答题 · 多题批量解析', icon: <PenLine size={22} />, color: 'from-exam to-exam-dark', cost: '积分' },
   { to: '/interview', title: isMacPlatform() ? '面试助手' : 'PC面试助手', desc: '实时听写面试官问题 · AI秒出参考答案 · 隐身模式', icon: <Mic size={22} />, color: 'from-rose-500 to-rose-700', cost: '积分' },
   { to: '/companion', title: '双机协作笔面试', desc: '电脑截图与听写 · 手机查看题目和答案', icon: <Smartphone size={22} />, color: 'from-cyan-600 to-teal-700', cost: '积分' },
-  { to: '/extension', title: 'AI 网申插件', desc: '简历识别 · 自动填写 · 投递管理', icon: <Chrome size={22} />, color: 'from-indigo-500 to-indigo-700', cost: '10积分/次' },
+  { to: '/extension', title: 'AI 网申插件', desc: '简历识别 · 网申自动填写', icon: <Chrome size={22} />, color: 'from-indigo-500 to-indigo-700', cost: '永久免费' },
 ];
 
 export default function Dashboard() {
@@ -20,6 +21,7 @@ export default function Dashboard() {
   const { data: profile } = useProfile();
   const updateStatus = useUpdateStatus();
   const [checkingUpdate, setCheckingUpdate] = useState(false);
+  const [ledgerOpen, setLedgerOpen] = useState(false);
   const acct = profile?.account;
   const credits = profile?.creditBalance ?? acct?.credits ?? 0;
   const checkUpdate = async () => {
@@ -44,11 +46,11 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold mb-1">你好，{acct?.nickname || acct?.email || '同学'} 👋</h1>
           <p className="text-sm text-slate-400 mb-4">从网申简历识别与自动填写，到笔试练习和面试准备，一套账号贯穿求职流程</p>
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/60 border border-slate-700">
+            <button onClick={() => setLedgerOpen(true)} className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-slate-900/60 border border-slate-700 hover:border-amber-400/60 transition-colors" title="查看当前账号积分明细">
               <Wallet size={16} className="text-amber-400" />
-              <span className="text-sm">积分余额</span>
-              <span className="text-amber-400 font-bold">{credits}</span>
-            </div>
+              <span className="text-sm">积分明细记录</span>
+              <span className="text-xs text-amber-400">余额 {credits}</span>
+            </button>
             <button onClick={() => window.dispatchEvent(new CustomEvent('quizmate:open-recharge'))} className="btn-primary text-xs">
               <Zap size={14} /> 充值积分
             </button>
@@ -84,7 +86,7 @@ export default function Dashboard() {
           <TrendingUp size={20} className="text-accent mt-0.5" />
           <div>
             <div className="text-sm font-medium">网申自动化</div>
-            <div className="text-xs text-slate-400 mt-1">网申插件提供简历识别、字段填写、投递管理与职位监控</div>
+            <div className="text-xs text-slate-400 mt-1">网申插件提供简历识别与字段自动填写，永久免费使用</div>
           </div>
         </div>
       </div>
@@ -107,7 +109,7 @@ export default function Dashboard() {
               </div>
               <div className="flex items-center gap-2 mb-1">
                 <h3 className="font-semibold text-sm">{m.title}</h3>
-                <span className={`tag ${m.cost === '免费' ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>{m.cost}</span>
+                <span className={`tag ${m.cost.includes('免费') ? 'bg-emerald-500/15 text-emerald-400' : 'bg-amber-500/15 text-amber-400'}`}>{m.cost}</span>
               </div>
               <p className="text-xs text-slate-400 leading-relaxed">{m.desc}</p>
               <ArrowRight size={16} className="absolute right-3 bottom-3 text-slate-600 group-hover:text-brand group-hover:translate-x-1 transition-all" />
@@ -122,11 +124,12 @@ export default function Dashboard() {
           <Chrome size={18} className="text-indigo-400" />
           <div className="flex-1 min-w-0">
             <div className="text-sm font-medium">QuizMate AI 网申自动化插件</div>
-            <div className="text-xs text-slate-400">AI 网申 · 投递管理 · 职位监控，覆盖浏览器内的求职流程</div>
+            <div className="text-xs text-slate-400">AI 网申自动化：识别简历并自动填写网申字段，永久免费使用</div>
           </div>
           <button onClick={() => navigate('/extension')} className="btn-outline text-xs">安装插件 <ArrowRight size={12} /></button>
         </div>
       </div>
+      <CreditLedgerModal open={ledgerOpen} onClose={() => setLedgerOpen(false)} />
     </div>
   );
 }

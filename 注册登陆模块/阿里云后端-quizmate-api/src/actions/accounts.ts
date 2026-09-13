@@ -347,6 +347,62 @@ function profileHandler(deps: ActionDependencies): ActionHandler {
   };
 }
 
+/** 返回当前登录账号自己的积分流水，禁止通过输入 accountId 查询其他账号。 */
+function creditLedgerHandler(deps: ActionDependencies): ActionHandler {
+  return async (input) => {
+    const client = await deps.db.connect();
+    try {
+      const account = await requireAccount(client, input);
+      const page = Math.max(1, Math.min(1000, Number(input.page) || 1));
+      const pageSize = Math.max(1, Math.min(100, Number(input.pageSize) || 50));
+      const offset = (page - 1) * pageSize;
+      const countResult = await client.query<{ count: string }>(
+        "SELECT count(*)::text AS count FROM credit_ledger WHERE account_id = $1",
+        [account.account_id]
+      );
+      const result = await client.query<{
+        log_id: string;
+        operation_type: string;
+        credits: string | number;
+        balance_after: string | number;
+        source: string | null;
+        service_type: string | null;
+        order_no: string | null;
+        reason: string | null;
+        created_at: Date | string;
+      }>(
+        `SELECT log_id, operation_type, credits, balance_after, source, service_type,
+                order_no, reason, created_at
+           FROM credit_ledger
+          WHERE account_id = $1
+          ORDER BY created_at DESC, log_id DESC
+          LIMIT $2 OFFSET $3`,
+        [account.account_id, pageSize, offset]
+      );
+      return {
+        accountId: account.account_id,
+        creditBalance: Number(account.credits),
+        page,
+        pageSize,
+        total: Number(countResult.rows[0]?.count ?? 0),
+        records: result.rows.map((row) => ({
+          id: row.log_id,
+          operationType: row.operation_type,
+          credits: Number(row.credits),
+          balanceAfter: Number(row.balance_after),
+          source: row.source ?? "",
+          serviceType: row.service_type ?? "",
+          orderNo: row.order_no ?? "",
+          reason: row.reason ?? "",
+          createdAt: new Date(row.created_at).toISOString()
+        }))
+      };
+    } finally {
+      client.release();
+    }
+  };
+}
+
 function resetPasswordHandler(deps: ActionDependencies): ActionHandler {
   return async (input) => {
     const email = normalizeEmail(input.email);
@@ -461,6 +517,7 @@ export function createAccountActions(deps: ActionDependencies): Map<string, Acti
     ["registerAccount", registerHandler(deps)],
     ["loginAccount", loginHandler(deps)],
     ["getAccountProfile", profileHandler(deps)],
+    ["getCreditLedger", creditLedgerHandler(deps)],
     ["resetAccountPassword", resetPasswordHandler(deps)],
     ["logoutAccount", logoutHandler(deps)],
     ["refreshAccountSession", refreshSessionHandler(deps)],
