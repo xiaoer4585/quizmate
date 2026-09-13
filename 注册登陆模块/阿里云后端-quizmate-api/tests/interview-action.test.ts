@@ -88,6 +88,7 @@ describe("interview speech action", () => {
     expect(prompt).toContain("候选人第一人称");
     expect(prompt).toContain("结论先行");
     expect(prompt).toContain("回答长度根据问题复杂度自动调整");
+    expect(prompt).toContain("每个编号单独一行");
     expect(prompt).toContain('"explanation":""');
     expect(prompt).not.toContain("回答要点，每个要点单独一行");
     // 不再强制双层结构与分隔符（CHG-20260820-07 速度修复）

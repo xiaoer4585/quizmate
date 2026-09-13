@@ -82,6 +82,7 @@ export function registerIpcHandlers(
   });
   ipcMain.handle('auth:logout', async () => { await controls.onAccountExit?.(); await ctx.authManager!.logout(); });
   ipcMain.handle('auth:getProfile', () => ctx.authManager!.getProfile());
+  ipcMain.handle('auth:getCreditLedger', (_e, page?: number, pageSize?: number) => ctx.authManager!.getCreditLedger(page, pageSize));
   ipcMain.handle('auth:isAuthenticated', () => ctx.authManager!.isAuthenticated());
 
   // ===== 配置 =====

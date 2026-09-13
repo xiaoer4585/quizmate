@@ -154,7 +154,7 @@ export function createExampleProfileRecord() {
         { company: '远景数据有限公司（示例）', position: '产品助理', department: '数据产品部', startDate: '2024-01', endDate: '2024-06', description: '参与经营分析看板规划、需求评审、验收和用户培训。', achievements: '将周报整理时间从 4 小时缩短至 40 分钟。' }
       ],
       projects: [
-        { name: '智能求职助手', role: '项目负责人', startDate: '2025-02', endDate: '2025-06', url: 'https://www.quizmate.cn/', description: '面向校招用户设计简历结构化、岗位匹配和投递管理原型。', achievements: '完成 30 位用户访谈和 3 轮可用性测试，关键任务完成率达到 92%。', technologies: 'Figma、Python、PostgreSQL、LLM' }
+        { name: '智能求职助手', role: '项目负责人', startDate: '2025-02', endDate: '2025-06', url: 'https://www.quizmate.cn/', description: '面向校招用户设计简历结构化与网申自动填写原型。', achievements: '完成 30 位用户访谈和 3 轮可用性测试，关键任务完成率达到 92%。', technologies: 'Figma、Python、PostgreSQL、LLM' }
       ],
       campus: [
         { org: '研究生会创新实践部', role: '项目负责人', startDate: '2024-09', endDate: '2025-06', description: '策划校园 AI 产品挑战赛并协调导师、企业和学生团队。', achievements: '覆盖 18 支团队、300 余名参与者。' }

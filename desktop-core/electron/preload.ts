@@ -29,6 +29,7 @@ const api = {
     register: (email: string, code: string, password: string, inviteCode?: string) => invoke('auth:register', email, code, password, inviteCode),
     logout: () => invoke('auth:logout'),
     getProfile: () => invoke('auth:getProfile'),
+    getCreditLedger: (page?: number, pageSize?: number) => invoke('auth:getCreditLedger', page, pageSize),
     isAuthenticated: () => invoke('auth:isAuthenticated'),
     onRequireLogin: (cb: () => void) => on('auth:require-login', cb),
   },

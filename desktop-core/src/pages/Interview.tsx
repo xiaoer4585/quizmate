@@ -402,7 +402,7 @@ export default function Interview() {
         <div className="flex items-center gap-2" data-guide-target="interview-start">
           <div className="px-3 py-1.5 rounded-lg bg-slate-900 border border-slate-700 text-xs">
             积分余额 <span className="text-amber-400 font-bold">{credits}</span>
-            <span className="text-slate-500 ml-2">（每次 AI 作答消耗 20 积分）</span>
+            <span className="text-slate-500 ml-2">（每道完整问题扣 20 积分，未说完整不扣）</span>
           </div>
           <button
             onClick={interviewRunning ? stopInterview : startInterview}
