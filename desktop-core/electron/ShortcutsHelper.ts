@@ -175,6 +175,9 @@ export class ShortcutsHelper {
 
   private shouldRegister(action: ShortcutAction, mode: 'overlay' | 'voice' | 'interview'): boolean {
     if (action === 'quit') return false
+    // 面试悬浮框启动后仍保留 Alt+Q/Alt+E（或用户自定义键），用于
+    // 临时截图搜题；其实际目标由主进程按当前面试状态路由。
+    if (mode === 'interview' && (action === 'screenshot' || action === 'search')) return true
     // 两个助手可同时运行，因此所有模式都注册同一组快捷键。
     // 具体动作由主进程按“笔试专属 / 面试专属 / 最近激活窗口”独立路由。
     // 唯一例外是两种笔试搜题动作：按当前笔试呈现模式只注册其中一个，

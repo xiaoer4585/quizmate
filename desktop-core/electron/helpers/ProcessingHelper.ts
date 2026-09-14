@@ -408,6 +408,11 @@ export class LightweightProcessingHelper {
         totalMs: Date.now() - startedAt,
       }
 
+      // The server returns the settled balance with the analysis response.
+      // Broadcast it immediately so the workbench never shows a stale local
+      // estimate after an AI deduction.
+      if (typeof result.creditBalance === 'number') this.sendCreditUpdate(result.creditBalance)
+
       // Notify overlay with the same payload shape the renderer expects.
       // voice 模式不发送悬浮框事件（由 main.ts 调用 TTS 播报）
       if (this.configHelper.getProcessingMode() !== 'voice') {
@@ -513,8 +518,14 @@ export class LightweightProcessingHelper {
   }
 
   private sendEvent(event: string, data: unknown): void {
-    if (this.mainWindow && !this.mainWindow.isDestroyed()) {
-      this.mainWindow.webContents.send(event, data)
+    if (!this.mainWindow || this.mainWindow.isDestroyed() || this.mainWindow.webContents.isDestroyed()) return
+    try { this.mainWindow.webContents.send(event, data) } catch { /* renderer may close during app shutdown */ }
+  }
+
+  private sendCreditUpdate(balance: number): void {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed() || win.webContents.isDestroyed()) continue
+      try { win.webContents.send('credits-updated', balance) } catch { /* renderer may close during app shutdown */ }
     }
   }
 }

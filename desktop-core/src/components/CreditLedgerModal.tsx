@@ -14,10 +14,19 @@ type LedgerRecord = {
 
 const operationNames: Record<string, string> = {
   consume: '使用扣减',
+  analysis: 'AI 分析扣减',
+  ai_analysis: 'AI 分析扣减',
+  consume_ai: 'AI 分析扣减',
+  exam: '笔试搜题扣减',
+  interview: '面试回答扣减',
+  companion: '双机协作扣减',
   register_bonus: '注册赠送',
   referral_bonus: '邀请奖励',
   recharge: '充值到账',
   activity_bonus: '活动奖励',
+  refund: '积分退还',
+  admin_add: '管理员增加',
+  admin_subtract: '管理员扣减',
 };
 
 function formatTime(value: string) {
@@ -69,7 +78,7 @@ export default function CreditLedgerModal({ open, onClose }: { open: boolean; on
               const positive = record.credits > 0;
               return <div key={record.id} className="flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-950/40 px-3 py-3">
                 {positive ? <ArrowUpCircle size={18} className="shrink-0 text-emerald-400" /> : <ArrowDownCircle size={18} className="shrink-0 text-rose-400" />}
-                <div className="min-w-0 flex-1"><div className="flex items-center gap-2 text-sm"><span>{operationNames[record.operationType] || record.operationType}</span>{record.reason && <span className="truncate text-xs text-slate-500">{record.reason}</span>}</div><div className="mt-1 text-xs text-slate-500">{formatTime(record.createdAt)} · 余额 {record.balanceAfter}</div></div>
+                <div className="min-w-0 flex-1"><div className="flex items-center gap-2 text-sm"><span>{operationNames[record.operationType] || '积分变动'}</span>{record.reason && <span className="truncate text-xs text-slate-500">{record.reason}</span>}</div><div className="mt-1 text-xs text-slate-500">{formatTime(record.createdAt)} · 余额 {record.balanceAfter}</div></div>
                 <strong className={positive ? 'text-emerald-400' : 'text-rose-400'}>{positive ? '+' : ''}{record.credits}</strong>
               </div>;
             })}

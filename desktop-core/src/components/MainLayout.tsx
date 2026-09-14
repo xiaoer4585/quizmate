@@ -1,5 +1,6 @@
 // 主框架布局 - 左侧导航 + 顶部状态栏 + 内容区
 import { useEffect, useState, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import {
   LayoutDashboard, PenLine, Mic, Smartphone,
@@ -26,6 +27,7 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   const navigate = useNavigate();
   const location = useLocation();
   const { data: profile } = useProfile();
+  const queryClient = useQueryClient();
   const [collapsed, setCollapsed] = useState(false);
   const [entryError, setEntryError] = useState('');
   const [approvedPath, setApprovedPath] = useState('');
@@ -47,6 +49,14 @@ export default function MainLayout({ children }: { children: ReactNode }) {
   const updateStatus = useUpdateStatus();
   const [dismissedKey, setDismissedKey] = useState<string | null>(null);
   const [rechargeOpen, setRechargeOpen] = useState(false);
+
+  // AI/面试扣费完成后主进程广播服务端余额，工作台和积分弹窗立即重新读取。
+  useEffect(() => {
+    const off = api.on?.('credits-updated', () => {
+      void queryClient.invalidateQueries({ queryKey: ['profile'] });
+    });
+    return () => { off?.(); };
+  }, [queryClient]);
 
   // 积分不足蒙版（仅当主窗口对用户可见时显示；最小化/隐藏时不打扰悬浮框用户）
   const mainVisible = useMainWindowVisible();

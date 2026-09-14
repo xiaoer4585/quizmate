@@ -179,6 +179,15 @@ function restoreMainWindow(): void {
   createTrayManager();
 }
 
+/** Send IPC only while the destination renderer is still usable. During quit,
+ * Electron can emit late helper events after BrowserWindow destruction. */
+function safeSend(win: BrowserWindow | null | undefined, channel: string, ...args: unknown[]): void {
+  if (state.quitting || !win || win.isDestroyed() || win.webContents.isDestroyed()) return;
+  try { win.webContents.send(channel, ...args); } catch (error) {
+    console.debug(`[Main] Ignored IPC send after window teardown (${channel})`, error);
+  }
+}
+
 function hideMainWindowOnMinimize(): void {
   const win = state.mainWindow;
   if (!win || win.isDestroyed() || state.quitting) return;
@@ -494,7 +503,10 @@ function createOverlayWindow() {
     state.overlayWindow.webContents.send('window-resized', { width: b.width, height: b.height });
   });
 
-  state.overlayWindow.on('closed', () => {
+  const overlayWindow = state.overlayWindow;
+  if (!overlayWindow) return;
+  overlayWindow.on('closed', () => {
+    if (state.overlayWindow !== overlayWindow) return;
     state.overlayWindow = null;
     state.isOverlayVisible = false;
     state.overlayLocked = false;
@@ -733,9 +745,15 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
     return;
   }
   const activeOverlay = getActiveOverlayKind();
+  const interviewActive = state.interviewOverlayActive || state.interviewOverlayVisible || pcInterviewStarting || interviewHelper?.isListening();
   switch (action) {
     case 'screenshot': {
       const mode = configHelper.getProcessingMode();
+      // 面试悬浮框运行时，截图快捷键只采集屏幕，不隐式启动笔试悬浮框。
+      if (interviewActive) {
+        await handleScreenshot(false);
+        break;
+      }
       // 语音模式截图不创建、不显示笔试悬浮框。
       if (shouldEnsureExamOverlay(mode, 'screenshot')) {
         if (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible) await launchExamClient();
@@ -746,6 +764,20 @@ async function handleShortcutAction(action: ShortcutAction): Promise<void> {
     }
     case 'search': {
       const mode = configHelper.getProcessingMode();
+      // 面试期间仍允许使用笔试截图队列搜题；只有在确实需要展示答案时
+      // 才创建笔试悬浮框，避免 Alt+Q 把当前面试工作区切走。
+      if (interviewActive) {
+        if (!state.overlayWindow || state.overlayWindow.isDestroyed() || !state.isOverlayVisible) {
+          if (mode === 'voice') {
+            await handleSearchAction('voice');
+            break;
+          }
+          await launchExamClient();
+        }
+        else activateOverlay('exam');
+        await handleSearchAction('overlay');
+        break;
+      }
       // If the exam overlay is already visible, honor the exam search key even
       // when the persisted presentation mode is still voice. This also makes
       // the screenshot/search pair usable after Alt+B without a mode detour.
@@ -1266,7 +1298,10 @@ function createInterviewOverlayWindow() {
     state.interviewOverlayWindow?.webContents.setZoomFactor(state.zoomFactor);
   });
 
-  state.interviewOverlayWindow.on('closed', () => {
+  const interviewOverlayWindow = state.interviewOverlayWindow;
+  if (!interviewOverlayWindow) return;
+  interviewOverlayWindow.on('closed', () => {
+    if (state.interviewOverlayWindow !== interviewOverlayWindow) return;
     state.interviewOverlayWindow = null;
     state.interviewOverlayActive = false;
     state.interviewOverlayVisible = false;
@@ -1577,7 +1612,7 @@ async function initializeApp(): Promise<void> {
       ttsHelper, undefined, new RealtimeVoiceHelper(configHelper, 'mobile-realtime-voice'),
       { onEvent: (channel, payload) => companion?.onInterviewEvent(channel, payload) });
     companion = new CompanionController(configHelper, mobileInterview, (snapshot) => {
-      state.mainWindow?.webContents.send('companion:state', snapshot);
+      safeSend(state.mainWindow, 'companion:state', snapshot);
     });
     ipcMain.handle('companion:state', () => companion!.state());
     ipcMain.handle('companion:entry', (_event, route: string) => assistantEntryError(route));
@@ -1714,8 +1749,10 @@ if (!gotLock) {
   });
 
   app.on('before-quit', () => {
-    companion?.deactivate();
+    // Mark quit first: deactivation emits a final companion state update and
+    // must not race a BrowserWindow that Electron is already destroying.
     state.quitting = true;
+    companion?.deactivate();
     shortcutsHelper?.unregisterAll();
     processingHelper?.cancelStreaming();
     interviewHelper?.stop?.();

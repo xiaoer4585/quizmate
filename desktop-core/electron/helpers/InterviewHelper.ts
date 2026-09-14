@@ -728,7 +728,8 @@ export class InterviewHelper {
       return;
     }
     for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) win.webContents.send(channel, payload);
+      if (win.isDestroyed() || win.webContents.isDestroyed()) continue;
+      try { win.webContents.send(channel, payload); } catch { /* renderer may close during app shutdown */ }
     }
   }
 }

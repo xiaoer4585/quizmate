@@ -196,5 +196,5 @@ export class InterviewHelper {
   private ensureContextAccountScope(){const scope=this.configHelper.getInterviewAccountScope();if(scope===this.contextAccountScope)return;this.stopForWorkspace();this.contextAccountScope=scope;this.lastAnswer='';this.clearTasks();this.context={language:'zh',answerStyle:'concise',audioMode:'demo',...this.configHelper.getInterviewContext()}}
   async onTranscript(text:string){this.ensureContextAccountScope();if(!this.remote.active())await this.remote.open(this.context,this.authManager.getDeviceId());await this.remote.ingest(text,true,'manual')}
   async generateAnswer(question:string){this.ensureContextAccountScope();if(!this.remote.active())await this.remote.open(this.context,this.authManager.getDeviceId());await this.remote.ingest(question,true,'manual',true)}
-  private broadcast(channel:string,payload:unknown){if(this.companion){this.companion.onEvent(channel,payload);return}for(const win of BrowserWindow.getAllWindows())if(!win.isDestroyed())win.webContents.send(channel,payload)}
+  private broadcast(channel:string,payload:unknown){if(this.companion){this.companion.onEvent(channel,payload);return}for(const win of BrowserWindow.getAllWindows()){if(win.isDestroyed()||win.webContents.isDestroyed())continue;try{win.webContents.send(channel,payload)}catch{/* renderer may close during app shutdown */}}}
 }
