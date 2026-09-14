@@ -204,6 +204,25 @@ export class DesktopAuthManager {
       }, { timeoutMs: 15000 });
       return { ...data, success: true };
     } catch (e) {
+      // Older production API nodes can lag behind the account-ledger action.
+      // Retry through the profile-compatible action only when the endpoint
+      // explicitly reports UNKNOWN_ACTION; never mask auth/network failures.
+      if (e instanceof ApiError && e.code === 'UNKNOWN_ACTION') {
+        try {
+          const profile = await this.api.postAction<ProfileResult>(this.apiEndpoint, 'getAccountProfile', { accountToken: token }, { timeoutMs: 15000 });
+          return {
+            success: false,
+            accountId: typeof profile.account?.accountId === 'string' ? profile.account.accountId : undefined,
+            creditBalance: profile.creditBalance ?? profile.account?.credits ?? 0,
+            page,
+            pageSize,
+            total: 0,
+            records: [],
+            error: '当前服务节点尚未开放积分流水接口，请更新服务后重试。',
+            code: 'LEDGER_UNAVAILABLE',
+          };
+        } catch {}
+      }
       if (e instanceof ApiError) return { success: false, error: e.message, code: e.code };
       return { success: false, error: `网络错误: ${(e as Error).message}`, code: 'NETWORK_ERROR' };
     }

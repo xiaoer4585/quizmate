@@ -412,6 +412,23 @@ function activateRemainingOverlay(closedOrHidden: OverlayKind): void {
   if (isOverlayVisible(fallback)) activateOverlay(fallback);
 }
 
+function getOverlayPosition(saved: { x: number; y: number } | null, width: number, height: number): { x: number; y: number } {
+  const requested = saved || { x: 50, y: 50 };
+  const display = screen.getDisplayNearestPoint({ x: requested.x, y: requested.y });
+  const area = display.workArea;
+  // Keep the full overlay inside the active work area. The previous build
+  // allowed only a small sliver to remain visible, which still made Alt+B
+  // appear to do nothing when a monitor layout changed.
+  const minX = area.x;
+  const maxX = area.x + Math.max(0, area.width - width);
+  const minY = area.y;
+  const maxY = area.y + Math.max(0, area.height - height);
+  return {
+    x: Math.min(maxX, Math.max(minX, requested.x)),
+    y: Math.min(maxY, Math.max(minY, requested.y)),
+  };
+}
+
 function createOverlayWindow() {
   if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
@@ -423,14 +440,18 @@ function createOverlayWindow() {
   const savedPos = configHelper.getWindowPosition();
   const width = savedSize?.width || wd.overlayWidth;
   const height = savedSize?.height || wd.overlayHeight;
+  const safePosition = getOverlayPosition(savedPos, width, height);
+  if (!savedPos || safePosition.x !== savedPos.x || safePosition.y !== savedPos.y) {
+    configHelper.setWindowPosition(safePosition);
+  }
 
   state.overlayWindow = new BrowserWindow({
     width,
     height,
     minWidth: 200,
     minHeight: 40,
-    x: savedPos?.x ?? 50,
-    y: savedPos?.y ?? 50,
+    x: safePosition.x,
+    y: safePosition.y,
     alwaysOnTop: true,
     show: false,
     frame: false,
@@ -684,13 +705,14 @@ async function launchExamClient(): Promise<{ success: boolean; error?: string }>
   if (configHelper.getProcessingMode() === 'voice') {
     return { success: false, error: '当前为语音播报模式，无法启动笔试助手悬浮框。' };
   }
-  if (state.overlayLocked) {
+  if (state.overlayLocked && state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     // 悬浮框已存在, 只需显示它
-    if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
-      showOverlay();
-    }
+    showOverlay();
     return { success: true };
   }
+  // A stale lifecycle flag must never block recreation after a renderer or
+  // BrowserWindow crash/close. Rebuild the window from the last safe bounds.
+  if (state.overlayLocked) state.overlayLocked = false;
   state.overlayLocked = true;
   // 快捷键已在启动时注册, 无需重复注册
   await Promise.resolve(createOverlayWindow());
@@ -1241,6 +1263,8 @@ function createInterviewOverlayWindow() {
   const savedPos = configHelper.getWindowPosition();
   const width = savedSize?.width || wd.overlayWidth;
   const height = savedSize?.height || wd.overlayHeight;
+  const safePosition = getOverlayPosition(savedPos, width, height);
+  const interviewPosition = getOverlayPosition({ x: safePosition.x + 36, y: safePosition.y + 36 }, width, height);
 
   state.interviewOverlayWindow = new BrowserWindow({
     width,
@@ -1248,8 +1272,8 @@ function createInterviewOverlayWindow() {
     minWidth: 200,
     minHeight: 40,
     // 与笔试窗同时首次出现时保留少量错位，用户可看出两个窗口都已启动。
-    x: savedPos ? savedPos.x + 36 : 86,
-    y: savedPos ? savedPos.y + 36 : 86,
+    x: interviewPosition.x,
+    y: interviewPosition.y,
     alwaysOnTop: true,
     show: false,
     frame: false,
