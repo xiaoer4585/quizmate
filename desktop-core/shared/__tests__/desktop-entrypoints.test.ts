@@ -40,6 +40,8 @@ describe('desktop entry points', () => {
     expect(mainProcessSource).toContain("snapshotScreenshotOverlay('interview', state.interviewOverlayWindow)");
     expect(mainProcessSource).toContain("code: 'OVERLAY_HIDE_TIMEOUT'");
     expect(mainProcessSource).toContain('if (screenshotInFlight && !forceDuringScreenshot) return;');
+    expect(mainProcessSource).toContain('const hideDelayMs = Math.max(500');
+    expect(mainProcessSource).toContain('DWM still has the previous');
   });
 
   it('disables PC overlays while the companion workspace is active', () => {

@@ -603,8 +603,11 @@ function showOverlay(markActive = true, forceDuringScreenshot = false, opacity =
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     // Re-verify before every show. A visible window without strict protection
     // is never allowed, even for a single event-loop turn.
-    state.overlayWindow.setOpacity(0);
-    state.overlayWindow.hide();
+    const wasVisible = state.overlayWindow.isVisible() && state.isOverlayVisible;
+    if (!wasVisible) {
+      state.overlayWindow.setOpacity(0);
+      state.overlayWindow.hide();
+    }
     let protectedNow = false;
     try {
       const result = applyAllProtections(state.overlayWindow);
@@ -621,7 +624,7 @@ function showOverlay(markActive = true, forceDuringScreenshot = false, opacity =
     }
     state.overlayWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
     state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-    state.overlayWindow.showInactive();
+    if (!wasVisible) state.overlayWindow.showInactive();
     state.isOverlayVisible = true;
     if (markActive) activateOverlay('exam');
   }
@@ -1003,6 +1006,14 @@ async function handleScreenshot(isExtra: boolean): Promise<void> {
       else state.interviewOverlayVisible = false;
     });
     const overlaysHidden = !needsTemporaryHide || await waitForScreenshotOverlaysHidden(overlaySnapshots);
+    // Native visibility can be false while DWM still has the previous
+    // transparent surface/shadow queued for one or more compositor frames.
+    // Keep the previously validated capture settle delay before sampling the
+    // desktop so BitBlt/screenshot-desktop cannot capture that stale surface.
+    if (needsTemporaryHide && overlaysHidden) {
+      const hideDelayMs = Math.max(500, Number(appConfig.screenshotHideDelayMs) || 0);
+      await new Promise((resolve) => setTimeout(resolve, hideDelayMs));
+    }
 
     let result: ScreenshotResult;
     try {
@@ -1434,8 +1445,11 @@ function showInterviewOverlay(markActive = true, forceDuringScreenshot = false, 
   if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   if (screenshotInFlight && !forceDuringScreenshot) return;
   if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()) {
-    state.interviewOverlayWindow.setOpacity(0);
-    state.interviewOverlayWindow.hide();
+    const wasVisible = state.interviewOverlayWindow.isVisible() && state.interviewOverlayVisible;
+    if (!wasVisible) {
+      state.interviewOverlayWindow.setOpacity(0);
+      state.interviewOverlayWindow.hide();
+    }
     let protectedNow = false;
     try {
       const result = applyAllProtections(state.interviewOverlayWindow);
@@ -1451,7 +1465,7 @@ function showInterviewOverlay(markActive = true, forceDuringScreenshot = false, 
       return;
     }
     state.interviewOverlayWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
-    state.interviewOverlayWindow.showInactive();
+    if (!wasVisible) state.interviewOverlayWindow.showInactive();
     state.interviewOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
     state.interviewOverlayVisible = true;
     if (markActive) activateOverlay('interview');
