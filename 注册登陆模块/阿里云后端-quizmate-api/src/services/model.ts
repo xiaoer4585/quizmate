@@ -603,9 +603,11 @@ export function createAnalysisModel(
       ? buildImageContent(resolved.apiFormat, text, request.screenshot)
       : text;
 
-    // 面试模式为非流式调用，耗时与输出长度成正比：上限收紧保证最坏耗时（提示词要求长度按复杂度自适应）
+    // 面试模式为非流式调用，耗时与输出长度成正比。简洁回答使用更
+    // 小的上限，保留自我介绍/英文自我介绍等简单问题的完整回答；详细
+    // 模式保留原上限，避免影响复杂问题的表达完整性。
     const maxTokens = request.mode === "interview"
-      ? 1200
+      ? (text.includes("回答风格：详细") || text.includes("详细回答") ? 1200 : 800)
       : request.mode === "universal"
         ? 1600
       : hasImage ? 4000 : 1800;

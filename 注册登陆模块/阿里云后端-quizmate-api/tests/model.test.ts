@@ -125,8 +125,8 @@ describe("model result parser", () => {
 
     expect(calledUrl).toBe("https://fast.example/chat/completions");
     expect(calledBody.model).toBe("doubao-seed-2.0-mini");
-    // 面试模式为非流式调用，max_tokens 上限收紧（CHG-20260820-07 速度修复）
-    expect(calledBody.max_tokens).toBe(1200);
+    // 简洁面试回答使用更小的输出上限，降低首答延迟；详细模式仍为 1200。
+    expect(calledBody.max_tokens).toBe(800);
     expect(calledBody.thinking).toEqual({ type: "disabled" });
     expect((calledBody.messages as Array<{ content: string }>)[0].content).toContain("实时面试回答助手");
     expect((calledBody.messages as Array<{ content: string }>)[0].content).toContain("第一人称");

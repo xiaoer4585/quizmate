@@ -147,13 +147,13 @@ export function applyAllProtections(win: BrowserWindow): ProtectionResult {
  */
 export function startProtectionWatchdog(
   win: BrowserWindow,
-  opts: { label?: string; intervalMs?: number } = {}
+  opts: { label?: string; intervalMs?: number; onProtectionFailure?: () => void } = {}
 ): ProtectionWatchdog {
   if (process.platform !== 'darwin') {
     return { stop: () => {} }
   }
   const label = opts.label || 'overlay'
-  const intervalMs = Math.max(opts.intervalMs ?? 2000, 500)
+  const intervalMs = Math.max(opts.intervalMs ?? 500, 250)
   let reapplyCount = 0
   let stopped = false
   let restoringAlwaysOnTop = false
@@ -196,6 +196,10 @@ export function startProtectionWatchdog(
       // the overlay unprotected.
       const protectedNow = readContentProtection(win)
       if (protectedNow !== true) {
+        // null means this Electron build has no readback API; keep the
+        // existing idempotent reapply behavior. Only an explicit false is a
+        // verified protection failure that should hide the overlay.
+        if (protectedNow === false) opts.onProtectionFailure?.()
         reapplyCount++
         if (reapplyCount === 1 || reapplyCount % 10 === 0) {
           console.log(`[MacProtection] watchdog(${label}): reapplying content protection (${reapplyCount})`)

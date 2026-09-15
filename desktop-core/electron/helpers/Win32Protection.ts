@@ -389,13 +389,13 @@ export interface ProtectionWatchdog {
  */
 export function startProtectionWatchdog(
   win: BrowserWindow,
-  opts: { label?: string; intervalMs?: number } = {}
+  opts: { label?: string; intervalMs?: number; onProtectionFailure?: () => void } = {}
 ): ProtectionWatchdog {
   if (process.platform !== 'win32') {
     return { stop: () => {} }
   }
   const label = opts.label || 'overlay'
-  const intervalMs = Math.max(opts.intervalMs ?? 2000, 500)
+  const intervalMs = Math.max(opts.intervalMs ?? 500, 250)
   let driftCount = 0
   const timer = setInterval(() => {
     try {
@@ -405,7 +405,12 @@ export function startProtectionWatchdog(
       }
       const target = getTargetAffinity()
       const actual = getWindowDisplayAffinity(win)
-      if (actual === null) return // FFI 不可用, 静默跳过
+      if (actual === null) {
+        // Fail closed: a visible overlay without a verified affinity is never
+        // acceptable. The caller hides it and retries protection before show.
+        opts.onProtectionFailure?.()
+        return
+      }
       if (actual !== target) {
         driftCount++
         console.warn(
@@ -415,6 +420,7 @@ export function startProtectionWatchdog(
         const after = getWindowDisplayAffinity(win)
         if (after !== target) {
           console.error(`[Win32Protection] watchdog(${label}): 重新应用后仍为 ${hex(after)}`)
+          opts.onProtectionFailure?.()
         } else {
           console.log(`[Win32Protection] watchdog(${label}): 已恢复 ${hex(after)}`)
         }

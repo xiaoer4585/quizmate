@@ -24,7 +24,7 @@ import { ByteDanceTtsHelper } from './helpers/ByteDanceTtsHelper';
 import { SapiVoiceHelper } from './helpers/SapiVoiceHelper';
 import { RealtimeVoiceHelper } from './helpers/RealtimeVoiceHelper';
 import { PermissionOnboardingHelper } from './helpers/PermissionOnboardingHelper';
-import { applyAllProtections, applyAntiCapture, readContentProtection, startProtectionWatchdog, ProtectionWatchdog, ProtectionResult } from './helpers/protection';
+import { applyAllProtections, readContentProtection, startProtectionWatchdog, ProtectionWatchdog, ProtectionResult } from './helpers/protection';
 import { InterviewHelper } from './helpers/InterviewHelper';
 import { OverlayManager } from './OverlayManager';
 import { UpdateChecker } from './UpdateChecker';
@@ -430,6 +430,7 @@ function getOverlayPosition(saved: { x: number; y: number } | null, width: numbe
 }
 
 function createOverlayWindow() {
+  let overlayProtectionReady = false;
   if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
     showOverlay();
@@ -482,20 +483,37 @@ function createOverlayWindow() {
 
   // ===== 防捕获 / 防检测保护 =====
   // 应用后读回验证(applyAllProtections 内部), 并由看门狗周期性监测亲和性漂移、自动重新应用
-  const applyProtection = () => {
-    if (!state.overlayWindow || state.overlayWindow.isDestroyed()) return;
+  const applyProtection = (): boolean => {
+    if (!state.overlayWindow || state.overlayWindow.isDestroyed()) return false;
     try {
       const result: ProtectionResult = applyAllProtections(state.overlayWindow);
       console.log('[Main] Overlay protection applied:', JSON.stringify(result));
+      // Windows is fail-closed: only WDA_EXCLUDEFROMCAPTURE with a successful
+      // readback may be shown. WDA_MONITOR/unknown affinity is not enough for
+      // the strict no-capture requirement.
+      overlayProtectionReady = process.platform !== 'win32'
+        ? result.success
+        : result.verified === true && result.details?.captureExcluded === true;
+      if (!overlayProtectionReady) state.overlayWindow.hide();
+      return overlayProtectionReady;
     } catch (e) {
       console.warn('[Main] Protection failed:', e);
+      overlayProtectionReady = false;
+      try { state.overlayWindow.hide(); } catch {}
+      return false;
     }
   };
   applyProtection();
   state.overlayWindow.once('ready-to-show', applyProtection);
   state.overlayWindow.once('show', applyProtection);
   if (overlayProtectionWatchdog) overlayProtectionWatchdog.stop();
-  overlayProtectionWatchdog = startProtectionWatchdog(state.overlayWindow, { label: 'exam-overlay' });
+  overlayProtectionWatchdog = startProtectionWatchdog(state.overlayWindow, {
+    label: 'exam-overlay',
+    onProtectionFailure: () => {
+      overlayProtectionReady = false;
+      if (state.overlayWindow && !state.overlayWindow.isDestroyed()) state.overlayWindow.hide();
+    },
+  });
 
   state.overlayWindow.webContents.on('did-finish-load', () => {
     state.overlayWindow?.webContents.send('background-opacity-changed', configHelper.getBackgroundOpacity());
@@ -548,7 +566,7 @@ function createOverlayWindow() {
 
   // 等页面加载完成后再显示，避免黑屏（loadURL 是异步的）
   state.overlayWindow.once('ready-to-show', () => {
-    if (screenshotInFlight) {
+    if (screenshotInFlight || !overlayProtectionReady) {
       hideOverlay();
       return;
     }
@@ -561,7 +579,7 @@ function createOverlayWindow() {
   });
   // 兜底：如果 ready-to-show 在 3 秒内没触发，强制显示
   setTimeout(() => {
-    if (screenshotInFlight) return;
+    if (screenshotInFlight || !overlayProtectionReady) return;
     if (state.overlayWindow && !state.overlayWindow.isDestroyed() && !state.isOverlayVisible) {
       state.overlayWindow.show();
       state.overlayWindow.showInactive();
@@ -583,15 +601,28 @@ function showOverlay(markActive = true, forceDuringScreenshot = false, opacity =
   // screen until handleScreenshot has restored the original state.
   if (screenshotInFlight && !forceDuringScreenshot) return;
   if (state.overlayWindow && !state.overlayWindow.isDestroyed()) {
-    state.overlayWindow.showInactive();
-    state.overlayWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
-    // 始终保持鼠标穿透，仅通过快捷键操作
-    state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
-    state.isOverlayVisible = true;
-    // 重新应用防捕获保护: 窗口隐藏/显示后, display affinity 可能被重置
-    try { applyAntiCapture(state.overlayWindow); } catch (e) {
-      console.warn('[Main] Re-apply anti-capture on show failed:', e);
+    // Re-verify before every show. A visible window without strict protection
+    // is never allowed, even for a single event-loop turn.
+    state.overlayWindow.setOpacity(0);
+    state.overlayWindow.hide();
+    let protectedNow = false;
+    try {
+      const result = applyAllProtections(state.overlayWindow);
+      protectedNow = process.platform !== 'win32'
+        ? result.success
+        : result.verified === true && result.details?.captureExcluded === true;
+    } catch (error) {
+      console.warn('[Main] Re-apply strict overlay protection failed:', error);
     }
+    if (!protectedNow) {
+      state.overlayWindow.hide();
+      state.isOverlayVisible = false;
+      return;
+    }
+    state.overlayWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
+    state.overlayWindow.setIgnoreMouseEvents(true, { forward: true });
+    state.overlayWindow.showInactive();
+    state.isOverlayVisible = true;
     if (markActive) activateOverlay('exam');
   }
 }
@@ -1254,6 +1285,7 @@ async function switchProcessingMode(mode: 'overlay' | 'voice'): Promise<void> {
 // ===== 面试悬浮窗（独立 BrowserWindow，加载 /overlay-interview 路由） =====
 // 参考 Cuemate 方式：透明悬浮窗 + 快捷键控制，完全沿用笔试悬浮窗的透明穿透方案
 function createInterviewOverlayWindow() {
+  let interviewProtectionReady = false;
   if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()) {
     showInterviewOverlay();
     return;
@@ -1303,18 +1335,32 @@ function createInterviewOverlayWindow() {
   state.interviewOverlayWindow.on('page-title-updated', (e) => e.preventDefault());
 
   // 防捕获保护（与笔试悬浮窗一致：应用后读回验证 + 看门狗监测漂移）
-  const applyInterviewProtection = () => {
-    if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) return;
+  const applyInterviewProtection = (): boolean => {
+    if (!state.interviewOverlayWindow || state.interviewOverlayWindow.isDestroyed()) return false;
     try {
       const result: ProtectionResult = applyAllProtections(state.interviewOverlayWindow);
       console.log('[Main] Interview overlay protection applied:', JSON.stringify(result));
+      interviewProtectionReady = process.platform !== 'win32'
+        ? result.success
+        : result.verified === true && result.details?.captureExcluded === true;
+      if (!interviewProtectionReady) state.interviewOverlayWindow.hide();
+      return interviewProtectionReady;
     } catch (e) { console.warn('[Main] Interview overlay protection failed:', e); }
+    interviewProtectionReady = false;
+    try { state.interviewOverlayWindow.hide(); } catch {}
+    return false;
   };
   applyInterviewProtection();
   state.interviewOverlayWindow.once('ready-to-show', applyInterviewProtection);
   state.interviewOverlayWindow.once('show', applyInterviewProtection);
   if (interviewProtectionWatchdog) interviewProtectionWatchdog.stop();
-  interviewProtectionWatchdog = startProtectionWatchdog(state.interviewOverlayWindow, { label: 'interview-overlay' });
+  interviewProtectionWatchdog = startProtectionWatchdog(state.interviewOverlayWindow, {
+    label: 'interview-overlay',
+    onProtectionFailure: () => {
+      interviewProtectionReady = false;
+      if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()) state.interviewOverlayWindow.hide();
+    },
+  });
 
   state.interviewOverlayWindow.webContents.on('did-finish-load', () => {
     state.interviewOverlayWindow?.webContents.send('background-opacity-changed', configHelper.getBackgroundOpacity());
@@ -1359,7 +1405,7 @@ function createInterviewOverlayWindow() {
 
   // 等页面加载完成后再显示，避免黑屏
   state.interviewOverlayWindow.once('ready-to-show', () => {
-    if (screenshotInFlight || assistantWorkspace !== 'pc' || workspaceTransitioning) {
+    if (screenshotInFlight || !interviewProtectionReady || assistantWorkspace !== 'pc' || workspaceTransitioning) {
       hideInterviewOverlay();
       return;
     }
@@ -1372,7 +1418,7 @@ function createInterviewOverlayWindow() {
   });
   // 兜底：3 秒内 ready-to-show 未触发则强制显示
   setTimeout(() => {
-    if (screenshotInFlight || assistantWorkspace !== 'pc' || workspaceTransitioning) return;
+    if (screenshotInFlight || !interviewProtectionReady || assistantWorkspace !== 'pc' || workspaceTransitioning) return;
     if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed() && !state.interviewOverlayVisible) {
       state.interviewOverlayWindow.show();
       state.interviewOverlayWindow.showInactive();
@@ -1388,14 +1434,26 @@ function showInterviewOverlay(markActive = true, forceDuringScreenshot = false, 
   if (assistantWorkspace !== 'pc' || workspaceTransitioning) return;
   if (screenshotInFlight && !forceDuringScreenshot) return;
   if (state.interviewOverlayWindow && !state.interviewOverlayWindow.isDestroyed()) {
+    state.interviewOverlayWindow.setOpacity(0);
+    state.interviewOverlayWindow.hide();
+    let protectedNow = false;
+    try {
+      const result = applyAllProtections(state.interviewOverlayWindow);
+      protectedNow = process.platform !== 'win32'
+        ? result.success
+        : result.verified === true && result.details?.captureExcluded === true;
+    } catch (error) {
+      console.warn('[Main] Re-apply strict interview protection failed:', error);
+    }
+    if (!protectedNow) {
+      state.interviewOverlayWindow.hide();
+      state.interviewOverlayVisible = false;
+      return;
+    }
     state.interviewOverlayWindow.setOpacity(Math.max(0, Math.min(1, opacity)));
     state.interviewOverlayWindow.showInactive();
     state.interviewOverlayWindow.setIgnoreMouseEvents(true, { forward: true });
     state.interviewOverlayVisible = true;
-    // 重新应用防捕获保护: 窗口隐藏/显示后 display affinity 可能被重置
-    try { applyAntiCapture(state.interviewOverlayWindow); } catch (e) {
-      console.warn('[Main] Re-apply anti-capture on interview show failed:', e);
-    }
     if (markActive) activateOverlay('interview');
   }
 }

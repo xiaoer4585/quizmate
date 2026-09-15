@@ -506,7 +506,10 @@ export class InterviewHelper {
       // 语音 final 只是 ASR 分片，不立即请求 AI；先合并成完整问题，再按
       // 一道完整题提交一次，避免半句和后半句各自扣费。
       const incomplete = isLikelyIncompleteInterviewFragment(raw);
-      const settleMs = incomplete ? ASR_FRAGMENT_SETTLE_MS : Math.max(2_000, ASR_SILENCE_COMMIT_MS);
+      // A clearly complete sentence only needs a short coalescing window. Keep
+      // the longer 6s window for unfinished fragments so long questions still
+      // merge, while simple questions can reach the model about 600ms sooner.
+      const settleMs = incomplete ? ASR_FRAGMENT_SETTLE_MS : Math.max(1_400, ASR_SILENCE_COMMIT_MS);
       this.mergeVoiceQuestionDraft(raw, accountScope, settleMs);
       return;
     }
@@ -561,17 +564,15 @@ export class InterviewHelper {
   }
 
   private createRequestContext() {
-    const boundedContext = process.platform === 'darwin'
-      ? limitInterviewRequestContext({
-          jobDescription: this.context.jobDescription,
-          resumeText: this.context.resumeText,
-          recentConversation: this.getRecentConversationContext(),
-        })
-      : {
-          jobDescription: this.context.jobDescription,
-          resumeText: this.context.resumeText,
-          recentConversation: this.getRecentConversationContext(),
-        };
+    // Apply the same bounded context on every desktop platform. Windows used
+    // to send the full stored resume/history even though the service compacts
+    // it again, adding request upload and prompt processing latency without
+    // changing the answer semantics.
+    const boundedContext = limitInterviewRequestContext({
+      jobDescription: this.context.jobDescription,
+      resumeText: this.context.resumeText,
+      recentConversation: this.getRecentConversationContext(),
+    });
     return {
       position: this.context.position,
       company: this.context.company,

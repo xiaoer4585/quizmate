@@ -119,6 +119,7 @@ export function buildInterviewPrompt(
       filled,
       continuityInstruction,
       selfIntroInstruction,
+      `回答风格：${styleText}`,
       "不要虚构简历中不存在的事实；信息不足时给出稳妥的通用表述。",
       "硬性排版要求：结论、理由和总结分段；多个要点逐条换行并使用 1、2、3 编号；每个编号单独一行，段落之间空一行，禁止把多个要点挤在同一行。",
       jsonRequirement

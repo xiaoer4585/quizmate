@@ -17,7 +17,7 @@ export const readContentProtection: (win: BrowserWindow) => boolean | null =
   process.platform === 'darwin' ? Mac.readContentProtection : (() => null)
 export const startProtectionWatchdog: (
   win: BrowserWindow,
-  opts?: { label?: string; intervalMs?: number }
+  opts?: { label?: string; intervalMs?: number; onProtectionFailure?: () => void }
 ) => Win32.ProtectionWatchdog = impl.startProtectionWatchdog
 export const removeAntiCapture: (win: BrowserWindow) => boolean = impl.removeAntiCapture
 export const isExcludeFromCaptureSupported: () => boolean = impl.isExcludeFromCaptureSupported
