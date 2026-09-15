@@ -11,7 +11,7 @@
   "tutorialUrl": "https://quizmate.cn/",
   "allowedExternalHosts": ["quizmate.cn", "www.quizmate.cn", "www.quizmate.vip", "offer.quizmate.cn", "www.offer.quizmate.cn"],
   "creditCostPerSuccess": 10,
-  "creditCostPerInterview": 20,
+  "creditCostPerInterview": 10,
   "maxScreenshots": 5,
   "minScreenshotIntervalMs": 300,
   "defaultBackgroundOpacity": 0.8,

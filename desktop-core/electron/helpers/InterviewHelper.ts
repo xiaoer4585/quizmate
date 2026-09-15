@@ -504,7 +504,7 @@ export class InterviewHelper {
         return;
       }
       // 语音 final 只是 ASR 分片，不立即请求 AI；先合并成完整问题，再按
-      // 一道题提交一次，避免半句和后半句各自扣 20 积分。
+      // 一道完整题提交一次，避免半句和后半句各自扣费。
       const incomplete = isLikelyIncompleteInterviewFragment(raw);
       const settleMs = incomplete ? ASR_FRAGMENT_SETTLE_MS : Math.max(2_000, ASR_SILENCE_COMMIT_MS);
       this.mergeVoiceQuestionDraft(raw, accountScope, settleMs);
@@ -537,7 +537,7 @@ export class InterviewHelper {
     this.broadcast('interview:transcript', { text: question });
     const task = this.addTask(question);
     // 每一道完整面试问题只创建一个 AI 请求；客户端先合并 ASR 分片，
-    // 后端在该请求成功后统一扣减 20 积分。未说完整的半句不会单独扣费。
+    // 后端在该请求成功后统一扣减 10 积分。未说完整的半句不会单独扣费。
     await this.enqueueAnswer(question, task.id, requestContext);
   }
 

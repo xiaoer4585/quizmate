@@ -122,7 +122,7 @@ describe("interview speech action", () => {
     })).rejects.toMatchObject({ code: "AUTH_REQUIRED" });
   });
 
-  it("calls the model and charges 20 credits after a successful answer", async () => {
+  it("calls the model and charges 10 credits after a successful answer", async () => {
     const writes: Array<{ sql: string; values?: unknown[] }> = [];
     const db = {
       query: async <T extends QueryResultRow>(sql: string): Promise<QueryResult<T>> => {
@@ -171,12 +171,12 @@ describe("interview speech action", () => {
     expect(result).toMatchObject({
       answer: "我会围绕岗位匹配度介绍自己的经历。",
       keyPoints: [],
-      creditCost: 20,
-      creditBalance: 80
+      creditCost: 10,
+      creditBalance: 90
     });
     expect(writes.some(({ sql, values }) =>
       sql.includes("INSERT INTO credit_ledger")
-      && values?.[1] === -20
+      && values?.[1] === -10
       && String(values?.[3]).startsWith("interview_")
     )).toBe(true);
     expect(writes.some(({ sql }) => sql.includes("INSERT INTO usage_logs"))).toBe(true);
@@ -217,8 +217,8 @@ describe("interview speech action", () => {
     const second = await handler(input, requestContext);
 
     expect(runAnalysisModel).toHaveBeenCalledTimes(2);
-    expect(first).toMatchObject({ creditCost: 20, creditBalance: 80 });
-    expect(second).toMatchObject({ creditCost: 20, creditBalance: 60 });
+    expect(first).toMatchObject({ creditCost: 10, creditBalance: 90 });
+    expect(second).toMatchObject({ creditCost: 10, creditBalance: 80 });
     expect(ledgerRequestIds).toHaveLength(2);
     expect(new Set(ledgerRequestIds).size).toBe(2);
   });

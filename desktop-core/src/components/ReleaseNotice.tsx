@@ -51,7 +51,7 @@ export default function ReleaseNotice({ appVersion }: { appVersion: string }) {
             <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-sm font-semibold text-emerald-300">2</span>
             <div>
               <div className="font-medium text-slate-100">面试助手更新上线</div>
-              <p className="mt-1 text-sm leading-6 text-slate-400">全面提升响应速度，每个问题仅消耗 20 积分，回复更便宜，速速体验。</p>
+              <p className="mt-1 text-sm leading-6 text-slate-400">全面提升响应速度，每个完整问题仅消耗 10 积分，回复更便宜，速速体验。</p>
             </div>
           </div>
         </div>

@@ -1,5 +1,8 @@
 export const CREDIT_COST_PER_SUCCESS = 10;
-export const CREDIT_COST_PER_INTERVIEW = 20;
+// Each successfully answered, complete interview question consumes one fixed
+// charge. Keep this value server-side so PC and companion clients cannot
+// choose a different price.
+export const CREDIT_COST_PER_INTERVIEW = 10;
 export const REGISTER_BONUS_CREDITS = 50;
 
 // 邀请注册机制常量

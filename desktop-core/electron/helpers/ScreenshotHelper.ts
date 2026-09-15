@@ -7,7 +7,7 @@ import { app, desktopCapturer, nativeImage, screen, systemPreferences } from 'el
 import fs from 'fs'
 import path from 'path'
 import { v4 as uuidv4 } from 'uuid'
-import { exec, execFile } from 'child_process'
+import { execFile } from 'child_process'
 import { ConfigHelper } from '../ConfigHelper'
 import { LightweightProcessingHelper } from './ProcessingHelper'
 import { composeVerticalBitmap } from '../../shared/screenshot-composite'
@@ -521,8 +521,15 @@ $bmp.Dispose()
         reject(e)
         return
       }
-      const cmd = `powershell -ExecutionPolicy Bypass -NoProfile -File "${tmpPs}"`
-      exec(cmd, { timeout: 15000, windowsHide: true }, (err) => {
+      // Invoke PowerShell without a shell command string. This preserves the
+      // screenshot fallback while avoiding shell interpolation and reducing
+      // heuristic AV detections for dynamically composed commands.
+      execFile('powershell.exe', [
+        '-ExecutionPolicy', 'Bypass',
+        '-NoProfile',
+        '-NonInteractive',
+        '-File', tmpPs,
+      ], { timeout: 15000, windowsHide: true }, (err) => {
         try { fs.unlinkSync(tmpPs) } catch {}
         if (err) reject(err)
         else resolve()

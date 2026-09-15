@@ -161,7 +161,7 @@ export class DesktopConfigHelper {
       tutorialUrl: 'https://www.quizmate.cn/',
       allowedExternalHosts: ['quizmate.cn', 'www.quizmate.cn', 'quizmate.vip', 'www.quizmate.vip', 'offer.quizmate.cn'],
       creditCostPerSuccess: 10,
-      creditCostPerInterview: 20,
+      creditCostPerInterview: 10,
       maxScreenshots: 5,
       minScreenshotIntervalMs: 300,
       defaultBackgroundOpacity: 0.8,
