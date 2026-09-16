@@ -8,7 +8,7 @@ import './index.css';
 
 // 悬浮窗路由检测：在 React 渲染前设置背景，防止透明窗口黑屏
 const hash = window.location.hash || '';
-const isOverlayWindow = hash.includes('overlay-exam') || hash.includes('overlay-interview');
+const isOverlayWindow = hash.includes('overlay-exam') || hash.includes('overlay-interview') || hash.includes('overlay-capture');
 if (isOverlayWindow) {
   // 悬浮窗：移除所有深色背景，确保透明
   document.documentElement.classList.remove('dark');

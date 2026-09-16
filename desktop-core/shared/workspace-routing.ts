@@ -1,4 +1,5 @@
 import type { ShortcutAction } from './shortcuts';
+import type { CompanionExamTriggerMode } from './mobile-companion';
 
 export type AssistantWorkspace = 'pc' | 'mobile';
 export type ShortcutDestination = 'pc' | 'mobile-exam' | 'mobile-interview' | 'system' | 'ignore';
@@ -13,6 +14,7 @@ export function routeWorkspaceShortcut(
   workspace: AssistantWorkspace,
   transitioning: boolean,
   action: ShortcutAction,
+  captureMode: CompanionExamTriggerMode = 'shortcut',
 ): ShortcutDestination {
   if (action === 'quit' || action === 'restore_main_window') return 'system';
   if (transitioning) return 'ignore';
@@ -20,7 +22,8 @@ export function routeWorkspaceShortcut(
   // Shared global shortcuts are routed to the active workspace. In mobile
   // workspace the three exam actions are deliberately isolated from the PC
   // overlay, while interview start remains a page-button-only operation.
-  if (action === 'screenshot' || action === 'search' || action === 'copy_content') return 'mobile-exam';
+  if (action === 'copy_content') return 'mobile-exam';
+  if ((action === 'screenshot' || action === 'search') && captureMode === 'shortcut') return 'mobile-exam';
   return 'ignore';
 }
 

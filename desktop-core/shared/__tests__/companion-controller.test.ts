@@ -41,6 +41,21 @@ test('mobile exam shortcuts capture first and analyze only after search', async 
   expect(published.some(c => c.status === 'done' && c.question === 'question' && c.answer === 'answer')).toBe(true);
 });
 
+test('transparent click captures and searches one fresh image per click', async () => {
+  const { controller } = fixture();
+  await controller.pair(); await controller.activate();
+  controller.setExamTriggerMode('transparent-click');
+  await controller.captureAndSearchOnce();
+  expect(mocks.capture).toHaveBeenCalledTimes(1);
+  expect(mocks.analyze).toHaveBeenCalledTimes(1);
+  await controller.sync();
+  const published = mocks.post.mock.calls.filter(c => c[1] === 'publishRelayResult').map(c => c[2].card);
+  expect(published.some(c => c.status === 'done' && c.answer === 'answer')).toBe(true);
+  await controller.captureAndSearchOnce();
+  expect(mocks.capture).toHaveBeenCalledTimes(2);
+  expect(mocks.analyze).toHaveBeenCalledTimes(2);
+});
+
 test('pairing fails clearly when the test service omits the phone URL', async () => {
   const { controller } = fixture();
   mocks.post.mockImplementationOnce(async () => ({ sessionId: 'session', code: '123456' }));

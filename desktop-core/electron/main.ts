@@ -32,12 +32,16 @@ import { ShortcutAction, ProcessingMode } from '../shared/shortcuts';
 import { selectActiveOverlay, selectFreshScreenshot, shouldEnsureExamOverlay } from '../shared/overlay-state';
 import { toBusinessVersion } from './version';
 import { CompanionController } from './helpers/CompanionController';
+import { TransparentCaptureOverlayManager } from './TransparentCaptureOverlayManager';
+import type { CompanionState } from '../shared/mobile-companion';
 import { hideScreenshotOverlay, snapshotScreenshotOverlay, waitForScreenshotOverlaysHidden, type ScreenshotOverlaySnapshot } from './helpers/ScreenshotOverlayGuard';
 import { workspaceEntryError, routeWorkspaceShortcut, supportsCompanionDesktopPlatform, type AssistantWorkspace } from '../shared/workspace-routing';
 
 let assistantWorkspace: AssistantWorkspace = 'pc';
 let workspaceTransitioning = false;
 let companion: CompanionController | undefined;
+let transparentCapture: TransparentCaptureOverlayManager | undefined;
+let transparentCaptureInFlight = false;
 let mobileInterview: InterviewHelper | undefined;
 let pcSearchCount = 0;
 let pcInterviewStarting = false;
@@ -64,10 +68,63 @@ async function changeAssistantWorkspace(target: AssistantWorkspace) {
       closeInterviewOverlay();
       mobileInterview?.setContext({ ...interviewHelper.getContext(), audioMode: configHelper.getInterviewContext().audioMode || 'demo', resumeText: interviewHelper.getActiveResume()?.text });
       await companion.activate();
-    } else companion.deactivate();
+    } else {
+      companion.deactivate();
+      transparentCapture?.hide(false);
+    }
     assistantWorkspace = target;
     return companion.state();
   } finally { workspaceTransitioning = false; }
+}
+
+function companionStateWithTransparentCapture(snapshot?: CompanionState): CompanionState {
+  const base = snapshot || companion?.state();
+  if (!base) throw new Error('双机协作尚未初始化');
+  const capture = transparentCapture?.state();
+  return {
+    ...base,
+    transparentCaptureVisible: capture?.visible === true,
+    transparentCaptureConfiguring: capture?.configuring === true,
+    transparentCaptureScale: capture?.scale ?? base.transparentCaptureScale,
+    transparentCaptureBounds: capture?.bounds ?? base.transparentCaptureBounds,
+  };
+}
+
+function syncTransparentCapture(snapshot?: CompanionState) {
+  if (!transparentCapture) return;
+  const current = snapshot || companion?.state();
+  const shouldShow = !!current
+    && current.workspace === 'mobile'
+    && current.connected === true
+    && current.captureMode === 'transparent-click'
+    && current.transparentCaptureEnabled !== false;
+  transparentCapture.sync(shouldShow);
+}
+
+async function handleTransparentCaptureClick() {
+  if (transparentCaptureInFlight || !companion || assistantWorkspace !== 'mobile' || workspaceTransitioning) return;
+  const current = companion.state();
+  if (current.captureMode !== 'transparent-click') return;
+  transparentCaptureInFlight = true;
+  const windowWasVisible = transparentCapture?.temporarilyHide() === true;
+  const overlaySnapshots: ScreenshotOverlaySnapshot[] = [
+    snapshotScreenshotOverlay('exam', state.overlayWindow),
+    snapshotScreenshotOverlay('interview', state.interviewOverlayWindow),
+  ];
+  overlaySnapshots.forEach((snapshot) => { if (snapshot.wasVisible) hideScreenshotOverlay(snapshot); });
+  const hidden = await waitForScreenshotOverlaysHidden(overlaySnapshots);
+  try {
+    if (!hidden) throw new Error('截图前无法确认悬浮框已隐藏，请重试');
+    const delay = Math.max(500, Number(configHelper.getAppConfig().screenshotHideDelayMs) || 0);
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    await companion.captureAndSearchOnce();
+  } catch (error) {
+    safeSend(state.mainWindow, 'companion:error', error instanceof Error ? error.message : '透明点击截图失败');
+  } finally {
+    if (windowWasVisible || companion.state().captureMode === 'transparent-click') syncTransparentCapture();
+    transparentCaptureInFlight = false;
+    safeSend(state.mainWindow, 'companion:state', companionStateWithTransparentCapture());
+  }
 }
 
 // ===== 平台常量（唯一的平台差异入口） =====
@@ -778,7 +835,8 @@ function cancelShortcutTest() {
 // ===== 快捷键处理 =====
 // 笔试/面试生命周期独立；窗口调节类动作只路由到最近启动或显示的悬浮窗。
 async function handleShortcutAction(action: ShortcutAction): Promise<void> {
-  const destination = routeWorkspaceShortcut(assistantWorkspace, workspaceTransitioning, action);
+  const captureMode = companion?.state().captureMode || 'shortcut';
+  const destination = routeWorkspaceShortcut(assistantWorkspace, workspaceTransitioning, action, captureMode);
   if (destination === 'ignore') return;
   if (destination === 'mobile-exam') {
     try {
@@ -1703,14 +1761,24 @@ async function initializeApp(): Promise<void> {
   ctx.interview = interviewHelper;
 
   if (SUPPORTS_COMPANION) {
+    transparentCapture = new TransparentCaptureOverlayManager(
+      configHelper,
+      getRendererUrl('#/overlay-capture'),
+      getPreloadPath(),
+      () => { void handleTransparentCaptureClick(); },
+      () => {
+        if (companion) safeSend(state.mainWindow, 'companion:state', companionStateWithTransparentCapture());
+      },
+    );
     const silentOverlay = { render() {}, renderTaskList() {}, show() {}, hide() {}, clear() {} };
     mobileInterview = new InterviewHelper(configHelper, authManager, silentOverlay as unknown as OverlayManager,
       ttsHelper, undefined, new RealtimeVoiceHelper(configHelper, 'mobile-realtime-voice'),
       { onEvent: (channel, payload) => companion?.onInterviewEvent(channel, payload) });
     companion = new CompanionController(configHelper, mobileInterview, (snapshot) => {
-      safeSend(state.mainWindow, 'companion:state', snapshot);
+      syncTransparentCapture(snapshot);
+      safeSend(state.mainWindow, 'companion:state', companionStateWithTransparentCapture(snapshot));
     });
-    ipcMain.handle('companion:state', () => companion!.state());
+    ipcMain.handle('companion:state', () => companionStateWithTransparentCapture());
     ipcMain.handle('companion:entry', (_event, route: string) => assistantEntryError(route));
     ipcMain.handle('companion:audioMode', (_event, value: unknown) => companion!.setAudioMode(value));
     ipcMain.handle('companion:service', (_event, value: unknown) => companion!.setServiceUrl(value));
@@ -1722,6 +1790,30 @@ async function initializeApp(): Promise<void> {
     ipcMain.handle('companion:disconnect', async () => { await changeAssistantWorkspace('pc'); await companion!.disconnect(); });
     ipcMain.handle('companion:interview', () => companion!.toggleInterview());
     ipcMain.handle('companion:screenshot', () => companion!.screenshot());
+    ipcMain.handle('companion:triggerMode', (_event, mode: unknown) => {
+      companion!.setExamTriggerMode(mode);
+      if (mode === 'transparent-click') transparentCapture?.setVisible(true);
+      else transparentCapture?.hide(false);
+      syncTransparentCapture();
+      return companionStateWithTransparentCapture();
+    });
+    ipcMain.handle('companion:transparentClick', () => handleTransparentCaptureClick());
+    ipcMain.handle('companion:transparentCapture:configure', () => {
+      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的透明点击模式');
+      transparentCapture?.configure();
+      return companionStateWithTransparentCapture();
+    });
+    ipcMain.handle('companion:transparentCapture:setVisible', (_event, visible: boolean) => {
+      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的透明点击模式');
+      transparentCapture?.setVisible(visible === true);
+      return companionStateWithTransparentCapture();
+    });
+    ipcMain.handle('companion:transparentCapture:setScale', (_event, scale: unknown) => {
+      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的透明点击模式');
+      transparentCapture?.setScale(scale);
+      return companionStateWithTransparentCapture();
+    });
+    ipcMain.handle('companion:transparentCapture:state', () => companionStateWithTransparentCapture());
   }
 
   updateChecker = new UpdateChecker();
@@ -1741,6 +1833,7 @@ async function initializeApp(): Promise<void> {
       processingHelper.cancelStreaming();
       interviewHelper.stopForWorkspace();
       await companion?.disconnect();
+      transparentCapture?.destroy();
       assistantWorkspace = 'pc';
     },
     createOverlayWindow,
@@ -1849,6 +1942,7 @@ if (!gotLock) {
     // must not race a BrowserWindow that Electron is already destroying.
     state.quitting = true;
     companion?.deactivate();
+    transparentCapture?.destroy();
     shortcutsHelper?.unregisterAll();
     processingHelper?.cancelStreaming();
     interviewHelper?.stop?.();

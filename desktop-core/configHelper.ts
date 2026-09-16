@@ -5,6 +5,7 @@ import Store from 'electron-store';
 import type { DesktopConfigHelperOptions } from './platform';
 import { toBusinessVersion } from './electron/version';
 import type { MacPermissionMigrationRecord, PermissionOnboardingState } from './shared/reliability';
+import type { CompanionExamTriggerMode, TransparentCaptureBounds } from './shared/mobile-companion';
 
 export interface AIModelConfig {
   provider: string;
@@ -65,6 +66,10 @@ export interface ClientSettings {
   zoomFactor?: number;
   /** Hide the main window from taskbar/Dock and remove the tray icon on minimize. */
   hideAppChromeOnMinimize?: boolean;
+  companionExamTriggerMode?: CompanionExamTriggerMode;
+  transparentCaptureEnabled?: boolean;
+  transparentCaptureScale?: number;
+  transparentCaptureBounds?: TransparentCaptureBounds;
   [k: string]: unknown;
 }
 
@@ -125,6 +130,9 @@ export class DesktopConfigHelper {
           backgroundOpacity: 0.8,
           zoomFactor: 1.0,
           hideAppChromeOnMinimize: true,
+          companionExamTriggerMode: 'shortcut',
+          transparentCaptureEnabled: true,
+          transparentCaptureScale: 1,
         },
         shortcutBindings: {},
         backgroundOpacity: 0.8,

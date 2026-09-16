@@ -12,6 +12,7 @@ import Extension from './pages/Extension';
 import Profile from './pages/Profile';
 import Overlay from './pages/Overlay';
 import ExamOverlay from './pages/ExamOverlay';
+import TransparentCaptureOverlay from './pages/TransparentCaptureOverlay';
 import PermissionOnboarding from './components/PermissionOnboarding';
 
 export default function App() {
@@ -22,7 +23,7 @@ export default function App() {
 
   // 悬浮窗视图：单独渲染，不走登录守卫与主框架
   // 笔试悬浮窗 /overlay-exam（原考试插件 UI） + 面试悬浮窗 /overlay-interview（面试任务卡片）
-  const isOverlay = location.pathname === '/overlay-exam' || location.pathname === '/overlay-interview';
+  const isOverlay = location.pathname === '/overlay-exam' || location.pathname === '/overlay-interview' || location.pathname === '/overlay-capture';
 
   useEffect(() => {
     if (isOverlay) return;
@@ -71,6 +72,7 @@ export default function App() {
       <Routes>
         <Route path="/overlay-exam" element={<ExamOverlay />} />
         <Route path="/overlay-interview" element={<Overlay />} />
+        <Route path="/overlay-capture" element={<TransparentCaptureOverlay />} />
       </Routes>
     );
   }

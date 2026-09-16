@@ -5,7 +5,7 @@ import { postAction } from '../apiClient';
 import { ScreenshotHelper } from './ScreenshotHelper';
 import { LightweightProcessingHelper } from './ProcessingHelper';
 import { InterviewHelper } from './InterviewHelper';
-import type { CompanionCard, CompanionState } from '../../shared/mobile-companion';
+import type { CompanionCard, CompanionExamTriggerMode, CompanionState } from '../../shared/mobile-companion';
 
 type Pairing = { sessionId: string; code: string; phoneUrl: string; expiresAt: number };
 
@@ -21,7 +21,7 @@ export class CompanionController {
   private interviewStarting = false;
   private pendingShots: string[] = [];
   private latestAnswer = '';
-  private view: CompanionState = { workspace: 'pc', transitioning: false, connected: false, listening: false, capturing: false, pending: 0 };
+  private view: CompanionState = { workspace: 'pc', transitioning: false, connected: false, listening: false, capturing: false, pending: 0, captureMode: 'shortcut' };
   private processor: LightweightProcessingHelper;
   private capture: ScreenshotHelper;
 
@@ -35,8 +35,18 @@ export class CompanionController {
     // 配对码同时从 pairing 和当前视图读取，避免某次心跳状态事件覆盖了二维码区域后连接码消失。
     const code = this.view.code || this.pairing?.code;
     const phoneUrl = this.view.phoneUrl || this.pairing?.phoneUrl;
-    return { ...this.view, code, phoneUrl, expiresAt: this.view.expiresAt || this.pairing?.expiresAt,
+    const settings = this.config.getClientSettings();
+    const captureMode: CompanionExamTriggerMode = settings.companionExamTriggerMode === 'transparent-click' ? 'transparent-click' : 'shortcut';
+    return { ...this.view, captureMode, transparentCaptureEnabled: settings.transparentCaptureEnabled !== false,
+      transparentCaptureScale: typeof settings.transparentCaptureScale === 'number' ? settings.transparentCaptureScale : 1,
+      code, phoneUrl, expiresAt: this.view.expiresAt || this.pairing?.expiresAt,
       audioMode: this.interview.getContext().audioMode || 'demo', serviceUrl: String(this.config.getClientSettings().companionServiceUrl || 'https://api.quizmate.vip/companion-test/') };
+  }
+  setExamTriggerMode(mode: unknown) {
+    if (mode !== 'shortcut' && mode !== 'transparent-click') throw new Error('截图触发方式无效');
+    this.pendingShots = [];
+    this.config.updateClientSettings({ companionExamTriggerMode: mode });
+    this.emit({ captureMode: mode });
   }
   async setAudioMode(value: unknown) {
     if (value !== 'demo' && value !== 'formal') throw new Error('音频模式无效');
@@ -191,6 +201,14 @@ export class CompanionController {
         this.emit({ error: message });
       }
     } finally { if (valid()) this.emit({ capturing: false }); }
+  }
+
+  /** Transparent click mode always starts a fresh one-shot capture and search. */
+  async captureAndSearchOnce() {
+    if (!this.enabled || !this.view.connected) throw new Error('手机未连接，请先连接手机');
+    if (this.view.capturing) return;
+    await this.screenshot();
+    if (this.pendingShots.length) await this.searchLatestScreenshots();
   }
 
   /** Analyze the screenshots collected by Alt+Q. */

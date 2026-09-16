@@ -38,6 +38,11 @@ describe('exclusive PC and mobile shortcut ownership', () => {
       expect(routeWorkspaceShortcut('mobile', false, action)).toBe('ignore');
     }
   });
+  it('blocks mobile screenshot/search shortcuts in transparent click mode', () => {
+    expect(routeWorkspaceShortcut('mobile', false, 'screenshot', 'transparent-click')).toBe('ignore');
+    expect(routeWorkspaceShortcut('mobile', false, 'search', 'transparent-click')).toBe('ignore');
+    expect(routeWorkspaceShortcut('mobile', false, 'copy_content', 'transparent-click')).toBe('mobile-exam');
+  });
   it('blocks assistant actions during either transition', () => {
     for (const workspace of ['pc', 'mobile'] as const) {
       for (const action of actions) {

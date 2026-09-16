@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Smartphone, Mic, Camera, Link2 } from 'lucide-react';
+import { Smartphone, Mic, Camera, Link2, Keyboard, MousePointer2, Move, Maximize2, Eye, EyeOff } from 'lucide-react';
 import { api } from '../lib/ipc';
 import type { CompanionState } from '../../shared/mobile-companion';
 import { defaultShortcutBindings, formatAccelerator } from '../../shared/shortcuts';
@@ -52,7 +52,28 @@ export default function Companion() {
         <div className="flex gap-2"><button disabled={busy} className="btn-outline" onClick={() => run(() => api.companion.pair())}>{pairingCode ? '重新配对' : '生成连接码'}</button>{pairingCode && <button disabled={busy} className="btn-ghost" onClick={() => run(() => api.companion.disconnect())}>断开</button>}</div>
       </section>
       <div className="space-y-4">
-        <section className="card space-y-3"><h2 className="font-semibold flex gap-2 items-center"><Camera size={18}/>手机笔试</h2><p className="text-sm text-slate-400 leading-7">通过快捷键控制，电脑全屏截图后在手机端搜题；长题可以连续截图，最后再搜题。</p><div className="grid gap-2 rounded-xl border border-slate-700 bg-slate-900/50 p-3 text-sm"><div><b className="text-cyan-300">{formatAccelerator(shortcuts.screenshot || defaultShortcutBindings.screenshot)}</b>　截图</div><div><b className="text-cyan-300">{formatAccelerator(shortcuts.search || defaultShortcutBindings.search)}</b>　搜题</div><div><b className="text-cyan-300">{formatAccelerator(shortcuts.copy_content || defaultShortcutBindings.copy_content)}</b>　复制手机答案到电脑剪贴板</div></div><p className="text-xs text-slate-400">操作顺序：先截图，再搜题；题目过长时可多次截图，完成后按搜题。</p></section>
+        <section className="card space-y-4"><h2 className="font-semibold flex gap-2 items-center"><Camera size={18}/>手机笔试</h2>
+          <p className="text-sm text-slate-400 leading-7">电脑截图后在手机端搜题，答案只显示在第二机位。请选择一种截图触发方式。</p>
+          <div className="grid grid-cols-2 gap-2" role="group" aria-label="截图触发方式">
+            <button type="button" aria-pressed={(state.captureMode || 'shortcut') === 'shortcut'} disabled={busy} className={(state.captureMode || 'shortcut') === 'shortcut' ? 'btn-outline !bg-cyan-400 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setTriggerMode('shortcut'))}><Keyboard size={16}/>快捷键截图</button>
+            <button type="button" aria-pressed={state.captureMode === 'transparent-click'} disabled={busy} className={state.captureMode === 'transparent-click' ? 'btn-outline !bg-emerald-400 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setTriggerMode('transparent-click'))}><MousePointer2 size={16}/>透明点击</button>
+          </div>
+          {(state.captureMode || 'shortcut') === 'shortcut' ? <>
+            <div className="grid gap-2 rounded-xl border border-slate-700 bg-slate-900/50 p-3 text-sm"><div><b className="text-cyan-300">{formatAccelerator(shortcuts.screenshot || defaultShortcutBindings.screenshot)}</b>　截图</div><div><b className="text-cyan-300">{formatAccelerator(shortcuts.search || defaultShortcutBindings.search)}</b>　搜题</div><div><b className="text-cyan-300">{formatAccelerator(shortcuts.copy_content || defaultShortcutBindings.copy_content)}</b>　复制手机答案</div></div>
+            <p className="text-xs text-slate-400">快捷键模式支持最多 3 张截图后一次搜题，搜题后进入下一轮。</p>
+          </> : <div className="space-y-3 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-3 text-sm">
+            <p className="text-emerald-200">单击透明正方形即可截图并搜题；每次点击只处理一张图，完成后自动清空。搜题结果显示在第二机位。</p>
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={busy} className="btn-outline" onClick={() => run(() => api.companion.transparentCapture?.setVisible(!(state.transparentCaptureVisible === true)))}>{state.transparentCaptureVisible ? <EyeOff size={16}/> : <Eye size={16}/>} {state.transparentCaptureVisible ? '隐藏点击区域' : '显示点击区域'}</button>
+              <button type="button" disabled={busy} className="btn-outline" onClick={() => run(() => api.companion.transparentCapture?.configure())}><Move size={16}/>调整位置</button>
+              {state.transparentCaptureConfiguring && <button type="button" disabled={busy} className="btn-primary !bg-emerald-600" onClick={() => run(() => api.companion.transparentCapture?.setVisible(true))}><Eye size={16}/>完成调整</button>}
+            </div>
+            <label className="block text-xs text-slate-300">点击区域大小：{Math.round((state.transparentCaptureScale || 1) * 100)}%
+              <input aria-label="透明点击区域大小" className="mt-2 w-full accent-emerald-400" type="range" min="0.5" max="2" step="0.05" value={state.transparentCaptureScale || 1} disabled={busy} onChange={(event) => { void run(() => api.companion.transparentCapture?.setScale(Number(event.target.value))); }} />
+            </label>
+            <p className="flex items-center gap-2 text-xs text-slate-400"><Maximize2 size={14}/>调整位置时会显示边框，拖动正方形即可移动；运行时边框完全透明。</p>
+          </div>}
+        </section>
         <section className="card space-y-3"><h2 className="font-semibold flex gap-2 items-center"><Mic size={18}/>手机面试</h2><p className="text-sm text-slate-400 leading-7">需点击下面的“开始面试”启动，面试快捷键不会在双机模式下生效。沿用 PC 面试页保存的岗位和简历设置。</p><div className="flex gap-2"><button disabled={busy} className={(state.audioMode || 'demo') === 'demo' ? 'btn-outline !bg-amber-500 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setAudioMode('demo'))}>演示模式</button><button disabled={busy} className={state.audioMode === 'formal' ? 'btn-outline !bg-emerald-500 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setAudioMode('formal'))}>正式面试模式</button></div>
         <p className={`text-sm p-3 rounded ${(state.audioMode || 'demo') === 'demo' ? 'bg-amber-500/15 text-amber-300' : 'bg-emerald-500/15 text-emerald-300'}`}>{(state.audioMode || 'demo') === 'demo' ? '演示模式：识别麦克风 + 扬声器，作为问题输入' : '正式面试模式：只识别扬声器（面试官问题）'}</p>
         <button disabled={busy || !mobile} className={state.listening ? 'btn-primary !bg-red-600 hover:!bg-red-500' : 'btn-primary !bg-emerald-600 hover:!bg-emerald-500'} onClick={() => run(() => api.companion.interview())}>{state.listening ? '结束面试' : '开始面试'}</button></section>
