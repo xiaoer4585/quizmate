@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Smartphone, Mic, Camera, Link2, Keyboard, MousePointer2, Move, Maximize2, Eye, EyeOff } from 'lucide-react';
+import { Smartphone, Mic, Camera, Link2, Keyboard, MousePointer2, Move, Eye, EyeOff } from 'lucide-react';
 import { api } from '../lib/ipc';
 import type { CompanionState } from '../../shared/mobile-companion';
 import { defaultShortcutBindings, formatAccelerator } from '../../shared/shortcuts';
@@ -27,6 +27,13 @@ export default function Companion() {
   const mobile = state.workspace === 'mobile';
   const pairingCode = state.code || state.phoneUrl?.match(/#(?:[^#]*&)?code=(\d{6})/)?.[1];
   return <div className="max-w-5xl mx-auto space-y-5">
+    {state.transparentCaptureConfiguring && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 backdrop-blur-[2px]" role="dialog" aria-label="正在调整透明悬浮球">
+      <div className="pointer-events-auto mx-6 w-full max-w-md rounded-2xl border border-emerald-400/40 bg-slate-900/95 p-6 text-center shadow-2xl">
+        <h2 className="text-lg font-semibold text-emerald-200">正在调整透明悬浮球</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-300">拖动悬浮球主体移动位置，拖动四个角调整正方形大小。调整时悬浮球会显示边框，正式使用时完全透明。</p>
+        <button type="button" disabled={busy} className="btn-primary !mt-5 !bg-emerald-600" onClick={() => run(() => api.companion.transparentCapture?.setVisible(true))}>完成调整</button>
+      </div>
+    </div>}
     <div className="flex items-start gap-4">
       <Smartphone className="text-cyan-400 mt-1" size={32}/>
       <div><h1 className="text-2xl font-semibold">双机协作笔面试</h1><p className="text-sm text-slate-400 mt-2">电脑采集问题，手机阅读答案。笔试截图和面试听写可以同时使用。</p></div>
@@ -65,13 +72,9 @@ export default function Companion() {
             <p className="text-emerald-200">单击透明正方形即可截图并搜题；每次点击只处理一张图，完成后自动清空。搜题结果显示在第二机位。</p>
             <div className="flex flex-wrap gap-2">
               <button type="button" disabled={busy} className="btn-outline" onClick={() => run(() => api.companion.transparentCapture?.setVisible(!(state.transparentCaptureVisible === true)))}>{state.transparentCaptureVisible ? <EyeOff size={16}/> : <Eye size={16}/>} {state.transparentCaptureVisible ? '隐藏点击区域' : '显示点击区域'}</button>
-              <button type="button" disabled={busy} className="btn-outline" onClick={() => run(() => api.companion.transparentCapture?.configure())}><Move size={16}/>调整位置</button>
-              {state.transparentCaptureConfiguring && <button type="button" disabled={busy} className="btn-primary !bg-emerald-600" onClick={() => run(() => api.companion.transparentCapture?.setVisible(true))}><Eye size={16}/>完成调整</button>}
+              <button type="button" disabled={busy} className="btn-outline" onClick={() => run(() => api.companion.transparentCapture?.configure())}><Move size={16}/>调整位置和大小</button>
             </div>
-            <label className="block text-xs text-slate-300">点击区域大小：{Math.round((state.transparentCaptureScale || 1) * 100)}%
-              <input aria-label="透明点击区域大小" className="mt-2 w-full accent-emerald-400" type="range" min="0.5" max="2" step="0.05" value={state.transparentCaptureScale || 1} disabled={busy} onChange={(event) => { void run(() => api.companion.transparentCapture?.setScale(Number(event.target.value))); }} />
-            </label>
-            <p className="flex items-center gap-2 text-xs text-slate-400"><Maximize2 size={14}/>调整位置时会显示边框，拖动正方形即可移动；运行时边框完全透明。</p>
+            <p className="flex items-center gap-2 text-xs text-slate-400"><Move size={14}/>点击“调整位置和大小”后，客户端会半遮蔽；拖动主体移动，拖动四角调整大小，完成后点击半遮蔽面板中的“完成调整”。正式使用时鼠标移到悬浮球位置会显示十字光标。</p>
           </div>}
         </section>
         <section className="card space-y-3"><h2 className="font-semibold flex gap-2 items-center"><Mic size={18}/>手机面试</h2><p className="text-sm text-slate-400 leading-7">需点击下面的“开始面试”启动，面试快捷键不会在双机模式下生效。沿用 PC 面试页保存的岗位和简历设置。</p><div className="flex gap-2"><button disabled={busy} className={(state.audioMode || 'demo') === 'demo' ? 'btn-outline !bg-amber-500 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setAudioMode('demo'))}>演示模式</button><button disabled={busy} className={state.audioMode === 'formal' ? 'btn-outline !bg-emerald-500 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setAudioMode('formal'))}>正式面试模式</button></div>

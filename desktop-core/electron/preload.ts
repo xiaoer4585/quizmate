@@ -24,7 +24,8 @@ const api = {
     transparentCapture: {
       configure: () => invoke('companion:transparentCapture:configure'),
       setVisible: (visible: boolean) => invoke('companion:transparentCapture:setVisible', visible),
-      setScale: (scale: number) => invoke('companion:transparentCapture:setScale', scale),
+      moveBy: (dx: number, dy: number) => invoke('companion:transparentCapture:moveBy', dx, dy),
+      resizeBy: (corner: 'nw' | 'ne' | 'sw' | 'se', dx: number, dy: number) => invoke('companion:transparentCapture:resizeBy', corner, dx, dy),
       getState: () => invoke('companion:transparentCapture:state'),
     },
     onState: (cb: (data: unknown) => void) => on('companion:state', cb),

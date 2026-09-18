@@ -9,19 +9,19 @@
 ```text
 Companion.tsx
   ├─ 选择快捷键/透明点击模式
-  ├─ 调整比例、显示/隐藏、进入配置
+  ├─ 显示/隐藏、进入配置和半遮蔽等待面板
   └─ 读取 CompanionState
 
 main.ts
   ├─ createTransparentCaptureWindow()
-  ├─ show/hide/configure/setScale
+  ├─ show/hide/configure/moveBy/resizeBy
   ├─ Windows 防捕获和看门狗
   ├─ 截图前隐藏透明窗口并等待 DWM 清理
   └─ 将一次点击转为 CompanionController.captureAndSearchOnce()
 
 TransparentCaptureOverlay.tsx
-  ├─ 运行态：透明正方形，点击发送 IPC
-  └─ 配置态：显示边框，使用 app-region 拖动
+  ├─ 运行态：短按发送截图 IPC，拖动发送移动 IPC
+  └─ 配置态：显示边框和四角调整柄，主体移动、四角等比例缩放
 
 CompanionController.ts
   ├─ captureMode 状态
@@ -35,7 +35,8 @@ CompanionController.ts
 - 运行态使用独立窗口接收鼠标事件，答案悬浮框继续 `setIgnoreMouseEvents(true, { forward: true })`。
 - Windows 应用 `WDA_EXCLUDEFROMCAPTURE` 并读回验证；保护失败时 fail-closed 隐藏窗口。
 - 配置态只在用户主动调整时显示半透明边框；配置态同样应用防捕获保护。
-- 边长由基础尺寸和比例计算，原生 `resize` 事件强制宽高相等；位置和比例写入客户端设置。
+- 不使用比例滑块。配置态通过四角调整柄改变边长，主进程始终强制宽高相等；正式态不显示调整柄，但仍允许拖动位置。
+- 鼠标手势以 6px 移动阈值区分点击与拖动：阈值以内释放为单击，超过阈值只移动窗口。
 - 截图开始前隐藏透明窗口，等待隐藏确认和至少 500ms 的 DWM 合成清理，完成后按模式和可见状态恢复。
 
 ## 状态与持久化
@@ -44,10 +45,9 @@ CompanionController.ts
 
 - `companionExamTriggerMode`: `shortcut` 或 `transparent-click`，默认 `shortcut`。
 - `transparentCaptureEnabled`: 是否显示透明点击窗口，默认 `true`。
-- `transparentCaptureScale`: 0.5 至 2.0，默认 1.0。
 - `transparentCaptureBounds`: `{ x, y, width, height }`，默认主显示器右侧安全位置。
 
-`CompanionState` 增加当前触发模式、透明窗口是否可见、是否处于配置态、比例和边界。窗口仅在 `workspace=mobile`、触发模式为 `transparent-click`、启用且手机已连接时显示。
+`CompanionState` 增加当前触发模式、透明窗口是否可见、是否处于配置态和边界。窗口仅在 `workspace=mobile`、触发模式为 `transparent-click`、启用且手机已连接时显示。
 
 ## 一次点击事务
 

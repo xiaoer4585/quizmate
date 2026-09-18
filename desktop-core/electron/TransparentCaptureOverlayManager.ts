@@ -1,5 +1,4 @@
 import { BrowserWindow, screen } from 'electron';
-import path from 'path';
 import { ConfigHelper } from './ConfigHelper';
 import { applyAllProtections, startProtectionWatchdog, type ProtectionWatchdog } from './helpers/protection';
 import type { TransparentCaptureBounds } from '../shared/mobile-companion';
@@ -11,23 +10,22 @@ const MAX_SIZE = 320;
 type StateListener = (state: {
   visible: boolean;
   configuring: boolean;
-  scale: number;
   bounds?: TransparentCaptureBounds;
 }) => void;
 
-function clampScale(value: unknown): number {
-  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : 1;
-  return Math.min(2, Math.max(0.5, Math.round(numeric * 100) / 100));
+function clampSize(value: unknown): number {
+  const numeric = typeof value === 'number' && Number.isFinite(value) ? value : BASE_SIZE;
+  return Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.round(numeric)));
 }
 
-function safeBounds(bounds: TransparentCaptureBounds | undefined, size: number): TransparentCaptureBounds {
+function safeBounds(bounds: TransparentCaptureBounds | undefined, fallbackSize = BASE_SIZE): TransparentCaptureBounds {
   const display = screen.getPrimaryDisplay();
   const area = display.workArea;
   const requested = bounds && Number.isFinite(bounds.x) && Number.isFinite(bounds.y)
     ? bounds
-    : { x: area.x + area.width - size - 36, y: area.y + Math.round((area.height - size) / 2), width: size, height: size };
-  const width = size;
-  const height = size;
+    : { x: area.x + area.width - fallbackSize - 36, y: area.y + Math.round((area.height - fallbackSize) / 2), width: fallbackSize, height: fallbackSize };
+  const width = clampSize(requested.width || fallbackSize);
+  const height = width;
   const x = Math.min(area.x + Math.max(0, area.width - width), Math.max(area.x, Math.round(requested.x)));
   const y = Math.min(area.y + Math.max(0, area.height - height), Math.max(area.y, Math.round(requested.y)));
   return { x, y, width, height };
@@ -52,11 +50,9 @@ export class TransparentCaptureOverlayManager {
   }
 
   state() {
-    const settings = this.config.getClientSettings();
     return {
       visible: !!this.win && !this.win.isDestroyed() && this.win.isVisible(),
       configuring: this.configuring,
-      scale: clampScale(settings.transparentCaptureScale),
       bounds: this.getBounds(),
     };
   }
@@ -103,9 +99,7 @@ export class TransparentCaptureOverlayManager {
   private ensureWindow(): BrowserWindow | null {
     if (this.win && !this.win.isDestroyed()) return this.win;
     const settings = this.config.getClientSettings();
-    const scale = clampScale(settings.transparentCaptureScale);
-    const size = Math.round(BASE_SIZE * scale);
-    const bounds = safeBounds(settings.transparentCaptureBounds, size);
+    const bounds = safeBounds(settings.transparentCaptureBounds);
     this.win = new BrowserWindow({
       ...bounds,
       minWidth: MIN_SIZE,
@@ -120,8 +114,8 @@ export class TransparentCaptureOverlayManager {
       skipTaskbar: true,
       focusable: false,
       show: false,
-      resizable: true,
-      movable: true,
+      resizable: false,
+      movable: false,
       fullscreenable: false,
       paintWhenInitiallyHidden: true,
       enableLargerThanScreen: true,
@@ -246,18 +240,31 @@ export class TransparentCaptureOverlayManager {
     if (this.userVisible) this.show();
   }
 
-  setScale(value: unknown) {
-    const scale = clampScale(value);
-    this.config.updateClientSettings({ transparentCaptureScale: scale });
-    const size = Math.round(BASE_SIZE * scale);
-    const current = this.getBounds() || safeBounds(undefined, size);
-    const next = safeBounds({ ...current, width: size, height: size }, size);
-    if (this.win && !this.win.isDestroyed()) {
-      this.boundsUpdating = true;
-      try { this.win.setBounds(next, true); } finally { this.boundsUpdating = false; }
-    }
-    this.config.updateClientSettings({ transparentCaptureBounds: next });
-    this.emitState();
+  moveBy(dx: number, dy: number) {
+    if (!this.win || this.win.isDestroyed() || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    const current = this.win.getBounds();
+    const next = safeBounds({ ...current, x: current.x + Math.round(dx), y: current.y + Math.round(dy), width: current.width, height: current.height }, current.width);
+    this.boundsUpdating = true;
+    try { this.win.setPosition(next.x, next.y, true); } finally { this.boundsUpdating = false; }
+    this.persistBounds();
+  }
+
+  resizeBy(corner: 'nw' | 'ne' | 'sw' | 'se', dx: number, dy: number) {
+    if (!this.configuring || !this.win || this.win.isDestroyed() || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
+    const current = this.win.getBounds();
+    const delta = Math.abs(dx) >= Math.abs(dy) ? dx : dy;
+    const signed = corner === 'nw' || corner === 'se' ? delta : -delta;
+    const size = clampSize(current.width + signed);
+    const right = current.x + current.width;
+    const bottom = current.y + current.height;
+    let x = current.x;
+    let y = current.y;
+    if (corner === 'nw' || corner === 'sw') x = right - size;
+    if (corner === 'nw' || corner === 'ne') y = bottom - size;
+    const next = safeBounds({ x, y, width: size, height: size }, size);
+    this.boundsUpdating = true;
+    try { this.win.setBounds(next, true); } finally { this.boundsUpdating = false; }
+    this.persistBounds();
   }
 
   destroy() {

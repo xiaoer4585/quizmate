@@ -38,7 +38,6 @@ export class CompanionController {
     const settings = this.config.getClientSettings();
     const captureMode: CompanionExamTriggerMode = settings.companionExamTriggerMode === 'transparent-click' ? 'transparent-click' : 'shortcut';
     return { ...this.view, captureMode, transparentCaptureEnabled: settings.transparentCaptureEnabled !== false,
-      transparentCaptureScale: typeof settings.transparentCaptureScale === 'number' ? settings.transparentCaptureScale : 1,
       code, phoneUrl, expiresAt: this.view.expiresAt || this.pairing?.expiresAt,
       audioMode: this.interview.getContext().audioMode || 'demo', serviceUrl: String(this.config.getClientSettings().companionServiceUrl || 'https://api.quizmate.vip/companion-test/') };
   }

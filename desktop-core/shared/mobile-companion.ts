@@ -37,6 +37,5 @@ export interface CompanionState {
   transparentCaptureEnabled?: boolean;
   transparentCaptureVisible?: boolean;
   transparentCaptureConfiguring?: boolean;
-  transparentCaptureScale?: number;
   transparentCaptureBounds?: TransparentCaptureBounds;
 }

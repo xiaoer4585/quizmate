@@ -1,0 +1,18 @@
+warning: unable to find all commit-graph files
+## codex/windows-dual-transparent-click-20260916
+ M desktop-core/configHelper.ts
+ M desktop-core/electron/TransparentCaptureOverlayManager.ts
+ M desktop-core/electron/helpers/CompanionController.ts
+ M desktop-core/electron/main.ts
+ M desktop-core/electron/preload.ts
+ M desktop-core/shared/mobile-companion.ts
+ M desktop-core/src/pages/Companion.tsx
+ M desktop-core/src/pages/TransparentCaptureOverlay.tsx
+ M specs/dual-transparent-capture/design.md
+ M specs/dual-transparent-capture/requirements.md
+ M windows客户端/QuizMate-Windows/package-lock.json
+ M windows客户端/QuizMate-Windows/package.json
+ M 测试文档/多个版本的客户端的测试文档.md
+?? desktop-core/shared/__tests__/transparent-capture-gesture.test.ts
+?? desktop-core/shared/transparent-capture-gesture.ts
+?? 测试文档/test-evidence/CHG-20260917-01/

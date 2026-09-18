@@ -85,7 +85,6 @@ function companionStateWithTransparentCapture(snapshot?: CompanionState): Compan
     ...base,
     transparentCaptureVisible: capture?.visible === true,
     transparentCaptureConfiguring: capture?.configuring === true,
-    transparentCaptureScale: capture?.scale ?? base.transparentCaptureScale,
     transparentCaptureBounds: capture?.bounds ?? base.transparentCaptureBounds,
   };
 }
@@ -1808,9 +1807,15 @@ async function initializeApp(): Promise<void> {
       transparentCapture?.setVisible(visible === true);
       return companionStateWithTransparentCapture();
     });
-    ipcMain.handle('companion:transparentCapture:setScale', (_event, scale: unknown) => {
+    ipcMain.handle('companion:transparentCapture:moveBy', (_event, dx: unknown, dy: unknown) => {
       if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的透明点击模式');
-      transparentCapture?.setScale(scale);
+      transparentCapture?.moveBy(Number(dx), Number(dy));
+      return companionStateWithTransparentCapture();
+    });
+    ipcMain.handle('companion:transparentCapture:resizeBy', (_event, corner: unknown, dx: unknown, dy: unknown) => {
+      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的透明点击模式');
+      if (corner !== 'nw' && corner !== 'ne' && corner !== 'sw' && corner !== 'se') throw new Error('无效的调整柄');
+      transparentCapture?.resizeBy(corner, Number(dx), Number(dy));
       return companionStateWithTransparentCapture();
     });
     ipcMain.handle('companion:transparentCapture:state', () => companionStateWithTransparentCapture());

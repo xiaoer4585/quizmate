@@ -1,0 +1,26 @@
+warning: in the working copy of 'desktop-core/configHelper.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'desktop-core/electron/TransparentCaptureOverlayManager.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'desktop-core/electron/helpers/CompanionController.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'desktop-core/electron/main.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'desktop-core/electron/preload.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'desktop-core/shared/mobile-companion.ts', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'desktop-core/src/pages/Companion.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'desktop-core/src/pages/TransparentCaptureOverlay.tsx', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'specs/dual-transparent-capture/design.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'specs/dual-transparent-capture/requirements.md', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'windows客户端/QuizMate-Windows/package-lock.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of 'windows客户端/QuizMate-Windows/package.json', LF will be replaced by CRLF the next time Git touches it
+warning: in the working copy of '测试文档/多个版本的客户端的测试文档.md', LF will be replaced by CRLF the next time Git touches it
+desktop-core/configHelper.ts
+desktop-core/electron/TransparentCaptureOverlayManager.ts
+desktop-core/electron/helpers/CompanionController.ts
+desktop-core/electron/main.ts
+desktop-core/electron/preload.ts
+desktop-core/shared/mobile-companion.ts
+desktop-core/src/pages/Companion.tsx
+desktop-core/src/pages/TransparentCaptureOverlay.tsx
+specs/dual-transparent-capture/design.md
+specs/dual-transparent-capture/requirements.md
+windows客户端/QuizMate-Windows/package-lock.json
+windows客户端/QuizMate-Windows/package.json
+测试文档/多个版本的客户端的测试文档.md

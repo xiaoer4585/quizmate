@@ -68,7 +68,6 @@ export interface ClientSettings {
   hideAppChromeOnMinimize?: boolean;
   companionExamTriggerMode?: CompanionExamTriggerMode;
   transparentCaptureEnabled?: boolean;
-  transparentCaptureScale?: number;
   transparentCaptureBounds?: TransparentCaptureBounds;
   [k: string]: unknown;
 }
@@ -132,7 +131,6 @@ export class DesktopConfigHelper {
           hideAppChromeOnMinimize: true,
           companionExamTriggerMode: 'shortcut',
           transparentCaptureEnabled: true,
-          transparentCaptureScale: 1,
         },
         shortcutBindings: {},
         backgroundOpacity: 0.8,
