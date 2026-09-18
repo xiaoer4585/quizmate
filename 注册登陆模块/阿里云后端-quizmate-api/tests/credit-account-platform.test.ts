@@ -58,7 +58,7 @@ describe("credit account platform filter (CHG-20260822-04)", () => {
     expect(result).toMatchObject({ total: 5 });
     const listQuery = queries.find((q) => q.text.includes("ORDER BY a.created_at DESC"))!;
     expect(listQuery.text).toContain("LEFT JOIN LATERAL");
-    expect(listQuery.text).toContain("SELECT s.platform FROM account_sessions s");
+    expect(listQuery.text).toContain("END AS platform FROM account_sessions s");
     expect(listQuery.text).toContain("session_platform");
     expect(listQuery.values).toEqual([20, 0]);
   });
@@ -70,7 +70,7 @@ describe("credit account platform filter (CHG-20260822-04)", () => {
     const result = await handler(dependencies(db), "adminListCreditAccounts")({ adminSecret: "secret-key", platform: "darwin-desktop", page: 1, pageSize: 10 }, context);
     expect(result).toMatchObject({ total: 2 });
     for (const query of queries) {
-      expect(query.text).toContain("s.platform = $1");
+      expect(query.text).toContain("latest.platform = $1");
     }
     expect(queries[0]!.values).toEqual(["darwin-desktop"]);
     expect(queries[1]!.values).toEqual(["darwin-desktop", 10, 0]);
