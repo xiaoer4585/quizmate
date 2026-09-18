@@ -1,0 +1,12 @@
+desktop-core/electron/TransparentCaptureOverlayManager.ts
+desktop-core/electron/main.ts
+desktop-core/shared/__tests__/transparent-capture-gesture.test.ts
+desktop-core/shared/transparent-capture-gesture.ts
+desktop-core/src/pages/Companion.tsx
+desktop-core/src/pages/TransparentCaptureOverlay.tsx
+specs/dual-transparent-capture/design.md
+specs/dual-transparent-capture/requirements.md
+specs/dual-transparent-capture/tasks.md
+windows客户端/QuizMate-Windows/package-lock.json
+windows客户端/QuizMate-Windows/package.json
+测试文档/多个版本的客户端的测试文档.md

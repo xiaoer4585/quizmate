@@ -1,0 +1,3 @@
+path=C:\Users\Administrator\.codex\tmp\quizmate-dual-transparent-click-20260916\windows客户端\QuizMate-Windows\release\QuizMate-Windows-2026.9.18003.exe
+bytes=82819933
+sha256=A42FBE2BB1850680782FE8B9C16898D15D82961127D38AC8B3FAE2741719D004

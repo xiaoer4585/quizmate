@@ -118,7 +118,7 @@ async function handleTransparentCaptureClick() {
     await new Promise((resolve) => setTimeout(resolve, delay));
     await companion.captureAndSearchOnce();
   } catch (error) {
-    safeSend(state.mainWindow, 'companion:error', error instanceof Error ? error.message : '透明点击截图失败');
+    safeSend(state.mainWindow, 'companion:error', error instanceof Error ? error.message : '屏幕透明区截图失败');
   } finally {
     if (windowWasVisible || companion.state().captureMode === 'transparent-click') syncTransparentCapture();
     transparentCaptureInFlight = false;
@@ -1798,25 +1798,25 @@ async function initializeApp(): Promise<void> {
     });
     ipcMain.handle('companion:transparentClick', () => handleTransparentCaptureClick());
     ipcMain.handle('companion:transparentCapture:configure', () => {
-      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的透明点击模式');
+      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的屏幕透明区截图模式');
       transparentCapture?.configure();
       return companionStateWithTransparentCapture();
     });
     ipcMain.handle('companion:transparentCapture:setVisible', (_event, visible: boolean) => {
-      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的透明点击模式');
+      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的屏幕透明区截图模式');
       transparentCapture?.setVisible(visible === true);
       return companionStateWithTransparentCapture();
     });
     ipcMain.handle('companion:transparentCapture:moveBy', (_event, dx: unknown, dy: unknown) => {
-      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的透明点击模式');
+      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的屏幕透明区截图模式');
       transparentCapture?.moveBy(Number(dx), Number(dy));
-      return companionStateWithTransparentCapture();
+      return true;
     });
     ipcMain.handle('companion:transparentCapture:resizeBy', (_event, corner: unknown, dx: unknown, dy: unknown) => {
-      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的透明点击模式');
+      if (assistantWorkspace !== 'mobile' || companion?.state().captureMode !== 'transparent-click') throw new Error('请先选择双机协作笔试的屏幕透明区截图模式');
       if (corner !== 'nw' && corner !== 'ne' && corner !== 'sw' && corner !== 'se') throw new Error('无效的调整柄');
       transparentCapture?.resizeBy(corner, Number(dx), Number(dy));
-      return companionStateWithTransparentCapture();
+      return true;
     });
     ipcMain.handle('companion:transparentCapture:state', () => companionStateWithTransparentCapture());
   }

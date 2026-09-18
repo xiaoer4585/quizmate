@@ -1,0 +1,14 @@
+## codex/windows-dual-transparent-click-20260916
+ M desktop-core/electron/TransparentCaptureOverlayManager.ts
+ M desktop-core/electron/main.ts
+ M desktop-core/shared/__tests__/transparent-capture-gesture.test.ts
+ M desktop-core/shared/transparent-capture-gesture.ts
+ M desktop-core/src/pages/Companion.tsx
+ M desktop-core/src/pages/TransparentCaptureOverlay.tsx
+ M specs/dual-transparent-capture/design.md
+ M specs/dual-transparent-capture/requirements.md
+ M specs/dual-transparent-capture/tasks.md
+ M windows客户端/QuizMate-Windows/package-lock.json
+ M windows客户端/QuizMate-Windows/package.json
+ M 测试文档/多个版本的客户端的测试文档.md
+?? 测试文档/test-evidence/CHG-20260918-02/

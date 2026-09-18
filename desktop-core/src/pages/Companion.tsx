@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Smartphone, Mic, Camera, Link2, Keyboard, MousePointer2, Move, Eye, EyeOff } from 'lucide-react';
+import { Smartphone, Mic, Camera, Link2, Keyboard, MousePointer2, Move } from 'lucide-react';
 import { api } from '../lib/ipc';
 import type { CompanionState } from '../../shared/mobile-companion';
 import { defaultShortcutBindings, formatAccelerator } from '../../shared/shortcuts';
@@ -27,10 +27,10 @@ export default function Companion() {
   const mobile = state.workspace === 'mobile';
   const pairingCode = state.code || state.phoneUrl?.match(/#(?:[^#]*&)?code=(\d{6})/)?.[1];
   return <div className="max-w-5xl mx-auto space-y-5">
-    {state.transparentCaptureConfiguring && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 backdrop-blur-[2px]" role="dialog" aria-label="正在调整透明悬浮球">
+    {state.transparentCaptureConfiguring && <div className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/70 backdrop-blur-[2px]" role="dialog" aria-label="正在调整屏幕透明区">
       <div className="pointer-events-auto mx-6 w-full max-w-md rounded-2xl border border-emerald-400/40 bg-slate-900/95 p-6 text-center shadow-2xl">
-        <h2 className="text-lg font-semibold text-emerald-200">正在调整透明悬浮球</h2>
-        <p className="mt-3 text-sm leading-6 text-slate-300">拖动悬浮球主体移动位置，拖动四个角调整正方形大小。调整时悬浮球会显示边框，正式使用时完全透明。</p>
+        <h2 className="text-lg font-semibold text-emerald-200">正在调整屏幕透明区</h2>
+        <p className="mt-3 text-sm leading-6 text-slate-300">拖动透明区主体移动位置，拖动四个角调整正方形大小。调整完成前此面板会持续保留，正式使用时透明区完全不可见。</p>
         <button type="button" disabled={busy} className="btn-primary !mt-5 !bg-emerald-600" onClick={() => run(() => api.companion.transparentCapture?.setVisible(true))}>完成调整</button>
       </div>
     </div>}
@@ -63,18 +63,17 @@ export default function Companion() {
           <p className="text-sm text-slate-400 leading-7">电脑截图后在手机端搜题，答案只显示在第二机位。请选择一种截图触发方式。</p>
           <div className="grid grid-cols-2 gap-2" role="group" aria-label="截图触发方式">
             <button type="button" aria-pressed={(state.captureMode || 'shortcut') === 'shortcut'} disabled={busy} className={(state.captureMode || 'shortcut') === 'shortcut' ? 'btn-outline !bg-cyan-400 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setTriggerMode('shortcut'))}><Keyboard size={16}/>快捷键截图</button>
-            <button type="button" aria-pressed={state.captureMode === 'transparent-click'} disabled={busy} className={state.captureMode === 'transparent-click' ? 'btn-outline !bg-emerald-400 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setTriggerMode('transparent-click'))}><MousePointer2 size={16}/>透明点击</button>
+            <button type="button" aria-pressed={state.captureMode === 'transparent-click'} disabled={busy} className={state.captureMode === 'transparent-click' ? 'btn-outline !bg-emerald-400 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setTriggerMode('transparent-click'))}><MousePointer2 size={16}/>屏幕透明区截图</button>
           </div>
           {(state.captureMode || 'shortcut') === 'shortcut' ? <>
             <div className="grid gap-2 rounded-xl border border-slate-700 bg-slate-900/50 p-3 text-sm"><div><b className="text-cyan-300">{formatAccelerator(shortcuts.screenshot || defaultShortcutBindings.screenshot)}</b>　截图</div><div><b className="text-cyan-300">{formatAccelerator(shortcuts.search || defaultShortcutBindings.search)}</b>　搜题</div><div><b className="text-cyan-300">{formatAccelerator(shortcuts.copy_content || defaultShortcutBindings.copy_content)}</b>　复制手机答案</div></div>
             <p className="text-xs text-slate-400">快捷键模式支持最多 3 张截图后一次搜题，搜题后进入下一轮。</p>
           </> : <div className="space-y-3 rounded-xl border border-emerald-400/25 bg-emerald-400/10 p-3 text-sm">
-            <p className="text-emerald-200">单击透明正方形即可截图并搜题；每次点击只处理一张图，完成后自动清空。搜题结果显示在第二机位。</p>
+            <p className="text-emerald-200">将鼠标移到屏幕透明区并单击，即可截图并搜题；每次点击只处理一张图，完成后自动清空，答案显示在第二机位。</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={busy} className="btn-outline" onClick={() => run(() => api.companion.transparentCapture?.setVisible(!(state.transparentCaptureVisible === true)))}>{state.transparentCaptureVisible ? <EyeOff size={16}/> : <Eye size={16}/>} {state.transparentCaptureVisible ? '隐藏点击区域' : '显示点击区域'}</button>
               <button type="button" disabled={busy} className="btn-outline" onClick={() => run(() => api.companion.transparentCapture?.configure())}><Move size={16}/>调整位置和大小</button>
             </div>
-            <p className="flex items-center gap-2 text-xs text-slate-400"><Move size={14}/>点击“调整位置和大小”后，客户端会半遮蔽；拖动主体移动，拖动四角调整大小，完成后点击半遮蔽面板中的“完成调整”。正式使用时鼠标移到悬浮球位置会显示十字光标。</p>
+            <p className="flex items-center gap-2 text-xs text-slate-400"><Move size={14}/>点击“调整位置和大小”后才显示透明区边框；拖动主体移动，拖动四角调整大小。完成后点击半遮蔽面板中的“完成调整”。正式使用时区域完全透明，鼠标移到对应位置会显示十字光标。</p>
           </div>}
         </section>
         <section className="card space-y-3"><h2 className="font-semibold flex gap-2 items-center"><Mic size={18}/>手机面试</h2><p className="text-sm text-slate-400 leading-7">需点击下面的“开始面试”启动，面试快捷键不会在双机模式下生效。沿用 PC 面试页保存的岗位和简历设置。</p><div className="flex gap-2"><button disabled={busy} className={(state.audioMode || 'demo') === 'demo' ? 'btn-outline !bg-amber-500 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setAudioMode('demo'))}>演示模式</button><button disabled={busy} className={state.audioMode === 'formal' ? 'btn-outline !bg-emerald-500 !text-slate-950' : 'btn-outline'} onClick={() => run(() => api.companion.setAudioMode('formal'))}>正式面试模式</button></div>

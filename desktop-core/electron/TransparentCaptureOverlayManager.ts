@@ -2,6 +2,7 @@ import { BrowserWindow, screen } from 'electron';
 import { ConfigHelper } from './ConfigHelper';
 import { applyAllProtections, startProtectionWatchdog, type ProtectionWatchdog } from './helpers/protection';
 import type { TransparentCaptureBounds } from '../shared/mobile-companion';
+import { resizeSquareBounds, type TransparentCaptureCorner } from '../shared/transparent-capture-gesture';
 
 const BASE_SIZE = 64;
 const MIN_SIZE = 32;
@@ -38,6 +39,7 @@ export class TransparentCaptureOverlayManager {
   private configuring = false;
   private boundsUpdating = false;
   private userVisible = true;
+  private persistTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly config: ConfigHelper,
@@ -135,19 +137,10 @@ export class TransparentCaptureOverlayManager {
       this.win = null;
       this.watchdog?.stop();
       this.watchdog = null;
+      if (this.persistTimer) clearTimeout(this.persistTimer);
+      this.persistTimer = null;
       this.protectionReady = false;
       this.emitState();
-    });
-    this.win.on('move', () => this.persistBounds());
-    this.win.on('resize', () => {
-      if (!this.win || this.win.isDestroyed() || this.boundsUpdating) return;
-      const bounds = this.win.getBounds();
-      const size = Math.min(MAX_SIZE, Math.max(MIN_SIZE, Math.max(bounds.width, bounds.height)));
-      if (bounds.width !== size || bounds.height !== size) {
-        this.boundsUpdating = true;
-        try { this.win.setSize(size, size, true); } finally { this.boundsUpdating = false; }
-      }
-      this.persistBounds();
     });
     this.win.loadURL(this.rendererUrl);
     this.protectionReady = this.applyProtection();
@@ -175,9 +168,24 @@ export class TransparentCaptureOverlayManager {
     this.emitState();
   }
 
+  private schedulePersistBounds() {
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = setTimeout(() => {
+      this.persistTimer = null;
+      this.persistBounds();
+    }, 160);
+  }
+
+  private flushPersistBounds() {
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = null;
+    this.persistBounds();
+  }
+
   private showInternal(configuring: boolean): boolean {
     const win = this.ensureWindow();
     if (!win || !this.protectionReady || !this.applyProtection()) return false;
+    if (!configuring && this.configuring) this.flushPersistBounds();
     this.configuring = configuring;
     this.sendVisualState();
     win.setOpacity(1);
@@ -196,6 +204,7 @@ export class TransparentCaptureOverlayManager {
   }
 
   hide(persist = true) {
+    if (this.configuring) this.flushPersistBounds();
     if (persist) {
       this.userVisible = false;
       this.config.updateClientSettings({ transparentCaptureEnabled: false });
@@ -246,28 +255,23 @@ export class TransparentCaptureOverlayManager {
     const next = safeBounds({ ...current, x: current.x + Math.round(dx), y: current.y + Math.round(dy), width: current.width, height: current.height }, current.width);
     this.boundsUpdating = true;
     try { this.win.setPosition(next.x, next.y, true); } finally { this.boundsUpdating = false; }
-    this.persistBounds();
+    this.schedulePersistBounds();
   }
 
-  resizeBy(corner: 'nw' | 'ne' | 'sw' | 'se', dx: number, dy: number) {
+  resizeBy(corner: TransparentCaptureCorner, dx: number, dy: number) {
     if (!this.configuring || !this.win || this.win.isDestroyed() || !Number.isFinite(dx) || !Number.isFinite(dy)) return;
     const current = this.win.getBounds();
-    const delta = Math.abs(dx) >= Math.abs(dy) ? dx : dy;
-    const signed = corner === 'nw' || corner === 'se' ? delta : -delta;
-    const size = clampSize(current.width + signed);
-    const right = current.x + current.width;
-    const bottom = current.y + current.height;
-    let x = current.x;
-    let y = current.y;
-    if (corner === 'nw' || corner === 'sw') x = right - size;
-    if (corner === 'nw' || corner === 'ne') y = bottom - size;
-    const next = safeBounds({ x, y, width: size, height: size }, size);
+    const resized = resizeSquareBounds(current, corner, dx, dy, MIN_SIZE, MAX_SIZE);
+    const next = safeBounds(resized, resized.width);
     this.boundsUpdating = true;
     try { this.win.setBounds(next, true); } finally { this.boundsUpdating = false; }
-    this.persistBounds();
+    this.schedulePersistBounds();
   }
 
   destroy() {
+    if (this.win && !this.win.isDestroyed()) this.flushPersistBounds();
+    if (this.persistTimer) clearTimeout(this.persistTimer);
+    this.persistTimer = null;
     this.watchdog?.stop();
     this.watchdog = null;
     const win = this.win;
