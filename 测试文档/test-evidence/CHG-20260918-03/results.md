@@ -10,6 +10,7 @@
 - 后端全量 Vitest：31 个测试文件、140 项测试全部通过。
 - 积分明细、面试和模型专项：4 个测试文件、35 项测试全部通过。
 - 后端 production build：通过；`dist/src/actions/accounts.js` 包含 `getCreditLedger`。
+- 后端部署清单：同时包含 actions、`domain/credits.js` 和 `services/model.js`，覆盖积分明细、面试 10 积分规则及面试响应优化；三组目录均纳入自动回滚。
 - 发布脚本 Node 语法检查与 `git diff --check`：通过。
 - 面试积分核对：客户端默认配置、Windows 生产配置和后端计费均为每个成功问题 10 积分。
 - 网站映射核对：首页、下载页、操作文档页和考试技巧文章均指向公开版本 `2026.09.18.3`。

@@ -1,11 +1,11 @@
-// CHG-20260913-02: deploy credit-ledger and interview response changes.
+// CHG-20260918-03: deploy credit-ledger, interview billing, and response changes.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const OSS = require('../../注册登陆模块/阿里云统一入口-study-auth-api/node_modules/ali-oss');
 
-const CHANGE_ID = 'CHG-20260913-02';
+const CHANGE_ID = 'CHG-20260918-03';
 const BACKEND_DIR = path.resolve(__dirname, '../../注册登陆模块/阿里云后端-quizmate-api');
 const INSTANCE_ID = 'i-2zedgehm045w1gsarawx';
 const REGION = 'cn-beijing';
@@ -15,7 +15,9 @@ const FILES = [
   'dist/src/actions/accounts.js',
   'dist/src/actions/configuration.js',
   'dist/src/actions/speech.js',
-  'dist/src/actions/index.js'
+  'dist/src/actions/index.js',
+  'dist/src/domain/credits.js',
+  'dist/src/services/model.js'
 ];
 
 function credentials() {
@@ -60,7 +62,9 @@ async function main() {
     ['dist/src/actions/accounts.js', 'getCreditLedger'],
     ['dist/src/actions/configuration.js', '网申助手'],
     ['dist/src/actions/speech.js', '换行'],
-    ['dist/src/actions/index.js', 'accounts']
+    ['dist/src/actions/index.js', 'accounts'],
+    ['dist/src/domain/credits.js', 'CREDIT_COST_PER_INTERVIEW = 10'],
+    ['dist/src/services/model.js', '? 1200 : 800']
   ]) if (!fs.readFileSync(path.join(BACKEND_DIR, file), 'utf8').includes(marker)) throw new Error(`${file} missing marker ${marker}`);
 
   fs.mkdirSync(path.dirname(PACKAGE_FILE), { recursive: true });
@@ -75,10 +79,12 @@ async function main() {
     'TS=$(date +%Y%m%d-%H%M%S)',
     'APP=/opt/quizmate-api-shadow',
     `BACKUP=$APP.rollback-${CHANGE_ID}-$TS`,
-    'mkdir -p "$BACKUP/actions"',
+    'mkdir -p "$BACKUP/actions" "$BACKUP/domain" "$BACKUP/services"',
     'cp -a "$APP/dist/src/actions/." "$BACKUP/actions/"',
+    'cp -a "$APP/dist/src/domain/." "$BACKUP/domain/"',
+    'cp -a "$APP/dist/src/services/." "$BACKUP/services/"',
     'echo "BACKUP_DIR=$BACKUP"',
-    'rollback() { code=$?; cp -a "$BACKUP/actions/." "$APP/dist/src/actions/"; systemctl restart quizmate-api-shadow.service || true; echo AUTO_ROLLBACK_DONE; exit $code; }',
+    'rollback() { code=$?; cp -a "$BACKUP/actions/." "$APP/dist/src/actions/"; cp -a "$BACKUP/domain/." "$APP/dist/src/domain/"; cp -a "$BACKUP/services/." "$APP/dist/src/services/"; systemctl restart quizmate-api-shadow.service || true; echo AUTO_ROLLBACK_DONE; exit $code; }',
     'trap rollback ERR',
     `curl -fsSL -o /tmp/quizmate-api-${CHANGE_ID}.tar.gz '${signedUrl}'`,
     `tar -xzf /tmp/quizmate-api-${CHANGE_ID}.tar.gz -C "$APP"`,
