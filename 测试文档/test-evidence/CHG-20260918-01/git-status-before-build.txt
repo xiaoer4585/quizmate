@@ -1,0 +1,6 @@
+## codex/windows-dual-transparent-click-20260916
+ M desktop-core/src/pages/Overlay.tsx
+ M windows客户端/QuizMate-Windows/package-lock.json
+ M windows客户端/QuizMate-Windows/package.json
+ M 测试文档/多个版本的客户端的测试文档.md
+?? 测试文档/test-evidence/CHG-20260918-01/

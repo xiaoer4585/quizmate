@@ -2,7 +2,7 @@
 // 左侧：问题列表 | 右侧：AI 回答（结合简历）
 // 快捷键: Windows Alt+R / macOS Option+R 开始或结束面试；窗口调节键作用于最近启动的悬浮窗
 import { useState, useEffect, useRef } from 'react';
-import { AlertCircle, CheckCircle2, Clock3, Mic, Sparkles } from 'lucide-react';
+import { AlertCircle, AudioLines, CheckCircle2, Clock3, ListTree, Mic, Sparkles } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { defaultShortcutBindings } from '../../shared/shortcuts';
 
@@ -14,6 +14,8 @@ function InterviewOverlayStyles() {
       ::-webkit-scrollbar { width: 4px; }
       ::-webkit-scrollbar-track { background: transparent; }
       ::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.28); border-radius: 2px; }
+      .interview-timeline-scroll, .interview-answer-scroll { scrollbar-gutter: stable; }
+      .interview-answer-scroll { overscroll-behavior: contain; }
     `}</style>
   );
 }
@@ -150,110 +152,122 @@ export default function Overlay() {
 
   // 取最新的任务作为右侧焦点（倒序，第一个是最新）
   const latestTask = tasks[selectedIndex] || tasks[0];
+  const latestStatus = latestTask?.status;
+  const latestStatusLabel = latestStatus === 'done' ? '回答完成' : latestStatus === 'error' ? '生成失败' : latestStatus === 'streaming' ? '正在生成回答' : latestStatus === 'pending' ? '等待生成' : '已识别';
+  const latestStatusColor = latestStatus === 'done' ? '#34d399' : latestStatus === 'error' ? '#f87171' : latestStatus === 'streaming' || latestStatus === 'pending' ? '#fbbf24' : subTextColor;
 
   return (
     <div className="w-full h-full p-1.5" style={{ background: 'transparent', pointerEvents: 'none' }}>
       <InterviewOverlayStyles />
       <div
-        className="w-full h-full flex flex-col overflow-hidden rounded-lg"
+        className="w-full h-full flex flex-col overflow-hidden rounded-xl"
         style={{
           background: bgColor,
           border: `1px solid ${borderColor}`,
-          boxShadow: theme === 'dark' ? '0 12px 32px rgba(0,0,0,0.3)' : '0 12px 32px rgba(15,23,42,0.14)',
+          boxShadow: 'none',
           color: textColor,
           pointerEvents: 'none',
         }}
       >
-        <header className="h-11 flex items-center gap-2.5 px-3 border-b shrink-0" style={{ borderColor }}>
-          <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: 'rgba(244,63,94,0.14)', color: accentColor }}>
+        <header className="h-14 flex items-center gap-3 px-4 border-b shrink-0" style={{ borderColor }}>
+          <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ background: 'rgba(244,63,94,0.14)', color: accentColor }}>
             <Mic size={15} />
           </div>
           <div className="min-w-0">
-            <div className="text-xs font-semibold leading-none">面试助手</div>
-            <div className="text-[9px] mt-1" style={{ color: subTextColor }}>{listening ? '正在听写，自动识别问题' : '已停止听写'}</div>
+            <div className="text-sm font-semibold leading-none tracking-wide">面试工作台</div>
+            <div className="text-[10px] mt-1.5" style={{ color: subTextColor }}>{listening ? '正在听写，自动识别问题' : '已停止听写'}</div>
           </div>
           <div className="flex-1" />
           {listening && (
-            <span className="flex items-center gap-1.5 text-[10px] font-medium" style={{ color: accentColor }}>
+            <span className="flex items-center gap-1.5 text-[10px] font-medium mr-1" style={{ color: accentColor }}>
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full opacity-60" style={{ background: accentColor }} />
                 <span className="relative inline-flex rounded-full h-2 w-2" style={{ background: accentColor }} />
               </span>
-              自动识别问题
+              语音流正常
             </span>
           )}
-          <div className="flex items-center gap-1.5 text-[9px]" style={{ color: subTextColor }}>
-            <span className="px-1.5 py-0.5 rounded" style={{ background: audioMode === 'formal' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.16)', color: audioMode === 'formal' ? '#6ee7b7' : '#fcd34d' }}>
-              {audioMode === 'formal' ? '正式：仅扬声器' : '演示：麦克风+扬声器'}
+          <div className="flex items-center gap-1.5 text-[10px]" style={{ color: subTextColor }}>
+            <span className="px-2 py-1 rounded-md" style={{ background: audioMode === 'formal' ? 'rgba(16,185,129,0.15)' : 'rgba(245,158,11,0.16)', color: audioMode === 'formal' ? '#6ee7b7' : '#fcd34d' }}>
+              {audioMode === 'formal' ? '正式面试 · 仅扬声器' : '演示模式 · 麦克风 + 扬声器'}
             </span>
-            <span className="px-1.5 py-0.5 rounded" style={{ background: panelColor }}>问题 {tasks.length}</span>
-            <span className="px-1.5 py-0.5 rounded" style={{ background: panelColor }}>完成 {doneCount}</span>
+            <span className="px-2 py-1 rounded-md" style={{ background: panelColor }}>问题 {String(tasks.length).padStart(2, '0')}</span>
+            <span className="px-2 py-1 rounded-md" style={{ background: panelColor }}>完成 {String(doneCount).padStart(2, '0')}</span>
           </div>
         </header>
-        <main className="flex-1 grid grid-cols-[minmax(130px,36%)_1fr] min-h-0">
-          <section className="min-w-0 overflow-y-auto p-2.5 border-r" style={{ borderColor }}>
-            <div className="flex items-center justify-between mb-2 px-0.5">
-              <span className="text-[10px] font-semibold" style={{ color: subTextColor }}>问题流</span>
-              {pendingCount > 0 && <span className="text-[9px]" style={{ color: accentColor }}>{pendingCount} 条处理中</span>}
+        <main className="flex-1 grid grid-cols-[minmax(190px,30%)_minmax(0,70%)] min-h-0">
+          <section className="interview-timeline-scroll min-w-0 overflow-y-auto p-3 border-r" style={{ borderColor }}>
+            <div className="flex items-center justify-between mb-3 px-0.5">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold" style={{ color: subTextColor }}><ListTree size={13} />问题时间线</span>
+              {pendingCount > 0 && <span className="text-[10px]" style={{ color: '#fbbf24' }}>{pendingCount} 条处理中</span>}
             </div>
-            {interimText && (
-              <div className="mb-2 p-2 rounded-md border text-[10px] leading-relaxed" style={{ color: subTextColor, background: panelColor, borderColor }}>
-                <div className="text-[9px] font-medium mb-1" style={{ color: accentColor }}>正在识别</div>
-                {interimText}
-              </div>
-            )}
             {tasks.length === 0 ? (
               <div className="h-full min-h-24 flex items-center justify-center text-center px-3">
-                <div className="text-[10px] leading-relaxed" style={{ color: subTextColor }}>
+                <div className="text-[11px] leading-relaxed" style={{ color: subTextColor }}>
                   {statusMessage?.content || (listening ? '等待面试官提问，识别到问题后自动生成答案' : '尚未开始听写')}
                 </div>
               </div>
             ) : (
               <div className="space-y-1.5">
                 {tasks.map((task, idx) => (
-                  <button key={task.id} onClick={() => { setSelectedIndex(idx); selectedIndexRef.current = idx; userNavigatedRef.current = idx !== 0; }} className="w-full text-left p-2 rounded-md border" style={{ background: idx === selectedIndex ? 'rgba(244,63,94,0.08)' : panelColor, borderColor: idx === selectedIndex ? 'rgba(244,63,94,0.28)' : borderColor }}>
-                    <div className="flex items-start gap-1.5">
-                      <span className="text-[9px] font-mono mt-0.5" style={{ color: idx === 0 ? accentColor : subTextColor }}>{String(tasks.length - idx).padStart(2, '0')}</span>
-                      <div className="min-w-0 flex-1 text-[10px] font-medium leading-relaxed">{task.question}</div>
-                      {task.status === 'done' ? <CheckCircle2 size={11} color="#10b981" className="shrink-0 mt-0.5" /> : task.status === 'error' ? <AlertCircle size={11} color="#ef4444" className="shrink-0 mt-0.5" /> : <Clock3 size={11} color={accentColor} className="shrink-0 mt-0.5" />}
+                  <button key={task.id} onClick={() => { setSelectedIndex(idx); selectedIndexRef.current = idx; userNavigatedRef.current = idx !== 0; }} className="w-full text-left p-2.5 rounded-lg border" style={{ background: idx === selectedIndex ? 'rgba(244,63,94,0.08)' : panelColor, borderColor: idx === selectedIndex ? 'rgba(244,63,94,0.28)' : borderColor }}>
+                    <div className="flex items-start gap-2">
+                      <span className="text-[10px] font-mono mt-0.5" style={{ color: idx === 0 ? accentColor : subTextColor }}>{String(tasks.length - idx).padStart(2, '0')}</span>
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[11px] font-medium leading-relaxed line-clamp-2">{task.question}</div>
+                        <div className="mt-1 text-[9px]" style={{ color: task.status === 'done' ? '#34d399' : task.status === 'error' ? '#f87171' : '#fbbf24' }}>{task.status === 'done' ? '已完成' : task.status === 'error' ? '生成失败' : task.status === 'streaming' ? '回答生成中' : '等待生成'}</div>
+                      </div>
+                      {task.status === 'done' ? <CheckCircle2 size={12} color="#34d399" className="shrink-0 mt-0.5" /> : task.status === 'error' ? <AlertCircle size={12} color="#f87171" className="shrink-0 mt-0.5" /> : <Clock3 size={12} color="#fbbf24" className="shrink-0 mt-0.5" />}
                     </div>
                   </button>
                 ))}
               </div>
             )}
+            {interimText && (
+              <div className="mt-3 p-2.5 rounded-lg border text-[10px] leading-relaxed" style={{ color: subTextColor, background: 'rgba(245,158,11,0.07)', borderColor: 'rgba(245,158,11,0.24)' }}>
+                <div className="flex items-center gap-1.5 text-[10px] font-medium mb-1.5" style={{ color: '#fbbf24' }}><AudioLines size={12} />正在识别 · 仅预览</div>
+                <div className="max-h-20 overflow-hidden">{interimText}</div>
+              </div>
+            )}
           </section>
 
-          <section className="min-w-0 overflow-y-auto p-3">
-            <div className="flex items-center gap-1.5 mb-2" style={{ color: subTextColor }}>
-              <Sparkles size={12} />
-              <span className="text-[10px] font-semibold">参考回答</span>
+          <section className="interview-answer-scroll min-w-0 overflow-y-auto p-4">
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <div className="flex items-center gap-2" style={{ color: subTextColor }}>
+                <Sparkles size={14} />
+                <span className="text-[11px] font-semibold">当前回答</span>
+              </div>
+              {latestTask && <span className="text-[10px] font-medium" style={{ color: latestStatusColor }}>{latestStatusLabel}</span>}
             </div>
             {!latestTask ? (
-              <div className="h-full min-h-28 flex items-center justify-center text-[10px]" style={{ color: subTextColor }}>
+              <div className="h-full min-h-28 flex items-center justify-center text-[11px]" style={{ color: subTextColor }}>
                 {listening ? '识别到完整问题后将在此生成答案' : '答案将在此显示'}
               </div>
             ) : (
-              <div className="space-y-2.5">
-                <div className="pb-2 border-b text-[11px] font-semibold leading-relaxed" style={{ borderColor }}>
+              <div className="space-y-4">
+                <div className="pb-3 border-b text-[13px] font-semibold leading-7" style={{ borderColor }}>
                   {latestTask.question}
                 </div>
-                {latestTask.status === 'pending' && <div className="text-[10px]" style={{ color: subTextColor }}>等待生成</div>}
+                {latestTask.status === 'pending' && <div className="text-[11px]" style={{ color: subTextColor }}>问题已整理，等待生成回答</div>}
                 {latestTask.status === 'streaming' && (
-                  <div className="flex items-center gap-2 text-[10px]" style={{ color: accentColor }}>
-                    <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />
-                    正在生成回答
+                  <div className="flex items-center gap-2 text-[11px]" style={{ color: '#fbbf24' }}>
+                    <span className="w-3 h-3 rounded-full border-2 border-current border-t-transparent animate-spin" />正在生成回答，界面会保持稳定
                   </div>
                 )}
-                {latestTask.status === 'error' && <div className="text-[10px] text-red-400">{latestTask.error}</div>}
-                {latestTask.status === 'skipped' && <div className="text-[10px]" style={{ color: subTextColor }}>已识别为求职者回答，跳过 AI 生成</div>}
-                {latestTask.answer && <div className="text-[11px] leading-[1.65] whitespace-pre-wrap">{latestTask.answer}</div>}
+                {latestTask.status === 'error' && <div className="text-[11px] text-red-400">{latestTask.error}</div>}
+                {latestTask.status === 'skipped' && <div className="text-[11px]" style={{ color: subTextColor }}>已识别为求职者回答，跳过 AI 生成</div>}
+                {latestTask.answer && <div className="text-[13px] leading-7 whitespace-pre-wrap break-words">{latestTask.answer}</div>}
+                <div className="flex flex-wrap gap-2">
+                  {latestTask.keyPoints?.slice(0, 5).map((point) => <span key={point} className="px-2.5 py-1 rounded-md text-[10px]" style={{ background: 'rgba(82,196,220,0.12)', color: '#8ed9e8' }}>{point}</span>)}
+                  {!latestTask.keyPoints?.length && <span className="px-2.5 py-1 rounded-md text-[10px]" style={{ background: panelColor, color: subTextColor }}>{audioMode === 'formal' ? '正式面试 · 仅扬声器' : '演示模式 · 麦克风 + 扬声器'}</span>}
+                </div>
               </div>
             )}
           </section>
         </main>
 
-        <footer className="h-7 flex items-center justify-between px-3 border-t text-[9px] shrink-0" style={{ borderColor, color: subTextColor }}>
-          <span>{listening ? '语音流已连接' : '语音流未启动'}</span>
+        <footer className="h-9 flex items-center justify-between px-4 border-t text-[10px] shrink-0" style={{ borderColor, color: subTextColor }}>
+          <span>{listening ? '语音流已连接' : '语音流未启动'}　·　Alt+B 显示/隐藏　·　Alt+R 结束面试</span>
           <span>{pendingCount > 0 ? `${pendingCount} 条回答生成中` : doneCount > 0 ? `已完成 ${doneCount} 条问答` : '等待问题'}</span>
         </footer>
       </div>
